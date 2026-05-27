@@ -39,7 +39,7 @@ export function CreateLandingCollectionCard({
           organizationId: orgId,
           integrationId,
           displayName: name.trim(),
-          includeSectionFields: true,
+          includeSectionFields: false,
           setAsPagesCollection: true,
         }),
       })
@@ -47,7 +47,7 @@ export function CreateLandingCollectionCard({
       if (!res.ok) throw new Error(data.error)
 
       setSuccess(
-        `Created "${name}" with ${data.fieldCount ?? 17} fields including hero, features, testimonials, and FAQ.`,
+        `Created "${name}" with ${data.fieldCount ?? 8} fields (name, slug, body, SEO).`,
       )
       onCreated?.(data.collection)
     } catch (err) {
@@ -66,8 +66,8 @@ export function CreateLandingCollectionCard({
         <div>
           <p className="text-xs font-bold text-zinc-200">Create landing page collection</p>
           <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
-            Auto-creates CMS fields for hero, features, testimonials, FAQ, pricing, and CTA sections
-            so AI-personalized content syncs on publish.
+            Creates name, slug, Rich Text body, and SEO fields. The full landing page HTML (or iframe
+            embed) is published into the body field only.
           </p>
         </div>
       </div>
@@ -103,7 +103,7 @@ export function CreateLandingCollectionCard({
         ) : (
           <Plus className="h-3.5 w-3.5" />
         )}
-        Create with section fields
+        Create collection
       </Button>
     </div>
   )

@@ -53,7 +53,7 @@ export function resolveRenderingStrategy(
     lineCount,
     strategy: 'custom_code',
     htmlMode: 'custom_code',
-    reason: `HTML under ${threshold} lines — direct custom code / Plain Text field`,
+    reason: `HTML under ${threshold} lines — full page HTML in CMS body field`,
   }
 }
 
@@ -66,7 +66,7 @@ export function resolveHtmlModeWithOverride(
   if (override && override !== 'auto') {
     const lineCount = countHtmlLines(html)
     const reasons: Record<PublishHtmlMode, string> = {
-      custom_code: 'Manual: HTML in custom code / Plain Text field',
+      custom_code: 'Manual: full HTML in CMS body field',
       iframe_embed: 'Manual: iframe embed snippet in Rich Text field',
       rich_text_html: 'Manual: full HTML in Rich Text field',
     }

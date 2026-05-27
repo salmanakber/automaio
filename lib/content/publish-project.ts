@@ -23,12 +23,6 @@ import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 import { resolveHtmlModeWithOverride, type PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
 import { getHtmlLineThreshold } from '@/lib/platform/rendering-settings'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
-import {
-  buildSectionCmsContent,
-  bindSectionContentToCmsFields,
-  buildSectionCmsMappingPreview,
-} from '@/lib/webflow/section-cms-bindings'
-import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 
 function slugify(value: string) {
   return value
@@ -90,15 +84,6 @@ export async function getProjectPublishPreview(projectId: string) {
   const publishHtmlMode = parsePublishHtmlMode(params)
   const threshold = await getHtmlLineThreshold()
 
-  const businessContext = parseStoredBusinessContext(params)
-  const sectionContent = buildSectionCmsContent(
-    payload.templateHtml ?? payload.bodyHtml ?? '',
-    (project.parameters as Record<string, string>) ?? {},
-    businessContext,
-  )
-  const sectionCmsFields = bindSectionContentToCmsFields(sectionContent, collectionFields)
-  payload.custom = { ...(payload.custom ?? {}), ...sectionCmsFields }
-
   let htmlMode: PublishHtmlMode = 'iframe_embed'
   if (integration && htmlForStrategy.trim() && project.contentType !== 'blog_post') {
     const access = await checkCustomCodeAccess(integration.webflowApiKey, integration.webflowSiteId)
@@ -136,9 +121,6 @@ export async function getProjectPublishPreview(projectId: string) {
     })),
     canPublish: Object.keys(plan.fieldData).length > 0,
     resolvedFields: Object.keys(plan.fieldData),
-    sectionCmsFields: Object.keys(sectionCmsFields),
-    sectionCmsMapping: buildSectionCmsMappingPreview(sectionContent, collectionFields),
-    sectionCmsMappedCount: Object.keys(sectionCmsFields).length,
     hasTemplateHtml: Boolean(payload.templateHtml?.trim()),
     usesEmbed: plan.usesEmbed,
     htmlMode: plan.htmlMode,
@@ -200,7 +182,6 @@ async function buildProjectPayload(
       seoDescription: params.seoDescription,
       ogTitle: params.ogTitle,
       ogDescription: params.ogDescription,
-      custom: params,
     }
   }
 
@@ -221,7 +202,6 @@ async function buildProjectPayload(
       seoDescription: params.seoDescription,
       ogTitle: params.ogTitle,
       ogDescription: params.ogDescription,
-      custom: params,
     }
   }
 
@@ -243,7 +223,6 @@ async function buildProjectPayload(
     seoDescription: params.seoDescription,
     ogTitle: params.ogTitle,
     ogDescription: params.ogDescription,
-    custom: params,
   }
 }
 
@@ -275,15 +254,6 @@ export async function publishContentProject(
   const projectParams = (project.parameters as Record<string, unknown>) ?? {}
   const publishHtmlMode = parsePublishHtmlMode(projectParams)
   const threshold = await getHtmlLineThreshold()
-
-  const businessContext = parseStoredBusinessContext(projectParams)
-  const sectionContent = buildSectionCmsContent(
-    payload.templateHtml ?? payload.bodyHtml ?? '',
-    (project.parameters as Record<string, string>) ?? {},
-    businessContext,
-  )
-  const sectionCmsFields = bindSectionContentToCmsFields(sectionContent, collectionFields)
-  payload.custom = { ...(payload.custom ?? {}), ...sectionCmsFields }
 
   const isHtmlPage = project.contentType !== 'blog_post' && Boolean(htmlForStrategy.trim())
   let htmlMode: PublishHtmlMode = 'iframe_embed'

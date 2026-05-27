@@ -224,88 +224,53 @@ export function buildWebflowFieldPlan(
   const isFullTemplate = !isBlogPost && Boolean(htmlContent && isFullHtmlDocument(htmlContent))
   const htmlMode: PublishHtmlMode =
     options?.htmlMode ?? (isFullTemplate ? 'iframe_embed' : 'rich_text_html')
-  const useRichTextHtml = isFullTemplate && htmlMode === 'rich_text_html'
-  const useCustomCode = isFullTemplate && htmlMode === 'custom_code'
   const useIframeEmbed = isFullTemplate && htmlMode === 'iframe_embed'
+
+  const isLandingPage = payload.contentType === 'landing_page'
 
   assign('name', payload.name)
   assign('slug', payload.slug)
-  assign('headline', payload.headline ?? payload.name)
-  assign('industry', payload.industry)
-  assign('status', payload.status)
-  assign('target-audience', payload.targetAudience)
-  assign('automaio-campaign-id', payload.automaioId)
-  assign('automaio-template-id', payload.automaioTemplateId)
-  assign('seo-title', payload.seoTitle)
-  assign('seo-description', payload.seoDescription)
-  assign('og-title', payload.ogTitle ?? payload.seoTitle)
-  assign('og-description', payload.ogDescription ?? payload.seoDescription)
+
+  if (isLandingPage) {
+    assign('seo-title', payload.seoTitle)
+    assign('seo-description', payload.seoDescription)
+    assign('og-title', payload.ogTitle ?? payload.seoTitle)
+    assign('og-description', payload.ogDescription ?? payload.seoDescription)
+  } else {
+    assign('headline', payload.headline ?? payload.name)
+    assign('industry', payload.industry)
+    assign('status', payload.status)
+    assign('target-audience', payload.targetAudience)
+    assign('automaio-campaign-id', payload.automaioId)
+    assign('automaio-template-id', payload.automaioTemplateId)
+    assign('seo-title', payload.seoTitle)
+    assign('seo-description', payload.seoDescription)
+    assign('og-title', payload.ogTitle ?? payload.seoTitle)
+    assign('og-description', payload.ogDescription ?? payload.seoDescription)
+  }
 
   let embedFieldSlug: string | null = null
   let richTextFieldSlug: string | null = null
 
-  if (isFullTemplate && useRichTextHtml) {
-    // Fallback when custom_code / iframe embed is not available — full HTML in Rich Text field.
-    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
-    const htmlBody =
-      extractRichTextFragment(htmlContent) || textContent || htmlToPlainSummary(htmlContent)
-    if (richTextFieldSlug && htmlBody) {
-      result[richTextFieldSlug] = htmlBody
-    } else {
-      assign('body-html', htmlBody)
-      richTextFieldSlug = resolveFieldSlug('body-html', collectionFields, overrides)
-    }
-    embedFieldSlug = null
-  } else if (isFullTemplate && useCustomCode) {
-    // Small HTML → full document in Plain Text / custom code field; summary in Rich Text.
-    const codeSlug =
-      resolveFieldSlug('template-html', collectionFields, overrides) ??
-      findPlainTextField(collectionFields, ['template-html', 'html', 'custom-code', 'embed', 'code-embed'])
-
-    if (codeSlug) {
-      result[codeSlug] = htmlContent
-      embedFieldSlug = codeSlug
-    } else {
-      assign('template-html', htmlContent)
-      embedFieldSlug = resolveFieldSlug('template-html', collectionFields, overrides)
-    }
-
-    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
-    const summary = textContent || htmlToPlainSummary(htmlContent)
-    if (richTextFieldSlug && summary) {
-      result[richTextFieldSlug] = summary
-    }
-  } else if (isFullTemplate && useIframeEmbed) {
-    // Large HTML → iframe embed snippet in Rich Text; HTML hosted by Automaio.
+  if (isFullTemplate) {
+    // Landing pages: entire design lives in one CMS body field — full HTML or iframe embed.
     richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
     const appUrl = getAppBaseUrl()
-    const embedContent = payload.automaioId
-      ? buildProjectEmbedSnippet(appUrl, payload.automaioId)
-      : `<iframe src="${buildProjectIframeUrl(appUrl, payload.automaioId ?? '')}" style="width:100%;border:0;min-height:80vh" title="${payload.name}"></iframe>`
 
-    if (richTextFieldSlug && embedContent) {
-      result[richTextFieldSlug] = embedContent
+    let bodyValue: string
+    if (useIframeEmbed && payload.automaioId) {
+      bodyValue = buildProjectEmbedSnippet(appUrl, payload.automaioId)
     } else {
-      assign('body-html', embedContent)
+      bodyValue =
+        extractRichTextFragment(htmlContent) || htmlContent || textContent || htmlToPlainSummary(htmlContent)
+    }
+
+    if (richTextFieldSlug && bodyValue) {
+      result[richTextFieldSlug] = bodyValue
+    } else {
+      assign('body-html', bodyValue)
       richTextFieldSlug = resolveFieldSlug('body-html', collectionFields, overrides)
     }
-    embedFieldSlug = null
-  } else if (isFullTemplate) {
-    // Full template HTML → content is served via iframe, NOT stored in CMS.
-    // CMS only gets name, slug, and a short plain-text summary for SEO.
-    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
-
-    const summary = textContent || htmlToPlainSummary(htmlContent)
-    if (richTextFieldSlug && summary) {
-      result[richTextFieldSlug] = summary
-    } else if (!richTextFieldSlug) {
-      const fallbackRich = resolveRichTextFieldSlug(collectionFields, overrides)
-      if (fallbackRich && summary) {
-        richTextFieldSlug = fallbackRich
-        result[fallbackRich] = summary
-      }
-    }
-
     embedFieldSlug = null
   } else if (isBlogPost) {
     // Blog posts: rich text body goes to CMS — no HTML template / iframe embed
@@ -334,7 +299,8 @@ export function buildWebflowFieldPlan(
     embedFieldSlug = resolveFieldSlug('template-html', collectionFields, overrides)
   }
 
-  if (payload.custom) {
+  // Do not spread section/hero/CTA fields into CMS — landing content is HTML or iframe in body only.
+  if (payload.custom && !isLandingPage) {
     for (const [key, val] of Object.entries(payload.custom)) {
       if (slugs.has(key) && val && !(key in result)) result[key] = val
     }
@@ -354,13 +320,13 @@ export function buildWebflowFieldPlan(
     embedFieldSlug,
     richTextFieldSlug,
     usesEmbed: Boolean(isFullTemplate && useIframeEmbed && payload.automaioId && !isBlogPost),
-    htmlMode: useCustomCode
-      ? 'custom_code'
-      : useRichTextHtml
-        ? 'rich_text_html'
-        : isFullTemplate
-          ? 'iframe_embed'
-          : 'rich_text_html',
+    htmlMode: isFullTemplate
+      ? useIframeEmbed
+        ? 'iframe_embed'
+        : useCustomCode
+          ? 'custom_code'
+          : 'rich_text_html'
+      : 'rich_text_html',
   }
 }
 

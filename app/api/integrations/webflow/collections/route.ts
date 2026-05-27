@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       fields: getDefaultLandingCollectionFields(),
-      includesSectionFields: true,
+      includesSectionFields: false,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load field definitions'
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       integrationId,
       displayName,
       fields,
-      includeSectionFields = true,
+      includeSectionFields = false,
       setAsPagesCollection = true,
     } = body as {
       organizationId: string
@@ -83,9 +83,7 @@ export async function POST(req: NextRequest) {
     const collectionFields =
       fields?.length
         ? fields
-        : includeSectionFields
-          ? getDefaultLandingCollectionFields()
-          : getDefaultLandingCollectionFields().slice(0, 8)
+        : getDefaultLandingCollectionFields()
 
     const collection = await client.createCollection(integration.webflowSiteId, {
       displayName,

@@ -6,7 +6,6 @@ import { extractBusinessContext, businessContextToParameters } from '@/lib/ai/bu
 import { personalizeProject } from '@/lib/ai/personalization-engine'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
-import { buildSectionCmsContent } from '@/lib/webflow/section-cms-bindings'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 import type { BusinessContext, OnboardingInput } from '@/lib/ai/business-context-types'
 
@@ -93,11 +92,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       resultHtml = result.html
       updatedCount = result.updatedCount
       sectionMap = result.sectionMap
-      const sectionContent = buildSectionCmsContent(resultHtml, result.parameters, context)
       mergedParams = {
         ...result.parameters,
         businessContext: JSON.stringify(context),
-        sectionContent: JSON.stringify(sectionContent),
         onboardingComplete: 'true',
       } as Record<string, string>
     } else {

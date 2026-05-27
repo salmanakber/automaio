@@ -59,16 +59,9 @@ export const SECTION_CMS_FIELD_DEFINITIONS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'Contact' },
 ]
 
+/** Minimal collection: name, slug, body (HTML/iframe), SEO — no per-section fields. */
 export function getDefaultLandingCollectionFields(): WebflowCollectionFieldDef[] {
-  const seen = new Set<string>()
-  const merged: WebflowCollectionFieldDef[] = []
-  for (const field of [...LANDING_PAGE_BASE_CMS_FIELDS, ...SECTION_CMS_FIELD_DEFINITIONS]) {
-    const key = field.displayName.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    merged.push(field)
-  }
-  return merged
+  return [...LANDING_PAGE_BASE_CMS_FIELDS]
 }
 
 export type SectionCmsMappingRow = {

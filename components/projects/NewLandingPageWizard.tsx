@@ -459,16 +459,11 @@ export function NewLandingPageWizard({
                         value={collectionCaps.embedAutoSetupPossible ? 'Auto-setup available' : 'Rich Text fallback'}
                       />
                       <DetectRow label="Body field" value={collectionCaps.hasRichTextBody ? 'Rich Text ✓' : collectionCaps.hasPlainTextBody ? 'Plain Text ✓' : 'Not detected'} />
-                      <DetectRow label="Section fields" value={`${collectionCaps.sectionFieldCount} mapped`} />
+                      <DetectRow label="CMS body field" value={collectionCaps.hasRichTextBody ? 'Rich Text ✓' : 'Required'} />
                     </div>
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      {collectionCaps.renderReason}
+                      {collectionCaps.renderReason} Publish sends the full page HTML (or iframe embed) into one body field plus SEO.
                     </p>
-                    {collectionCaps.sectionFieldCount === 0 && (
-                      <p className="text-[11px] text-amber-600">
-                        Tip: Create a landing page collection above to auto-add hero, features, FAQ, and testimonial fields.
-                      </p>
-                    )}
                   </div>
                 )}
               </>
@@ -504,8 +499,7 @@ export function NewLandingPageWizard({
               <p><strong>Collection:</strong> {collections.find((c) => c.id === collectionId)?.name}</p>
               {collectionCaps && (
                 <Badge variant="outline" className="text-[10px]">
-                  {collectionCaps.renderMode === 'iframe_embed' ? 'Iframe embed' : 'CMS HTML'} ·{' '}
-                  {collectionCaps.sectionFieldCount} section fields
+                  {collectionCaps.renderMode === 'iframe_embed' ? 'Iframe in CMS body' : 'Full HTML in CMS body'}
                 </Badge>
               )}
             </div>

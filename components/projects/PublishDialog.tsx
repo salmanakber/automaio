@@ -34,11 +34,6 @@ import {
   RefreshCw,
   CalendarClock,
 } from 'lucide-react'
-import {
-  SectionCmsMappingPreview,
-  type SectionCmsMappingRow,
-} from '@/components/projects/SectionCmsMappingPreview'
-import { CreateLandingCollectionCard } from '@/components/webflow/CreateLandingCollectionCard'
 import { PublishLayoutControls } from '@/components/projects/PublishLayoutControls'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseLayoutControls } from '@/lib/webflow/layout-controls'
@@ -63,8 +58,6 @@ type PublishResult = {
 }
 
 type PublishPreview = {
-  sectionCmsMapping?: SectionCmsMappingRow[]
-  sectionCmsMappedCount?: number
   canPublish?: boolean
   htmlMode?: string
   publishHtmlMode?: string
@@ -105,10 +98,6 @@ export function PublishDialog({
   const [copied, setCopied] = useState(false)
 
   const isLandingPage = project?.contentType === 'landing_page'
-  const integrationId = project?.webflowIntegrationId as string | undefined
-  const missingSectionFields =
-    preview?.sectionCmsMapping?.some((r) => r.status === 'missing_field') ?? false
-
   const minScheduleInput = useMemo(() => new Date().toISOString().slice(0, 16), [open])
 
   const savePublishSettings = async () => {
@@ -306,22 +295,6 @@ export function PublishDialog({
               </p>
             )}
 
-            {isLandingPage && preview?.sectionCmsMapping && !previewLoading && (
-              <SectionCmsMappingPreview
-                rows={preview.sectionCmsMapping}
-                mappedCount={preview.sectionCmsMappedCount}
-              />
-            )}
-
-            {missingSectionFields && integrationId && !previewLoading && (
-              <CreateLandingCollectionCard
-                orgId={orgId}
-                integrationId={integrationId}
-                onCreated={() => loadPreview()}
-                compact
-              />
-            )}
-
             {isLandingPage && !previewLoading && (
               <div className="space-y-2">
                 <Label className="text-[11px] uppercase tracking-wide text-zinc-400">
@@ -341,9 +314,9 @@ export function PublishDialog({
                       Auto ({preview?.htmlLineCount ?? '—'} lines · threshold{' '}
                       {preview?.htmlLineThreshold ?? 4000})
                     </SelectItem>
-                    <SelectItem value="custom_code">Custom code — HTML in Plain Text field</SelectItem>
-                    <SelectItem value="iframe_embed">Iframe embed — snippet in Rich Text</SelectItem>
-                    <SelectItem value="rich_text_html">Rich Text — full HTML in body field</SelectItem>
+                    <SelectItem value="custom_code">Full HTML in CMS body (under line limit)</SelectItem>
+                    <SelectItem value="iframe_embed">Iframe embed in CMS body (over line limit)</SelectItem>
+                    <SelectItem value="rich_text_html">Full HTML in CMS body (force)</SelectItem>
                   </SelectContent>
                 </Select>
                 {preview?.htmlMode && (

@@ -7,7 +7,6 @@ import {
   tagTextElements,
   type TextElement,
 } from '@/lib/ai/dom-patcher'
-import { buildSectionCmsContent } from '@/lib/webflow/section-cms-bindings'
 
 const COPYWRITER_SYSTEM = `You are an expert landing page copywriter and conversion strategist.
 Update ONLY plain text for each element. Preserve HTML structure — never add tags or markdown.
@@ -174,9 +173,6 @@ export async function personalizeProject(
     seoTitle: context.seoTitle ?? params.seoTitle ?? '',
     seoDescription: context.seoDescription ?? params.seoDescription ?? '',
     onboardingComplete: 'true',
-    sectionContent: JSON.stringify(
-      buildSectionCmsContent(result.html, params, context),
-    ),
   }
 
   return { ...result, parameters: mergedParams }
