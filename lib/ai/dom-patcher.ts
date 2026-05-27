@@ -1,3 +1,5 @@
+import { applyTextPreservingMarkup } from '@/lib/ai/markup-preserve'
+
 export type TextElement = {
   id: string
   tag: string
@@ -64,7 +66,7 @@ export function tagTextElements(html: string): { html: string; elements: TextEle
   let idx = 0
 
   const tagPattern =
-    /<(h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|footer)([^>]*)>([\s\S]*?)<\/\1>/gi
+    /<(h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|b|i|small|footer)([^>]*)>([\s\S]*?)<\/\1>/gi
 
   const tagged = html.replace(tagPattern, (match, tag: string, attrs: string, inner: string) => {
     if (/skip|noscript|script|style/i.test(attrs)) return match
@@ -83,6 +85,7 @@ export function tagTextElements(html: string): { html: string; elements: TextEle
       tagLower === 'button' ||
       tagLower === 'li' ||
       tagLower === 'label' ||
+      tagLower === 'small' ||
       (tagLower === 'a' && /class=["'][^"']*cta/i.test(attrs)) ||
       hasTextClass(attrs) ||
       ((tagLower === 'div' || tagLower === 'span') && isLeaf)
@@ -109,18 +112,11 @@ export function applyTextPatches(
   elements?: TextElement[],
 ): string {
   let result = html.replace(
-    /(<(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|footer)[^>]*\sdata-am-id="(\d+)"[^>]*>)([\s\S]*?)(<\/(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|footer)>)/gi,
+    /(<(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|b|i|small|footer)[^>]*\sdata-am-id="(\d+)"[^>]*>)([\s\S]*?)(<\/(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|b|i|small|footer)>)/gi,
     (match, openTag, id, inner, closeTag) => {
       const newText = updates[id] ?? updates[String(Number(id))]
       if (newText === undefined) return match
-
-      const hasChildElements = /<[a-z][\s>]/i.test(inner.replace(/<br\s*\/?>/gi, ''))
-      if (!hasChildElements) {
-        return `${openTag}${escapeHtml(newText)}${closeTag}`
-      }
-
-      const patched = inner.replace(/>([^<]+)</, () => `>${escapeHtml(newText)}<`)
-      return `${openTag}${patched}${closeTag}`
+      return applyTextPreservingMarkup(openTag, inner, closeTag, newText)
     },
   )
 
@@ -136,23 +132,11 @@ export function applyTextPatches(
     )
 
     result = result.replace(tagPattern, (match, openTag, inner, closeTag) => {
-      const hasChildElements = /<[a-z][\s>]/i.test(inner.replace(/<br\s*\/?>/gi, ''))
-      if (!hasChildElements) {
-        return `${openTag}${escapeHtml(newText)}${closeTag}`
-      }
-      const patched = inner.replace(/>([^<]+)</, () => `>${escapeHtml(newText)}<`)
-      return `${openTag}${patched}${closeTag}`
+      return applyTextPreservingMarkup(openTag, inner, closeTag, newText)
     })
   }
 
   return result
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
 }
 
 export function groupElementsBySection(elements: TextElement[]): Record<string, TextElement[]> {

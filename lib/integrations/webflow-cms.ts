@@ -10,7 +10,7 @@ import {
   formatWebflowValidationError,
   type AutomaioContentPayload,
 } from '@/lib/webflow/field-mapper'
-import { ensureAutomaioEmbedForIntegration } from '@/lib/webflow/site-embed'
+import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 
 function slugify(value: string) {
   return value
@@ -101,11 +101,14 @@ export async function syncWebflowIntegrationV2(organizationId: string, integrati
     },
   })
 
-  let embedSetup: Awaited<ReturnType<typeof ensureAutomaioEmbedForIntegration>> | null = null
+  let embedSetup: Awaited<ReturnType<typeof ensureAutomaioRuntimeForIntegration>> | null = null
   try {
-    embedSetup = await ensureAutomaioEmbedForIntegration(integrationId)
+    embedSetup = await ensureAutomaioRuntimeForIntegration(integrationId, {
+      collectionId: integration.templatesCollectionId ?? undefined,
+      publishSite: false,
+    })
   } catch (embedErr) {
-    console.warn('[Automaio] Embed auto-setup skipped:', embedErr)
+    console.warn('[Automaio] Runtime auto-setup skipped:', embedErr)
   }
 
   return {
@@ -113,6 +116,7 @@ export async function syncWebflowIntegrationV2(organizationId: string, integrati
     siteName: site.displayName,
     embedAutoConfigured: embedSetup?.success === true,
     embedNeedsReconnect: embedSetup?.success === false && embedSetup.needsReconnect,
+    runtimeAutoConfigured: embedSetup?.success === true,
   }
 }
 

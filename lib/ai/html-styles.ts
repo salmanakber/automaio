@@ -1,3 +1,5 @@
+import { extractHeadAssets } from '@/lib/webflow/html-assets'
+
 /** Extract all inline style blocks from HTML (template + theme CSS). */
 export function extractInlineStyleBlocks(html: string): string {
   return [...html.matchAll(/<style[^>]*>[\s\S]*?<\/style>/gi)].map((m) => m[0]).join('\n')
@@ -8,16 +10,26 @@ export function stripInlineStyleBlocks(html: string): string {
   return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').trim()
 }
 
-/** Re-attach preserved styles if the personalized HTML lost them. */
+/** Re-attach preserved styles and head assets if the personalized HTML lost them. */
 export function mergePreservedStyles(originalHtml: string, resultHtml: string): string {
   const originalStyles = extractInlineStyleBlocks(originalHtml)
-  if (!originalStyles.trim()) return resultHtml
+  let result = resultHtml
 
-  const resultStyles = extractInlineStyleBlocks(resultHtml)
-  if (resultStyles.trim()) return resultHtml
+  if (originalStyles.trim()) {
+    const resultStyles = extractInlineStyleBlocks(resultHtml)
+    if (!resultStyles.trim()) {
+      const body = stripInlineStyleBlocks(resultHtml)
+      result = `${originalStyles}\n${body}`.trim()
+    }
+  }
 
-  const body = stripInlineStyleBlocks(resultHtml)
-  return `${originalStyles}\n${body}`.trim()
+  const originalHead = extractHeadAssets(originalHtml)
+  const resultHead = extractHeadAssets(result)
+  if (originalHead.trim() && !resultHead.trim()) {
+    result = `${originalHead}\n${result}`.trim()
+  }
+
+  return result
 }
 
 export function resolveUpdateText(updates: Record<string, string>, id: string): string | undefined {

@@ -5,6 +5,13 @@ import { getAppBaseUrl } from '@/lib/app-url'
 import { buildCollectionEmbedSnippet } from '@/lib/webflow/embed-setup'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
 import { ensureAutomaioEmbedForIntegration } from '@/lib/webflow/site-embed'
+import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
+import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
+
+type CollectionsJson = {
+  automaioEmbed?: { scriptId?: string; configuredAt?: string }
+  automaioRuntime?: { scriptId?: string; configuredAt?: string; collectionId?: string }
+}
 
 async function getIntegrationForUser(integrationId: string, userId: string) {
   return prisma.webflowIntegration.findFirst({
@@ -17,7 +24,12 @@ async function getIntegrationForUser(integrationId: string, userId: string) {
   })
 }
 
-/** Check whether the connected token can manage Webflow custom code (OAuth required). */
+function readCollectionsJson(raw: unknown): CollectionsJson {
+  if (!raw || typeof raw !== 'object') return {}
+  return raw as CollectionsJson
+}
+
+/** Check custom code access and runtime bootstrap status for the connected site. */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -32,15 +44,39 @@ export async function GET(
       return NextResponse.json({ error: 'Integration not found' }, { status: 404 })
     }
 
-    const collectionsJson = integration.collections as { automaioEmbed?: unknown } | null
+    const collectionsJson = readCollectionsJson(integration.collections)
     const access = await checkCustomCodeAccess(integration.webflowApiKey, integration.webflowSiteId)
     const appUrl = getAppBaseUrl()
 
+    const runtimeConfigured = Boolean(collectionsJson.automaioRuntime?.scriptId)
+    const legacyEmbedConfigured = Boolean(collectionsJson.automaioEmbed?.scriptId)
+    const embedConfigured = runtimeConfigured || legacyEmbedConfigured
+
+    let message = access.message
+    if (access.ok) {
+      if (runtimeConfigured) {
+        message =
+          'Remote runtime bootstrap is active on your collection template. Pages render from Automaio automatically — no embed paste required.'
+      } else if (legacyEmbedConfigured) {
+        message =
+          'Legacy iframe embed is active. New landing collections use remote runtime instead — sync or publish to upgrade.'
+      } else {
+        message =
+          'Automatic runtime setup is available. Create a landing collection or publish a page to apply it — no manual embed paste needed.'
+      }
+    }
+
     return NextResponse.json({
       customCodeAccess: access.ok,
-      message: access.ok ? 'Automatic embed is available.' : access.message,
-      embedConfigured: Boolean(collectionsJson?.automaioEmbed),
+      message,
+      runtimeConfigured,
+      legacyEmbedConfigured,
+      /** @deprecated Use runtimeConfigured — kept for older UI clients */
+      embedConfigured,
+      runtimeUrl: `${appUrl}/webflow/runtime.js`,
+      runtimeCollectionSnippet: buildWebflowRuntimeCollectionEmbed(appUrl),
       collectionEmbedSnippet: buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId),
+      templatesCollectionId: integration.templatesCollectionId,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to check embed status'
@@ -48,7 +84,7 @@ export async function GET(
   }
 }
 
-/** Retry automatic embed setup (requires OAuth with custom_code scopes). */
+/** Retry automatic runtime bootstrap on the collection template (OAuth + custom_code required). */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -69,24 +105,51 @@ export async function POST(
         ? body.collectionId
         : integration.templatesCollectionId ?? integration.campaignsCollectionId
 
-    const result = await ensureAutomaioEmbedForIntegration(id, {
+    const preferLegacyEmbed = body.mode === 'iframe_embed'
+
+    const appUrl = getAppBaseUrl()
+
+    if (preferLegacyEmbed) {
+      const result = await ensureAutomaioEmbedForIntegration(id, {
+        collectionId: collectionId ?? undefined,
+        publishSite: body.publishSite !== false,
+      })
+
+      if (!result.success) {
+        return NextResponse.json({
+          success: false,
+          needsReconnect: result.needsReconnect,
+          error: result.error,
+          collectionEmbedSnippet: buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId),
+        })
+      }
+
+      return NextResponse.json({ success: true, mode: 'iframe_embed', automaioEmbed: result.automaioEmbed })
+    }
+
+    const result = await ensureAutomaioRuntimeForIntegration(id, {
       collectionId: collectionId ?? undefined,
       publishSite: body.publishSite !== false,
     })
 
     if (!result.success) {
-      const appUrl = getAppBaseUrl()
       return NextResponse.json({
         success: false,
         needsReconnect: result.needsReconnect,
         error: result.error,
+        runtimeCollectionSnippet: buildWebflowRuntimeCollectionEmbed(appUrl),
         collectionEmbedSnippet: buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId),
       })
     }
 
-    return NextResponse.json({ success: true, automaioEmbed: result.automaioEmbed })
+    return NextResponse.json({
+      success: true,
+      mode: 'remote_runtime',
+      automaioRuntime: result.automaioRuntime,
+      runtimeConfigured: true,
+    })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Embed setup failed'
+    const message = error instanceof Error ? error.message : 'Runtime setup failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

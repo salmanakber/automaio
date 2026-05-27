@@ -47,7 +47,11 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
   const [embedStatus, setEmbedStatus] = useState<{
     customCodeAccess: boolean
     message: string
+    runtimeConfigured: boolean
+    legacyEmbedConfigured: boolean
     embedConfigured: boolean
+    runtimeUrl?: string
+    runtimeCollectionSnippet?: string
     collectionEmbedSnippet?: string
   } | null>(null)
   const [embedLoading, setEmbedLoading] = useState(false)
@@ -84,7 +88,11 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
           setEmbedStatus({
             customCodeAccess: Boolean(d.customCodeAccess),
             message: d.message ?? '',
-            embedConfigured: Boolean(d.embedConfigured),
+            runtimeConfigured: Boolean(d.runtimeConfigured),
+            legacyEmbedConfigured: Boolean(d.legacyEmbedConfigured),
+            embedConfigured: Boolean(d.embedConfigured ?? d.runtimeConfigured),
+            runtimeUrl: d.runtimeUrl,
+            runtimeCollectionSnippet: d.runtimeCollectionSnippet,
             collectionEmbedSnippet: d.collectionEmbedSnippet,
           })
         }
@@ -172,7 +180,7 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
         })
         const d = await res.json()
         if (!res.ok || d.needsReconnect) {
-          alert(d.error ?? 'Embed setup failed. Reconnect via OAuth first.')
+          alert(d.error ?? 'Runtime setup failed. Reconnect via OAuth first.')
           break
         }
       }
@@ -215,8 +223,8 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
                   <p className="text-sm font-medium">Connect with Webflow OAuth</p>
                   <p className="text-xs text-muted-foreground">
-                    Official install flow for marketplace apps. Grants CMS, site, and automatic embed
-                    access (custom_code). Reconnect once if you connected before this update.
+                    Official install flow for marketplace apps. Grants CMS, site, and automatic runtime
+                    setup (custom_code). Reconnect once if you connected before this update.
                   </p>
                   <Button asChild className="w-full sm:w-auto">
                     <a href={`/api/integrations/webflow/oauth?orgId=${orgId}`}>
@@ -299,18 +307,25 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
                     <div className="space-y-1">
                       <p className="text-sm font-medium">
                         {embedStatus.customCodeAccess
-                          ? embedStatus.embedConfigured
-                            ? 'Automatic iframe embed is active'
-                            : 'Automatic embed available'
-                          : 'Automatic embed needs OAuth reconnect'}
+                          ? embedStatus.runtimeConfigured
+                            ? 'Automatic runtime is active'
+                            : embedStatus.legacyEmbedConfigured
+                              ? 'Legacy iframe embed is active'
+                              : 'Automatic runtime available'
+                          : 'Automatic runtime needs OAuth reconnect'}
                       </p>
                       <p className="text-xs text-muted-foreground leading-relaxed">{embedStatus.message}</p>
+                      {embedStatus.runtimeConfigured && embedStatus.runtimeUrl && (
+                        <p className="text-[10px] text-muted-foreground font-mono truncate">
+                          {embedStatus.runtimeUrl}
+                        </p>
+                      )}
                     </div>
                   </div>
                   {embedStatus.customCodeAccess ? (
-                    !embedStatus.embedConfigured && (
+                    !embedStatus.runtimeConfigured && (
                       <Button size="sm" onClick={handleRetryEmbed} disabled={embedSetupLoading}>
-                        {embedSetupLoading ? 'Setting up…' : 'Apply embed to collection template'}
+                        {embedSetupLoading ? 'Setting up…' : 'Apply runtime bootstrap to collection template'}
                       </Button>
                     )
                   ) : oauthAvailable ? (
@@ -323,9 +338,18 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Without custom code access, HTML pages publish to the CMS Rich Text field
-                      automatically — no manual embed needed. Bind Rich Text to your body field in
-                      Webflow Designer.
+                      automatically. Reconnect via OAuth to enable remote runtime (recommended).
                     </p>
+                  )}
+                  {embedStatus.customCodeAccess && !embedStatus.runtimeConfigured && embedStatus.runtimeCollectionSnippet && (
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer text-zinc-400 hover:text-zinc-300">
+                        Optional manual fallback embed
+                      </summary>
+                      <pre className="mt-2 text-[10px] font-mono bg-black/20 p-2 rounded overflow-x-auto whitespace-pre-wrap">
+                        {embedStatus.runtimeCollectionSnippet.slice(0, 400)}…
+                      </pre>
+                    </details>
                   )}
                 </div>
               )}
@@ -335,7 +359,7 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
                   <p className="text-sm font-semibold text-violet-700">Landing pages</p>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                     HTML templates with AI personalization. Uses <strong>Pages collection</strong> below.
-                    Automaio auto-detects fields and sets up iframe embed or CMS HTML.
+                    Automaio auto-configures remote runtime — no embed paste required.
                   </p>
                   {selectedPagesCollection && (
                     <p className="text-[11px] font-medium">

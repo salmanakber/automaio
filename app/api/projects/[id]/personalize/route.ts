@@ -8,6 +8,7 @@ import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
+import { preserveTemplateHtmlIntegrity } from '@/lib/content/preserve-template-html'
 import type { BusinessContext, OnboardingInput } from '@/lib/ai/business-context-types'
 
 type RouteParams = { params: Promise<{ id: string }> }
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     if (!skipAiRewrite) {
       const result = await personalizeProject(project, context, baseHtml, customPrompt)
-      resultHtml = result.html
+      resultHtml = preserveTemplateHtmlIntegrity(baseHtml, result.html)
       updatedCount = result.updatedCount
       sectionMap = result.sectionMap
       mergedParams = {

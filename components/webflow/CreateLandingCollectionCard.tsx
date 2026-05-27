@@ -59,7 +59,9 @@ export function CreateLandingCollectionCard({
       }
 
       setSuccess(
-        `Created "${name}" with ${data.fieldCount ?? 9} fields (Page ID + SEO). Add the runtime embed to your Webflow collection template.`,
+        data.runtimeAutoConfigured
+          ? `Created "${name}" with ${data.fieldCount ?? 9} fields. Runtime bootstrap auto-installed on your collection template — no manual embed paste needed.`
+          : `Created "${name}" with ${data.fieldCount ?? 9} fields. Runtime will auto-configure on first publish (or reconnect Webflow for immediate setup).`,
       )
       onCreated?.(data.collection)
     } catch (err) {
@@ -78,8 +80,7 @@ export function CreateLandingCollectionCard({
         <div>
           <p className="text-xs font-bold text-zinc-200">Create landing page collection</p>
           <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
-            Creates Title, Slug, Page ID, SEO, and status fields. Content renders via Automaio
-            runtime.js — no HTML/CSS blobs stored in Webflow CMS.
+            Creates Title, Slug, Page ID, SEO, and status fields. Runtime bootstrap auto-installs on your collection template — no manual embed paste.
           </p>
         </div>
       </div>
@@ -102,9 +103,11 @@ export function CreateLandingCollectionCard({
       {success && (
         <div className="space-y-2">
           <p className="text-[11px] text-emerald-400">{success}</p>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2">
-              <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Runtime collection template embed</p>
-            <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap max-h-32 overflow-y-auto">{templateSnippet}</pre>
+          <details className="rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+            <summary className="text-[10px] text-zinc-500 uppercase font-bold cursor-pointer">
+              Optional manual fallback embed (only if auto-setup failed)
+            </summary>
+            <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap max-h-32 overflow-y-auto mt-2">{templateSnippet}</pre>
             <Button
               type="button"
               variant="ghost"
@@ -117,9 +120,9 @@ export function CreateLandingCollectionCard({
               }}
             >
               {copiedSnippet ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              Copy embed snippet
+              Copy fallback embed
             </Button>
-          </div>
+          </details>
         </div>
       )}
 

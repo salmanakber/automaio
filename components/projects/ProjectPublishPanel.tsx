@@ -53,6 +53,8 @@ export function ProjectPublishPanel({
   const [hasTemplateHtml, setHasTemplateHtml] = useState(false)
   const [resolvedFields, setResolvedFields] = useState<string[]>([])
   const [embedAutoConfigured, setEmbedAutoConfigured] = useState<boolean | null>(null)
+  const [runtimeAutoConfigured, setRuntimeAutoConfigured] = useState<boolean | null>(null)
+  const [usesRemoteRuntime, setUsesRemoteRuntime] = useState<boolean | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(true)
   const [publishing, setPublishing] = useState(false)
   const [previewError, setPreviewError] = useState('')
@@ -76,6 +78,7 @@ export function ProjectPublishPanel({
         setCanPublish(Boolean(d.canPublish))
         setHasTemplateHtml(Boolean(d.hasTemplateHtml))
         setResolvedFields(d.resolvedFields ?? [])
+        setUsesRemoteRuntime(d.usesRemoteRuntime ?? null)
       })
       .catch((e) => setPreviewError(e instanceof Error ? e.message : 'Could not load field mapping'))
       .finally(() => setLoadingPreview(false))
@@ -103,13 +106,15 @@ export function ProjectPublishPanel({
       if (!res.ok) throw new Error(data.error ?? 'Publish failed')
 
       setEmbedAutoConfigured(Boolean(data.embedAutoConfigured))
+      setRuntimeAutoConfigured(Boolean(data.runtimeAutoConfigured ?? data.embedAutoConfigured))
+      setUsesRemoteRuntime(Boolean(data.usedRemoteRuntime))
 
-      if (data.embedNeedsReconnect) {
+      if (data.embedNeedsReconnect || data.runtimeNeedsReconnect) {
         setResult({
           type: 'warning',
           message:
             data.embedMessage ??
-            'Published to CMS, but automatic embed needs a Webflow reconnect. Go to Settings → Integrations and reconnect Webflow.',
+            'Published to CMS, but automatic runtime setup needs a Webflow reconnect. Go to Settings → Integrations and reconnect Webflow.',
           liveUrl: data.liveUrl,
         })
       } else {
@@ -118,8 +123,8 @@ export function ProjectPublishPanel({
           message:
             data.embedMessage ??
             (webflowCmsItemId
-              ? `Updated in Webflow (${data.mappedFields?.length ?? 0} fields). Your template should appear on the live CMS page automatically.`
-              : `Published to Webflow (${data.mappedFields?.length ?? 0} fields). Your template should appear on the live CMS page automatically.`),
+              ? `Updated in Webflow (${data.mappedFields?.length ?? 0} fields). Content renders from Automaio automatically.`
+              : `Published to Webflow (${data.mappedFields?.length ?? 0} fields). Content renders from Automaio automatically.`),
           liveUrl: data.liveUrl,
         })
       }
@@ -142,7 +147,7 @@ export function ProjectPublishPanel({
           Publish to Webflow
         </CardTitle>
         <CardDescription>
-          One click saves to CMS, installs the embed on your collection template, and publishes your site.
+          One click saves to CMS, auto-configures remote runtime on your collection template, and publishes your site.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -191,13 +196,17 @@ export function ProjectPublishPanel({
             <div className="flex items-start gap-2">
               <Zap className="size-5 text-emerald-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="text-sm font-medium">Automatic embed</p>
+                <p className="text-sm font-medium">
+                  {usesRemoteRuntime ? 'Remote runtime' : 'Automatic embed'}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  {embedAutoConfigured === true
-                    ? 'Content loads in an isolated iframe — your Webflow site stays fast and styles are not affected.'
-                    : embedAutoConfigured === false
-                      ? 'Reconnect Webflow once to enable automatic iframe embed (Settings → Integrations).'
-                      : 'When you publish, content loads via iframe URL — no heavy HTML injected into your page.'}
+                  {runtimeAutoConfigured === true
+                    ? 'Runtime bootstrap is active — pages render from Automaio without manual embed paste.'
+                    : runtimeAutoConfigured === false || embedAutoConfigured === false
+                      ? 'Reconnect Webflow once to enable automatic runtime setup (Settings → Integrations).'
+                      : usesRemoteRuntime
+                        ? 'When you publish, Automaio applies runtime bootstrap to your collection template automatically.'
+                        : 'When you publish, content loads via iframe URL — legacy mode for older collections.'}
                 </p>
               </div>
             </div>

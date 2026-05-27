@@ -46,6 +46,8 @@ type SelectedElement = {
   src?: string
   alt?: string
   href?: string
+  innerHtml?: string
+  inlineTags?: string
 }
 
 export type ProjectVisualEditorHandle = {
@@ -275,7 +277,14 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
           }
           break
         case 'am-ai-req':
-          setSelected({ id: d.id, text: d.text, tag: d.tag, kind: d.kind ?? 'text' })
+          setSelected({
+            id: d.id,
+            text: d.text,
+            tag: d.tag,
+            kind: d.kind ?? 'text',
+            innerHtml: d.innerHtml,
+            inlineTags: d.inlineTags,
+          })
           if (!isStudio) setAiOpen(true)
           break
         case 'am-image-req':
@@ -334,7 +343,13 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       const res = await fetch(`/api/projects/${projectId}/ai-element`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: selected.text, tag: selected.tag, prompt: aiPrompt }),
+        body: JSON.stringify({
+          text: selected.text,
+          tag: selected.tag,
+          prompt: aiPrompt,
+          innerHtml: (selected as SelectedElement & { innerHtml?: string }).innerHtml,
+          inlineTags: (selected as SelectedElement & { inlineTags?: string }).inlineTags,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed')

@@ -59,6 +59,8 @@ type PublishResult = {
   collectionEmbedSnippet?: string
   collectionTemplateSnippet?: string
   embedNeedsReconnect?: boolean
+  runtimeAutoConfigured?: boolean
+  usedRemoteRuntime?: boolean
 }
 
 type PublishPreview = {
@@ -68,6 +70,9 @@ type PublishPreview = {
   htmlLineCount?: number
   htmlLineThreshold?: number
   usesEmbed?: boolean
+  usesRemoteRuntime?: boolean
+  runtimeConfigured?: boolean
+  runtimeUrl?: string
   resolvedFields?: string[]
   error?: string
 }
@@ -155,7 +160,12 @@ export function PublishDialog({
     setLayoutControls(parseLayoutControls(params))
     const mode = params.publishHtmlMode
     setPublishHtmlMode(
-      mode === 'iframe_embed' || mode === 'rich_text_html' || mode === 'custom_code' || mode === 'auto'
+      mode === 'iframe_embed' ||
+        mode === 'rich_text_html' ||
+        mode === 'custom_code' ||
+        mode === 'remote_runtime' ||
+        mode === 'split_plain_text' ||
+        mode === 'auto'
         ? mode
         : 'auto',
     )
@@ -207,17 +217,20 @@ export function PublishDialog({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Publish failed')
 
-      if (data.embedNeedsReconnect) {
+      if (data.embedNeedsReconnect || data.runtimeNeedsReconnect) {
         setResult({
           type: 'warning',
           message:
             data.embedMessage ??
-            'CMS item created/updated, but automatic iframe embed could not be applied.',
+            'CMS item created/updated, but automatic runtime setup could not be applied.',
           liveUrl: data.liveUrl,
           previewUrl: data.previewUrl,
           embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
           collectionEmbedSnippet: data.collectionEmbedSnippet,
+          collectionTemplateSnippet: data.collectionTemplateSnippet,
           embedNeedsReconnect: true,
+          runtimeAutoConfigured: false,
+          usedRemoteRuntime: Boolean(data.usedRemoteRuntime),
         })
       } else {
         setResult({
@@ -226,7 +239,12 @@ export function PublishDialog({
           liveUrl: data.liveUrl,
           previewUrl: data.previewUrl,
           embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
-          collectionTemplateSnippet: data.collectionTemplateSnippet,
+          collectionTemplateSnippet:
+            data.runtimeAutoConfigured || data.embedAutoConfigured
+              ? undefined
+              : data.collectionTemplateSnippet,
+          runtimeAutoConfigured: Boolean(data.runtimeAutoConfigured ?? data.embedAutoConfigured),
+          usedRemoteRuntime: Boolean(data.usedRemoteRuntime),
         })
       }
       onPublished?.({
@@ -254,7 +272,7 @@ export function PublishDialog({
             Publish to Webflow CMS
           </DialogTitle>
           <DialogDescription className="text-zinc-500 text-xs mt-2">
-            Creates or updates a CMS item, maps fields, and optionally publishes your Webflow site.
+            Creates or updates a CMS item, auto-configures remote runtime when available, and optionally publishes your Webflow site.
           </DialogDescription>
         </DialogHeader>
 
@@ -327,23 +345,34 @@ export function PublishDialog({
                       {preview?.htmlLineThreshold ?? 4000})
                     </SelectItem>
                     <SelectItem value="remote_runtime">
-                      Remote runtime (recommended — Page ID in CMS)
+                      Remote runtime (recommended — auto-configured, no embed paste)
                     </SelectItem>
                     <SelectItem value="split_plain_text">
                       Legacy: split HTML / CSS / JS in CMS fields
                     </SelectItem>
                     <SelectItem value="custom_code">Full HTML in CMS body (legacy Rich Text)</SelectItem>
-                    <SelectItem value="iframe_embed">Iframe embed in CMS body</SelectItem>
+                    <SelectItem value="iframe_embed">Legacy: iframe embed in CMS body</SelectItem>
                     <SelectItem value="rich_text_html">Full HTML in Rich Text (force)</SelectItem>
                   </SelectContent>
                 </Select>
                 {preview?.htmlMode && (
                   <p className="text-[10px] text-zinc-600">
                     Resolved: {preview.htmlMode.replace(/_/g, ' ')}
-                    {preview.usesEmbed ? ' · collection embed.js' : ''}
+                    {preview.usesRemoteRuntime
+                      ? preview.runtimeConfigured
+                        ? ' · runtime bootstrap active'
+                        : ' · runtime bootstrap on publish'
+                      : preview.usesEmbed
+                        ? ' · legacy collection embed.js'
+                        : ''}
                     {preview.resolvedFields?.length
                       ? ` · ${preview.resolvedFields.length} CMS fields`
                       : ''}
+                  </p>
+                )}
+                {preview?.usesRemoteRuntime && (
+                  <p className="text-[10px] text-emerald-600/80 leading-relaxed">
+                    Webflow stores Page ID + SEO only. Content renders from Automaio via runtime.js — no manual embed paste when OAuth custom_code is connected.
                   </p>
                 )}
               </div>
@@ -436,7 +465,12 @@ export function PublishDialog({
                   <p>{result.message}</p>
                   {result.embedNeedsReconnect && (
                     <p className="text-[11px] opacity-90 leading-relaxed">
-                      Reconnect Webflow via OAuth with <code className="text-amber-200">custom_code</code> scopes.
+                      Reconnect Webflow via OAuth with <code className="text-amber-200">custom_code</code> scopes to enable automatic runtime setup. You can use the manual embed below as a fallback.
+                    </p>
+                  )}
+                  {result.runtimeAutoConfigured && result.usedRemoteRuntime && (
+                    <p className="text-[11px] opacity-90 leading-relaxed">
+                      Runtime bootstrap applied to your collection template automatically. Future content updates deploy without republishing CMS HTML.
                     </p>
                   )}
                   {result.liveUrl && (
@@ -465,7 +499,7 @@ export function PublishDialog({
                 result.collectionTemplateSnippet && (
                   <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
                     <p className="text-[10px] text-zinc-500 uppercase font-bold">
-                      Webflow collection template embed (one-time setup)
+                      Manual fallback — collection template embed (only if auto-setup failed)
                     </p>
                     <pre className="text-[10px] font-mono text-zinc-300 bg-black/40 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
                       {result.collectionTemplateSnippet}

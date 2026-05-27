@@ -37,9 +37,9 @@ const baseStyles = `
 function sectionTemplate(badge: string, body: string): string {
   return `<style>${baseStyles}</style>
 <section class="ai-landing-wrap">
-  <span class="badge">${badge}</span>
+  <span class="badge" data-ai-field="hero.badge">${badge}</span>
   ${body}
-  <footer class="ai-footer">© {{year}} {{company_name}} · Powered by Automaio</footer>
+  <footer class="ai-footer" data-ai-field="footer.copyright">© {{year}} {{company_name}} · Powered by Automaio</footer>
 </section>`
 }
 
@@ -55,13 +55,13 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       placeholders: ['{{company_name}}', '{{headline}}', '{{subheadline}}', '{{cta_text}}', '{{year}}'],
       html: sectionTemplate(
         'SaaS',
-        `<h1>{{headline}}</h1>
-    <p class="lead">{{subheadline}}</p>
-    <a class="cta" href="#contact">{{cta_text}}</a>
+        `<h1 data-ai-field="hero.title">{{headline}}</h1>
+    <p class="lead" data-ai-field="hero.description">{{subheadline}}</p>
+    <a class="cta" href="#contact" data-ai-field="cta.primary">{{cta_text}}</a>
     <div class="grid">
-      <div class="card"><h3>Ship faster</h3><p>Launch campaigns in minutes, not weeks.</p></div>
-      <div class="card"><h3>Webflow ready</h3><p>Export and publish to your Webflow site.</p></div>
-      <div class="card"><h3>AI powered</h3><p>Generate copy tuned to your audience.</p></div>
+      <div class="card"><h3 data-ai-field="features.1.title">Ship faster</h3><p data-ai-field="features.1.description">Launch campaigns in minutes, not weeks.</p></div>
+      <div class="card"><h3 data-ai-field="features.2.title">Webflow ready</h3><p data-ai-field="features.2.description">Export and publish to your Webflow site.</p></div>
+      <div class="card"><h3 data-ai-field="features.3.title">AI powered</h3><p data-ai-field="features.3.description">Generate copy tuned to your audience.</p></div>
     </div>`,
       ),
     },
@@ -77,12 +77,12 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       placeholders: ['{{company_name}}', '{{headline}}', '{{offer}}', '{{cta_text}}', '{{year}}'],
       html: sectionTemplate(
         'Sale',
-        `<h1>{{headline}}</h1>
-    <p class="lead">{{offer}}</p>
-    <a class="cta" href="#shop">{{cta_text}}</a>
+        `<h1 data-ai-field="hero.title">{{headline}}</h1>
+    <p class="lead" data-ai-field="hero.description">{{offer}}</p>
+    <a class="cta" href="#shop" data-ai-field="cta.primary">{{cta_text}}</a>
     <div class="grid">
-      <div class="card"><h3>Free shipping</h3><p>On orders over $50 this week.</p></div>
-      <div class="card"><h3>Best sellers</h3><p>Curated picks from {{company_name}}.</p></div>
+      <div class="card"><h3 data-ai-field="features.1.title">Free shipping</h3><p data-ai-field="features.1.description">On orders over $50 this week.</p></div>
+      <div class="card"><h3 data-ai-field="features.2.title">Best sellers</h3><p data-ai-field="features.2.description">Curated picks from {{company_name}}.</p></div>
     </div>`,
       ),
     },
@@ -98,13 +98,13 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       placeholders: ['{{company_name}}', '{{headline}}', '{{subheadline}}', '{{cta_text}}', '{{year}}'],
       html: sectionTemplate(
         'Agency',
-        `<h1>{{headline}}</h1>
-    <p class="lead">{{subheadline}}</p>
-    <a class="cta" href="#contact">{{cta_text}}</a>
+        `<h1 data-ai-field="hero.title">{{headline}}</h1>
+    <p class="lead" data-ai-field="hero.description">{{subheadline}}</p>
+    <a class="cta" href="#contact" data-ai-field="cta.primary">{{cta_text}}</a>
     <div class="grid">
-      <div class="card"><h3>Strategy</h3><p>Position your brand for measurable growth.</p></div>
-      <div class="card"><h3>Creative</h3><p>Campaigns designed for Webflow delivery.</p></div>
-      <div class="card"><h3>Automation</h3><p>Schedule and optimize with Automaio.</p></div>
+      <div class="card"><h3 data-ai-field="features.1.title">Strategy</h3><p data-ai-field="features.1.description">Position your brand for measurable growth.</p></div>
+      <div class="card"><h3 data-ai-field="features.2.title">Creative</h3><p data-ai-field="features.2.description">Campaigns designed for Webflow delivery.</p></div>
+      <div class="card"><h3 data-ai-field="features.3.title">Automation</h3><p data-ai-field="features.3.description">Schedule and optimize with Automaio.</p></div>
     </div>`,
       ),
     },
@@ -120,9 +120,9 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       placeholders: ['{{company_name}}', '{{headline}}', '{{location}}', '{{cta_text}}', '{{year}}'],
       html: sectionTemplate(
         'Local',
-        `<h1>{{headline}}</h1>
-    <p class="lead">Visit us at {{location}}</p>
-    <a class="cta" href="#contact">{{cta_text}}</a>`,
+        `<h1 data-ai-field="hero.title">{{headline}}</h1>
+    <p class="lead" data-ai-field="hero.description">Visit us at {{location}}</p>
+    <a class="cta" href="#contact" data-ai-field="cta.primary">{{cta_text}}</a>`,
       ),
     },
   },
@@ -137,10 +137,10 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       placeholders: ['{{company_name}}', '{{headline}}', '{{subheadline}}', '{{cta_text}}', '{{year}}'],
       html: sectionTemplate(
         'Healthcare',
-        `<h1>{{headline}}</h1>
-    <p class="lead">{{subheadline}}</p>
-    <a class="cta" href="#contact">{{cta_text}}</a>
-    <p class="disclaimer" style="margin-top:24px;font-size:0.85rem;color:#64748b;">This content is informational. Consult a professional for medical advice.</p>`,
+        `<h1 data-ai-field="hero.title">{{headline}}</h1>
+    <p class="lead" data-ai-field="hero.description">{{subheadline}}</p>
+    <a class="cta" href="#contact" data-ai-field="cta.primary">{{cta_text}}</a>
+    <p class="disclaimer" style="margin-top:24px;font-size:0.85rem;color:#64748b;" data-ai-field="content.disclaimer">This content is informational. Consult a professional for medical advice.</p>`,
       ),
     },
   },

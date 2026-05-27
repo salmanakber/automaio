@@ -30,12 +30,15 @@ export async function getOrgSetupStatus(orgId: string): Promise<OrgSetupStatus> 
 
   const collectionsJson = integration?.collections as {
     automaioEmbed?: { scriptId?: string; configuredAt?: string }
+    automaioRuntime?: { scriptId?: string; configuredAt?: string }
     collections?: Array<{ id: string }>
   } | null
 
   const webflowConnected = Boolean(integration?.webflowApiKey)
   const collectionConfigured = Boolean(integration?.campaignsCollectionId)
-  const embedConfigured = Boolean(collectionsJson?.automaioEmbed?.scriptId)
+  const runtimeConfigured = Boolean(collectionsJson?.automaioRuntime?.scriptId)
+  const legacyEmbedConfigured = Boolean(collectionsJson?.automaioEmbed?.scriptId)
+  const embedConfigured = runtimeConfigured || legacyEmbedConfigured
   const hasPublishedProject = publishedCount > 0
   const hasAnyProject = projectCount > 0
 
@@ -74,8 +77,8 @@ export async function getOrgSetupStatus(orgId: string): Promise<OrgSetupStatus> 
     },
     {
       id: 'embed',
-      label: 'Auto-embed active',
-      description: 'Content displays on your site without manual code',
+      label: 'Auto-runtime active',
+      description: 'Landing pages render from Automaio without manual embed paste',
       done: embedConfigured || hasPublishedProject,
       href: `/dashboard/${orgId}/settings?tab=integrations`,
       actionLabel: embedConfigured ? undefined : 'Reconnect Webflow',

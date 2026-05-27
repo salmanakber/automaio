@@ -37,9 +37,9 @@ window.AutomaioRuntime && window.AutomaioRuntime.render({
 }
 
 export const WEBFLOW_RUNTIME_TEMPLATE_SETUP = [
-  'Open Webflow → CMS → your landing collection → Collection Template.',
-  'Add one Embed element and paste the Automaio runtime snippet.',
+  'Automaio auto-installs the runtime bootstrap when you create a collection or publish a page.',
+  'Optional: bind Page ID to a hidden text field on your collection template for faster lookup.',
   'Bind SEO Title and SEO Description to page SEO settings.',
-  'Each CMS item only stores Page ID + metadata — content renders from Automaio.',
-  'Republish Webflow once; future page updates deploy without changing CMS HTML.',
+  'Each CMS item stores Page ID + metadata — content renders from Automaio.',
+  'Republish Webflow once after connecting; future page updates deploy without changing CMS HTML.',
 ] as const

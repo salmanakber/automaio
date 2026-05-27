@@ -5,6 +5,7 @@ import { requireOrgAccess } from '@/lib/api/org-access'
 import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { syncWebflowIntegrationV2 } from '@/lib/integrations/webflow-cms'
 import { getDefaultLandingCollectionFields } from '@/lib/webflow/section-cms-bindings'
+import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 import {
   formatWebflowCollectionCreateError,
   isDuplicateCollectionError,
@@ -115,12 +116,24 @@ export async function POST(req: NextRequest) {
       // Collection was created — sync can be retried from settings
     }
 
+    let runtimeAutoConfigured = false
+    try {
+      const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
+        collectionId: collection.id,
+        publishSite: false,
+      })
+      runtimeAutoConfigured = runtimeResult.success === true
+    } catch {
+      // Runtime auto-setup can be retried on first publish
+    }
+
     return NextResponse.json(
       {
         collection,
         fieldCount: collectionFields.length,
         includesSectionFields: includeSectionFields,
         setAsPagesCollection,
+        runtimeAutoConfigured,
       },
       { status: 201 },
     )

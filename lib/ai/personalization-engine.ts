@@ -2,27 +2,26 @@ import { aiOrchestrator } from '@/lib/ai/orchestrator'
 import { buildToneSystemPrompt } from '@/lib/ai/tone-presets'
 import type { BusinessContext } from '@/lib/ai/business-context-types'
 import {
-  applyTextPatches,
-  groupElementsBySection,
-  stripPersonalizationMarkers,
-  tagTextElements,
-  type TextElement,
-} from '@/lib/ai/dom-patcher'
-import {
-  extractInlineStyleBlocks,
-  mergePreservedStyles,
-  resolveUpdateText,
-  stripInlineStyleBlocks,
-} from '@/lib/ai/html-styles'
-import { extractHeadAssets } from '@/lib/webflow/html-assets'
-import { extractRichTextFragment } from '@/lib/webflow/embed-setup'
+  applySemanticSlotPatches,
+  buildSemanticPromptFields,
+  groupSlotsBySection,
+  normalizeSemanticUpdates,
+  parseSemanticSlots,
+  type SemanticSlot,
+} from '@/lib/ai/semantic-slots'
+import { preserveTemplateHtmlIntegrity } from '@/lib/content/preserve-template-html'
 
-const COPYWRITER_SYSTEM = `You are an expert landing page copywriter and conversion strategist.
-Update ONLY plain text for each element. Preserve HTML structure — never add tags or markdown.
-Match each element to its HTML tag role (h1 = main headline, h3 in cards = feature titles, buttons = CTAs).
-Prioritize conversion: clear value props, trust signals, action-oriented CTAs.
-Skip elements that should remain unchanged (copyright years, generic nav labels unless business-specific).
-Return ONLY valid JSON mapping element IDs to updated plain text strings.`
+const SEMANTIC_COPYWRITER_SYSTEM = `You are an expert landing page copywriter and conversion strategist.
+You personalize landing pages using SEMANTIC CONTENT SLOTS only.
+
+Rules:
+- Return ONLY valid JSON mapping semantic field keys to updated plain text strings
+- NEVER generate HTML, tags, markdown, or layout structure
+- NEVER add or remove fields — only update values for fields provided
+- Match each field's semantic role (hero headline vs CTA vs feature description)
+- Preserve approximate length unless constraints specify otherwise
+- For fields with inline markup hints, return plain text only — markup is applied automatically
+- Skip fields that should remain unchanged (copyright years, generic placeholders)`
 
 function buildBusinessBrief(context: BusinessContext): string {
   const parts = [
@@ -48,11 +47,11 @@ function buildBusinessBrief(context: BusinessContext): string {
   return parts.filter(Boolean).join('\n')
 }
 
-function buildSectionGuidance(groups: Record<string, TextElement[]>): string {
+function buildSectionGuidance(groups: Record<string, SemanticSlot[]>): string {
   const lines: string[] = []
-  for (const [section, els] of Object.entries(groups)) {
+  for (const [section, slots] of Object.entries(groups)) {
     if (section === 'general') continue
-    lines.push(`- ${section}: ${els.length} element(s) — ${describeSectionIntent(section)}`)
+    lines.push(`- ${section}: ${slots.length} slot(s) — ${describeSectionIntent(section)}`)
   }
   return lines.length ? `Template sections detected:\n${lines.join('\n')}` : ''
 }
@@ -72,73 +71,21 @@ function describeSectionIntent(section: string): string {
   return intents[section] ?? 'personalize for business context'
 }
 
-function formatElementBlock(elements: TextElement[]): string {
-  return elements.map((el) => {
-    const sectionNote = el.section ? ` [${el.section}]` : ''
-    return `[${el.id}] <${el.tag}>${sectionNote} ${el.text}`
-  }).join('\n')
-}
-
 export type PersonalizationResult = {
   html: string
   updatedCount: number
-  elements: TextElement[]
+  elements: Array<{ id: string; tag: string; text: string; section?: string }>
   sectionMap: Record<string, number>
+  schema: Record<string, string>
 }
 
-function normalizeAiUpdates(raw: Record<string, unknown>): Record<string, string> {
-  const updates: Record<string, string> = {}
-  for (const [key, value] of Object.entries(raw)) {
-    if (typeof value === 'string' && value.trim()) {
-      updates[String(key)] = value.trim()
-    }
-  }
-  return updates
-}
-
-async function personalizeLandingPageStructural(
-  html: string,
-  context: BusinessContext,
-  organizationId: string,
-  customPrompt?: string,
-): Promise<string> {
-  const preservedStyles = extractInlineStyleBlocks(html)
-  const headAssets = extractHeadAssets(html)
-  const bodyFragment = stripInlineStyleBlocks(extractRichTextFragment(html))
-  const toneGuidance = buildToneSystemPrompt(context.tonePreset)
-  const businessBrief = buildBusinessBrief(context)
-
-  const prompt = `${customPrompt ? `Additional instructions: ${customPrompt}\n\n` : ''}Business context:
-${businessBrief}
-
-Rewrite this landing page HTML for the business above. Keep the same structure, classes, and layout.
-Update headlines, body copy, CTAs, and feature text. Do not remove sections.
-Return ONLY the inner HTML fragment (no markdown fences, no <html> wrapper).`
-
-  const response = await aiOrchestrator.generate({
-    prompt: `${prompt}\n\nHTML:\n${bodyFragment.slice(0, 12000)}`,
-    systemPrompt: `${COPYWRITER_SYSTEM}\n\n${toneGuidance}`,
-    organizationId,
-    maxTokens: 6000,
-    temperature: 0.65,
-  })
-
-  let newBody = response.content.trim().replace(/^```(?:html)?\s*|\s*```$/g, '')
-  if (!newBody.includes('<')) {
-    throw new Error('AI returned an invalid format during personalization')
-  }
-
-  // Section-only output — no html/head/body wrappers (scoped at publish time).
-  newBody = newBody
-    .replace(/<!DOCTYPE[^>]*>/gi, '')
-    .replace(/<\/?html[^>]*>/gi, '')
-    .replace(/<head[\s\S]*?<\/head>/gi, '')
-    .replace(/<\/?body[^>]*>/gi, '')
-    .trim()
-
-  const inlineStyles = extractInlineStyleBlocks(html)
-  const styles = [headAssets, preservedStyles || inlineStyles].filter(Boolean).join('\n')
-  return styles ? `${styles}\n${newBody}` : newBody
+function slotsToLegacyElements(slots: SemanticSlot[]) {
+  return slots.map((slot, index) => ({
+    id: String(index),
+    tag: slot.tag,
+    text: slot.text,
+    section: slot.section,
+  }))
 }
 
 export async function personalizeLandingPageHtml(
@@ -147,25 +94,19 @@ export async function personalizeLandingPageHtml(
   organizationId: string,
   customPrompt?: string,
 ): Promise<PersonalizationResult> {
-  const cleanHtml = stripPersonalizationMarkers(html)
-  const { html: taggedHtml, elements } = tagTextElements(cleanHtml)
+  const { html: annotatedHtml, slots, schema } = parseSemanticSlots(html)
 
-  if (elements.length < 3) {
-    const structuralHtml = await personalizeLandingPageStructural(
-      cleanHtml,
-      context,
-      organizationId,
-      customPrompt,
-    )
+  if (slots.length === 0) {
     return {
-      html: mergePreservedStyles(cleanHtml, structuralHtml),
-      updatedCount: elements.length,
-      elements,
+      html: preserveTemplateHtmlIntegrity(html, html),
+      updatedCount: 0,
+      elements: [],
       sectionMap: {},
+      schema: {},
     }
   }
 
-  const groups = groupElementsBySection(elements)
+  const groups = groupSlotsBySection(slots)
   const sectionMap = Object.fromEntries(
     Object.entries(groups).map(([k, v]) => [k, v.length]),
   )
@@ -173,22 +114,26 @@ export async function personalizeLandingPageHtml(
   const toneGuidance = buildToneSystemPrompt(context.tonePreset)
   const businessBrief = buildBusinessBrief(context)
   const sectionGuidance = buildSectionGuidance(groups)
+  const fieldBlock = buildSemanticPromptFields(slots)
+
+  const exampleKeys = slots.slice(0, 3).map((s) => `"${s.field}": "..."`).join(',\n  ')
 
   const prompt = `${customPrompt ? `Additional instructions: ${customPrompt}\n\n` : ''}Business context:
 ${businessBrief}
 
 ${sectionGuidance}
 
-Current page text elements (format: [id] <tag> [section] text):
-${formatElementBlock(elements)}
+Semantic content slots (update each field with personalized plain text):
+${fieldBlock}
 
-Rewrite each element for this business. Map hero/features/CTA/testimonials/FAQ sections intelligently.
-If a section type has no matching business data, generate appropriate conversion-focused copy.
-Return JSON: {"0":"updated text","1":"updated text",...}`
+Return JSON only — field keys must match exactly:
+{
+  ${exampleKeys}${slots.length > 3 ? ',\n  ...' : ''}
+}`
 
   const response = await aiOrchestrator.generate({
     prompt,
-    systemPrompt: `${COPYWRITER_SYSTEM}\n\n${toneGuidance}`,
+    systemPrompt: `${SEMANTIC_COPYWRITER_SYSTEM}\n\n${toneGuidance}`,
     organizationId,
     maxTokens: 4000,
     temperature: 0.65,
@@ -197,71 +142,34 @@ Return JSON: {"0":"updated text","1":"updated text",...}`
   let updates: Record<string, string> = {}
   try {
     const raw = response.content.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
-    updates = normalizeAiUpdates(JSON.parse(raw) as Record<string, unknown>)
+    updates = normalizeSemanticUpdates(JSON.parse(raw) as Record<string, unknown>)
   } catch {
     throw new Error('AI returned an invalid format during personalization')
   }
 
   if (Object.keys(updates).length === 0) {
-    const structuralHtml = await personalizeLandingPageStructural(
-      cleanHtml,
-      context,
-      organizationId,
-      customPrompt,
-    )
-    return {
-      html: mergePreservedStyles(cleanHtml, structuralHtml),
-      updatedCount: 0,
-      elements,
-      sectionMap,
-    }
+    throw new Error('AI returned no personalized content — try again or adjust your business context')
   }
 
-  const patchedHtml = applyTextPatches(taggedHtml, updates, elements)
-  const mergedHtml = mergePreservedStyles(cleanHtml, patchedHtml)
+  const patchedHtml = applySemanticSlotPatches(annotatedHtml, updates)
+  const mergedHtml = preserveTemplateHtmlIntegrity(html, patchedHtml)
 
-  const textChanged = elements.some((el) => {
-    const next = resolveUpdateText(updates, el.id)
-    return next !== undefined && next.trim() !== el.text.trim()
-  })
+  const updatedCount = slots.filter((slot) => {
+    const next = updates[slot.field]
+    return next !== undefined && next.trim() !== slot.text.trim()
+  }).length
 
-  if (!textChanged && Object.keys(updates).length > 0) {
-    const structuralHtml = await personalizeLandingPageStructural(
-      cleanHtml,
-      context,
-      organizationId,
-      customPrompt,
-    )
-    return {
-      html: mergePreservedStyles(cleanHtml, structuralHtml),
-      updatedCount: Object.keys(updates).length,
-      elements,
-      sectionMap,
-    }
+  const mergedSchema = { ...schema }
+  for (const [field, value] of Object.entries(updates)) {
+    if (value.trim()) mergedSchema[field] = value.trim()
   }
-
-  if (mergedHtml === cleanHtml && elements.length > 0) {
-    const structuralHtml = await personalizeLandingPageStructural(
-      cleanHtml,
-      context,
-      organizationId,
-      customPrompt,
-    )
-    return {
-      html: mergePreservedStyles(cleanHtml, structuralHtml),
-      updatedCount: Object.keys(updates).length,
-      elements,
-      sectionMap,
-    }
-  }
-
-  const updatedCount = Object.keys(updates).length
 
   return {
     html: mergedHtml,
     updatedCount,
-    elements,
+    elements: slotsToLegacyElements(slots),
     sectionMap,
+    schema: mergedSchema,
   }
 }
 
@@ -300,6 +208,7 @@ export async function personalizeProject(
     tone: context.tonePreset ?? params.tone ?? '',
     seoTitle: context.seoTitle ?? params.seoTitle ?? '',
     seoDescription: context.seoDescription ?? params.seoDescription ?? '',
+    semanticSchema: JSON.stringify(result.schema),
     onboardingComplete: 'true',
   }
 

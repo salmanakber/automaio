@@ -7,6 +7,7 @@ import { extractBusinessContext, businessContextToParameters } from '@/lib/ai/bu
 import { personalizeProject } from '@/lib/ai/personalization-engine'
 import { enhanceBlogBody } from '@/lib/ai/blog-enhance'
 import { applyLayoutControlsToHtml, DEFAULT_LAYOUT_CONTROLS } from '@/lib/webflow/layout-controls'
+import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 import type { OnboardingInput } from '@/lib/ai/business-context-types'
 
 export async function GET(req: NextRequest) {
@@ -188,6 +189,17 @@ export async function POST(req: NextRequest) {
       where: { id: project.id },
       include: { template: { select: { id: true, name: true } } },
     })
+
+    if (webflowIntegrationId && cmsCollectionId) {
+      try {
+        await ensureAutomaioRuntimeForIntegration(webflowIntegrationId, {
+          collectionId: cmsCollectionId,
+          publishSite: false,
+        })
+      } catch {
+        // Runtime auto-setup retries on publish
+      }
+    }
 
     return NextResponse.json({ project: finalProject ?? project }, { status: 201 })
   } catch (error) {

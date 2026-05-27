@@ -16,6 +16,7 @@ import {
   buildProjectEmbedSnippet,
 } from '@/lib/webflow/embed-setup'
 import { ensureAutomaioEmbedForIntegration } from '@/lib/webflow/site-embed'
+import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 import { buildWebflowLiveUrl } from '@/lib/webflow/live-url'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
@@ -173,7 +174,14 @@ export async function getProjectPublishPreview(projectId: string) {
     usesSplitPlainText: plan.htmlMode === 'split_plain_text',
     usesRemoteRuntime: plan.htmlMode === 'remote_runtime',
     runtimeUrl: `${appUrl}/webflow/runtime.js`,
+    runtimeConfigured: Boolean(
+      (integration?.collections as CollectionsJson | null)?.automaioRuntime?.scriptId,
+    ),
   }
+}
+
+type CollectionsJson = {
+  automaioRuntime?: { scriptId?: string }
 }
 
 async function getCollectionFields(
@@ -389,13 +397,42 @@ export async function publishContentProject(
   let embedAutoConfigured = false
   let embedNeedsReconnect = false
   let embedMessage = ''
-  let usedRichTextFallback = plan.htmlMode === 'rich_text_html'
+  let runtimeAutoConfigured = false
+  let runtimeNeedsReconnect = false
   const usedSplitPlainText = plan.htmlMode === 'split_plain_text'
   const usedRemoteRuntime = plan.htmlMode === 'remote_runtime'
+  let usedRichTextFallback = plan.htmlMode === 'rich_text_html'
 
   if (usedRemoteRuntime) {
-    embedMessage =
-      'Published with remote runtime. Webflow CMS stores Page ID + SEO only — add the runtime embed snippet to your Collection Template (one-time setup). Content updates deploy without republishing CMS HTML.'
+    let runtimeResult: Awaited<ReturnType<typeof ensureAutomaioRuntimeForIntegration>>
+    try {
+      runtimeResult = await ensureAutomaioRuntimeForIntegration(integration.id, {
+        collectionId: project.cmsCollectionId ?? undefined,
+        publishSite: shouldPublishSite,
+      })
+    } catch (runtimeErr) {
+      runtimeResult = {
+        success: false,
+        needsReconnect: true,
+        recoverable: true,
+        error: runtimeErr instanceof Error ? runtimeErr.message : 'Runtime setup failed',
+      }
+    }
+
+    if (runtimeResult.success) {
+      runtimeAutoConfigured = true
+      embedAutoConfigured = true
+      embedMessage =
+        'Published with remote runtime. Automaio automatically configured your collection template — pages render from the platform without pasting embed code.'
+    } else if (runtimeResult.needsReconnect) {
+      runtimeNeedsReconnect = true
+      embedNeedsReconnect = true
+      embedMessage =
+        'Published with remote runtime. Reconnect Webflow in Settings to enable automatic template setup, or add the runtime embed snippet manually.'
+    } else {
+      embedMessage =
+        'Published with remote runtime. Webflow CMS stores Page ID + SEO only — content updates deploy without republishing CMS HTML.'
+    }
   } else if (usedSplitPlainText) {
     embedMessage =
       'Landing page published to HTML/CSS/JS Plain Text CMS fields. Add the Automaio collection template embed to your Webflow Collection Template page.'
@@ -472,6 +509,7 @@ export async function publishContentProject(
         ...schemaParams,
         liveUrl,
         previewUrl,
+        slug: payload.slug ?? slugify(project.name),
       },
     },
   })
@@ -485,6 +523,8 @@ export async function publishContentProject(
     embedAutoConfigured,
     embedNeedsReconnect,
     embedMessage,
+    runtimeAutoConfigured,
+    runtimeNeedsReconnect,
     usedRichTextFallback,
     usedSplitPlainText,
     usedRemoteRuntime,
