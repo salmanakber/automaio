@@ -127,6 +127,24 @@ export class WebflowClient {
     })
   }
 
+  /** Find a live CMS item by exact slug (public site URLs use live items). */
+  async findLiveCollectionItemBySlug(collectionId: string, slug: string) {
+    const data = await this.request<{
+      items?: Array<{ id: string; fieldData?: Record<string, unknown> }>
+    }>(`/collections/${collectionId}/items/live?slug=${encodeURIComponent(slug)}&limit=1`)
+
+    return data.items?.[0] ?? null
+  }
+
+  /** Staged CMS item — for Webflow preview / unpublished items. */
+  async findStagedCollectionItemBySlug(collectionId: string, slug: string) {
+    const data = await this.request<{
+      items?: Array<{ id: string; fieldData?: Record<string, unknown> }>
+    }>(`/collections/${collectionId}/items?slug=${encodeURIComponent(slug)}&limit=1`)
+
+    return data.items?.[0] ?? null
+  }
+
   async publishSite(siteId: string) {
     return this.request(`/sites/${siteId}/publish`, {
       method: 'POST',

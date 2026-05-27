@@ -510,6 +510,7 @@ export async function publishContentProject(
         liveUrl,
         previewUrl,
         slug: payload.slug ?? slugify(project.name),
+        cmsSlug: payload.slug ?? slugify(project.name),
       },
     },
   })
