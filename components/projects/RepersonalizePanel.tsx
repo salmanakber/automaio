@@ -90,7 +90,6 @@ export function RepersonalizePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           onboarding: formToOnboardingInput(onboarding),
-          businessContext: ctx,
         }),
       })
       const data = await parseJsonResponse<{
@@ -118,7 +117,7 @@ export function RepersonalizePanel({
   const handleOnboardingComplete = (data: OnboardingFormData, ctx?: BusinessContext) => {
     setFormData(data)
     setContext(ctx ?? null)
-    setMode('confirm')
+    runPersonalize(data)
   }
 
   const handleQuickRepersonalize = () => {

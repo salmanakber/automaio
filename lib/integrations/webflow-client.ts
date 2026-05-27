@@ -121,6 +121,12 @@ export class WebflowClient {
     })
   }
 
+  async deleteCollectionItem(collectionId: string, itemId: string) {
+    return this.request<void>(`/collections/${collectionId}/items/${itemId}`, {
+      method: 'DELETE',
+    })
+  }
+
   async publishSite(siteId: string) {
     return this.request(`/sites/${siteId}/publish`, {
       method: 'POST',

@@ -3,6 +3,7 @@ import { validateSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAccessByUserId } from '@/lib/api/org-access'
 import { publishContentProject } from '@/lib/content/publish-project'
+import { deleteWebflowCmsItemForProject } from '@/lib/webflow/delete-cms-item'
 import { scheduleContentProject } from '@/lib/campaigns/schedule-content'
 
 type RouteParams = { params: Promise<{ id: string }> }
@@ -100,8 +101,19 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     const existing = await getProjectForUser(id, user.id)
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+    let webflowDelete: Awaited<ReturnType<typeof deleteWebflowCmsItemForProject>> | null = null
+    try {
+      webflowDelete = await deleteWebflowCmsItemForProject(existing)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Webflow delete failed'
+      return NextResponse.json(
+        { error: `Could not delete Webflow CMS item: ${message}` },
+        { status: 400 },
+      )
+    }
+
     await prisma.contentProject.delete({ where: { id } })
-    return NextResponse.json({ deleted: true })
+    return NextResponse.json({ deleted: true, webflow: webflowDelete })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete project' }, { status: 500 })
   }

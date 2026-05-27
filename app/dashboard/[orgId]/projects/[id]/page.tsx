@@ -17,6 +17,7 @@ import {
   ZoomOut,
   Wand2,
   RefreshCw,
+  Trash2,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -43,6 +44,7 @@ import { PublishDialog } from '@/components/projects/PublishDialog'
 import { AiProgressOverlay } from '@/components/projects/AiProgressOverlay'
 import { RepersonalizePanel } from '@/components/projects/RepersonalizePanel'
 import { BlogStudioPanel } from '@/components/projects/BlogStudioPanel'
+import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 
@@ -72,6 +74,9 @@ export default function ProjectStudioPage() {
   const [saveError, setSaveError] = useState('')
   const [repersonalizeOpen, setRepersonalizeOpen] = useState(false)
   const [repersonalizing, setRepersonalizing] = useState(false)
+  const [editorKey, setEditorKey] = useState(0)
+  const [publishedLiveUrl, setPublishedLiveUrl] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const seoAutoTried = useRef(false)
 
   const load = useCallback(async () => {
@@ -91,6 +96,12 @@ export default function ProjectStudioPage() {
       setLoading(false)
     })
   }, [load])
+
+  useEffect(() => {
+    if (!project) return
+    const params = (project.parameters as Record<string, unknown>) ?? {}
+    if (typeof params.liveUrl === 'string') setPublishedLiveUrl(params.liveUrl)
+  }, [project])
 
   const saveParameters = async (nextProject: Record<string, unknown>) => {
     setProject(nextProject)
@@ -213,7 +224,25 @@ export default function ProjectStudioPage() {
 
   const handleRepersonalized = async (updated: Record<string, unknown>) => {
     setProject(updated)
+    setEditorKey((k) => k + 1)
     await load()
+  }
+
+  const handleDeleteProject = async () => {
+    if (!confirm('Delete this project? The Webflow CMS item will also be removed if linked.')) {
+      return
+    }
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+      const data = await parseJsonResponse<{ error?: string }>(res)
+      if (!res.ok) throw new Error(data.error ?? 'Delete failed')
+      router.push(`/dashboard/${orgId}/projects`)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -308,6 +337,16 @@ export default function ProjectStudioPage() {
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
               Save
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-zinc-500 hover:text-red-400"
+              onClick={handleDeleteProject}
+              disabled={deleting}
+              title="Delete project"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </Button>
           </div>
         </header>
 
@@ -342,6 +381,14 @@ export default function ProjectStudioPage() {
                 onGenerateSeo={handleGenerateSeo}
                 seoGenerating={seoGenerating}
               />
+              {isLandingPage && (
+                <div className="p-4 border-t border-zinc-800">
+                  <ProjectUrlsCard
+                    projectId={projectId}
+                    liveUrl={publishedLiveUrl}
+                  />
+                </div>
+              )}
             </div>
           </aside>
 
@@ -374,6 +421,7 @@ export default function ProjectStudioPage() {
               className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative"
             >
               <ProjectVisualEditor
+                key={editorKey}
                 ref={editorRef}
                 html={renderedHtml}
                 projectId={projectId}
@@ -405,7 +453,10 @@ export default function ProjectStudioPage() {
           project={project}
           projectId={projectId}
           orgId={orgId}
-          onPublished={load}
+          onPublished={(result) => {
+            if (result?.liveUrl) setPublishedLiveUrl(result.liveUrl)
+            load()
+          }}
         />
 
         <AiProgressOverlay

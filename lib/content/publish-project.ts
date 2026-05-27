@@ -22,6 +22,7 @@ import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 import { resolveHtmlModeWithOverride, type PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
 import { getHtmlLineThreshold } from '@/lib/platform/rendering-settings'
+import { buildProjectIframeUrl } from '@/lib/webflow/embed-page'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
 
 function slugify(value: string) {
@@ -383,10 +384,26 @@ export async function publishContentProject(
     itemSlug: payload.slug ?? slugify(project.name),
   })
 
+  const appUrl = getAppBaseUrl()
+  const previewUrl = buildProjectIframeUrl(appUrl, projectId)
+
+  const existingParams = (project.parameters as Record<string, unknown>) ?? {}
+  await prisma.contentProject.update({
+    where: { id: projectId },
+    data: {
+      parameters: {
+        ...existingParams,
+        liveUrl,
+        previewUrl,
+      },
+    },
+  })
+
   return {
     cmsItemId,
     html,
     liveUrl,
+    previewUrl,
     mappedFields: Object.keys(fieldData),
     embedAutoConfigured,
     embedNeedsReconnect,
@@ -395,7 +412,7 @@ export async function publishContentProject(
     htmlMode: plan.htmlMode,
     usesEmbed: plan.usesEmbed,
     embedFieldSlug: plan.embedFieldSlug,
-    embedSnippet: buildProjectEmbedSnippet(getAppBaseUrl(), projectId),
+    embedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
     collectionEmbedSnippet:
       plan.usesEmbed
         ? buildCollectionEmbedSnippet(getAppBaseUrl(), integration.webflowSiteId)

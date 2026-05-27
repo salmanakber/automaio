@@ -320,13 +320,7 @@ export function buildWebflowFieldPlan(
     embedFieldSlug,
     richTextFieldSlug,
     usesEmbed: Boolean(isFullTemplate && useIframeEmbed && payload.automaioId && !isBlogPost),
-    htmlMode: isFullTemplate
-      ? useIframeEmbed
-        ? 'iframe_embed'
-        : useCustomCode
-          ? 'custom_code'
-          : 'rich_text_html'
-      : 'rich_text_html',
+    htmlMode: isFullTemplate ? htmlMode : 'rich_text_html',
   }
 }
 

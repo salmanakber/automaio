@@ -35,6 +35,7 @@ import {
   CalendarClock,
 } from 'lucide-react'
 import { PublishLayoutControls } from '@/components/projects/PublishLayoutControls'
+import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseLayoutControls } from '@/lib/webflow/layout-controls'
 import type { LayoutControls } from '@/lib/ai/business-context-types'
@@ -46,13 +47,15 @@ type PublishDialogProps = {
   project: Record<string, unknown> | null
   projectId: string
   orgId: string
-  onPublished?: () => void
+  onPublished?: (result?: { liveUrl?: string; previewUrl?: string }) => void
 }
 
 type PublishResult = {
   type: 'success' | 'error' | 'warning'
   message: string
   liveUrl?: string
+  previewUrl?: string
+  embedSnippet?: string
   collectionEmbedSnippet?: string
   embedNeedsReconnect?: boolean
 }
@@ -210,6 +213,8 @@ export function PublishDialog({
             data.embedMessage ??
             'CMS item created/updated, but automatic iframe embed could not be applied.',
           liveUrl: data.liveUrl,
+          previewUrl: data.previewUrl,
+          embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
           collectionEmbedSnippet: data.collectionEmbedSnippet,
           embedNeedsReconnect: true,
         })
@@ -218,9 +223,14 @@ export function PublishDialog({
           type: 'success',
           message: data.embedMessage ?? 'Published to Webflow CMS successfully.',
           liveUrl: data.liveUrl,
+          previewUrl: data.previewUrl,
+          embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
         })
       }
-      onPublished?.()
+      onPublished?.({
+        liveUrl: data.liveUrl,
+        previewUrl: data.previewUrl,
+      })
     } catch (err) {
       setResult({
         type: 'error',
@@ -433,6 +443,15 @@ export function PublishDialog({
                   )}
                 </div>
               </div>
+
+              {(result.type === 'success' || result.type === 'warning') && result.previewUrl && (
+                <ProjectUrlsCard
+                  projectId={projectId}
+                  liveUrl={result.liveUrl}
+                  embedSnippet={result.embedSnippet}
+                  compact
+                />
+              )}
 
               {result.embedNeedsReconnect && (
                 <div className="space-y-3">
