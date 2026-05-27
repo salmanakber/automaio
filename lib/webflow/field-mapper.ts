@@ -15,6 +15,11 @@ import {
   extractRichTextWithAssets,
   sanitizeForWebflowRichText,
 } from '@/lib/webflow/html-assets'
+import type { AssembledLandingPage } from '@/lib/webflow/landing-page-assembler'
+import {
+  collectionSupportsSplitPlainText,
+  resolveSplitFieldSlug,
+} from '@/lib/webflow/cms-collection-schema'
 
 export { formatWebflowValidationError } from '@/lib/webflow/webflow-errors'
 
@@ -40,15 +45,21 @@ export type AutomaioContentPayload = {
   seoDescription?: string
   ogTitle?: string
   ogDescription?: string
+  previewImage?: string
   custom?: Record<string, string>
 }
 
-/** How full HTML templates are delivered on the Webflow site. */
-export type PublishHtmlMode = 'iframe_embed' | 'rich_text_html' | 'custom_code'
+/** How landing page HTML is delivered to Webflow CMS. */
+export type PublishHtmlMode =
+  | 'split_plain_text'
+  | 'iframe_embed'
+  | 'rich_text_html'
+  | 'custom_code'
 
 export type BuildFieldPlanOptions = {
-  /** When custom_code is unavailable, store HTML in CMS Rich Text instead of iframe embed. */
   htmlMode?: PublishHtmlMode
+  /** Pre-assembled HTML/CSS/JS for split Plain Text CMS fields. */
+  assembledLanding?: AssembledLandingPage
 }
 
 export type PublishFieldPlan = {
@@ -87,6 +98,11 @@ const FIELD_ALIASES: Record<keyof CmsFieldMapping, string[]> = {
     'code-embed',
     'automaio-html',
   ],
+  'html-content': ['html-content', 'html_content', 'html'],
+  'css-content': ['css-content', 'css_content', 'css'],
+  'js-content': ['js-content', 'js_content', 'js'],
+  'preview-image': ['preview-image', 'preview_image', 'preview-image-url'],
+  'template-id': ['template-id', 'template_id', 'automaio-template-id'],
   industry: ['industry', 'category', 'tag', 'sector'],
   status: ['status', 'state'],
   'target-audience': ['target-audience', 'audience', 'segment'],
@@ -179,6 +195,17 @@ export function previewFieldMapping(
     })
   }
 
+  if (plan.htmlMode === 'split_plain_text') {
+    rows.push({
+      logicalKey: 'collection-template',
+      label: 'Webflow collection template',
+      webflowSlug: 'html-content + css-content + js-content',
+      value: 'Add Automaio embed snippet to Collection Template',
+      included: true,
+      note: 'SEO-friendly direct HTML rendering (not iframe)',
+    })
+  }
+
   return rows
 }
 
@@ -232,12 +259,15 @@ export function buildWebflowFieldPlan(
     payload.contentType === 'custom' ||
     Boolean(payload.automaioTemplateId)
   const hasLandingHtml = !isBlogPost && isLandingPage && Boolean(htmlContent)
+  const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
   const isFullTemplate =
     !isBlogPost &&
     Boolean(htmlContent && (hasLandingHtml || isFullHtmlDocument(htmlContent)))
-  const htmlMode: PublishHtmlMode =
-    options?.htmlMode ?? (isFullTemplate ? 'iframe_embed' : 'rich_text_html')
-  const useIframeEmbed = isFullTemplate && htmlMode === 'iframe_embed'
+  const resolvedMode = options?.htmlMode ?? (hasSplitFields ? 'split_plain_text' : 'iframe_embed')
+  const useSplitPlainText =
+    hasSplitFields && resolvedMode === 'split_plain_text' && Boolean(options?.assembledLanding)
+  const htmlMode: PublishHtmlMode = useSplitPlainText ? 'split_plain_text' : resolvedMode
+  const useIframeEmbed = isFullTemplate && htmlMode === 'iframe_embed' && !useSplitPlainText
 
   assign('name', payload.name)
   assign('slug', payload.slug)
@@ -245,6 +275,8 @@ export function buildWebflowFieldPlan(
   if (isLandingPage) {
     assign('seo-title', payload.seoTitle)
     assign('seo-description', payload.seoDescription)
+    assign('status', payload.status ?? 'published')
+    assign('template-id', payload.automaioTemplateId)
     assign('og-title', payload.ogTitle ?? payload.seoTitle)
     assign('og-description', payload.ogDescription ?? payload.seoDescription)
   } else {
@@ -263,7 +295,21 @@ export function buildWebflowFieldPlan(
   let embedFieldSlug: string | null = null
   let richTextFieldSlug: string | null = null
 
-  if (isFullTemplate) {
+  if (useSplitPlainText && options?.assembledLanding) {
+    const split = options.assembledLanding
+    const htmlSlug = resolveSplitFieldSlug('html', collectionFields)
+    const cssSlug = resolveSplitFieldSlug('css', collectionFields)
+    const jsSlug = resolveSplitFieldSlug('js', collectionFields)
+
+    if (htmlSlug && split.htmlContent) result[htmlSlug] = split.htmlContent
+    if (cssSlug && split.cssContent) result[cssSlug] = split.cssContent
+    if (jsSlug && split.jsContent) result[jsSlug] = split.jsContent
+
+    assign('html-content', split.htmlContent)
+    assign('css-content', split.cssContent)
+    assign('js-content', split.jsContent)
+    assign('preview-image', payload.previewImage)
+  } else if (isFullTemplate) {
     // Landing pages: entire design lives in one CMS body field — full HTML or iframe embed.
     richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
     const appUrl = getAppBaseUrl()
@@ -343,8 +389,10 @@ export function buildWebflowFieldPlan(
     fieldData: sanitized,
     embedFieldSlug,
     richTextFieldSlug,
-    usesEmbed: Boolean(isFullTemplate && useIframeEmbed && payload.automaioId && !isBlogPost),
-    htmlMode: isFullTemplate ? htmlMode : 'rich_text_html',
+    usesEmbed: Boolean(
+      isFullTemplate && useIframeEmbed && payload.automaioId && !isBlogPost && !useSplitPlainText,
+    ),
+    htmlMode: useSplitPlainText ? 'split_plain_text' : isFullTemplate ? htmlMode : 'rich_text_html',
   }
 }
 

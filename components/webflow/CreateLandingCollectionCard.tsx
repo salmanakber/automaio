@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Plus, Layers } from 'lucide-react'
+import { buildWebflowCollectionTemplateEmbed } from '@/lib/webflow/collection-template-snippet'
+import { Copy, Check, Loader2, Plus, Layers } from 'lucide-react'
 
 type CreateLandingCollectionCardProps = {
   orgId: string
@@ -25,6 +26,8 @@ export function CreateLandingCollectionCard({
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [copiedSnippet, setCopiedSnippet] = useState(false)
+  const templateSnippet = buildWebflowCollectionTemplateEmbed()
 
   const create = async () => {
     if (!name.trim()) return
@@ -56,7 +59,7 @@ export function CreateLandingCollectionCard({
       }
 
       setSuccess(
-        `Created "${name}" with ${data.fieldCount ?? 8} fields (name, slug, body, SEO).`,
+        `Created "${name}" with ${data.fieldCount ?? 10} fields (HTML, CSS, JS, SEO). Add the collection template embed in Webflow Designer.`,
       )
       onCreated?.(data.collection)
     } catch (err) {
@@ -75,8 +78,8 @@ export function CreateLandingCollectionCard({
         <div>
           <p className="text-xs font-bold text-zinc-200">Create landing page collection</p>
           <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
-            Creates name, slug, Rich Text body, and SEO fields. The full landing page HTML (or iframe
-            embed) is published into the body field only.
+            Creates Title, Slug, HTML Content, CSS Content, JS Content, SEO, and status fields.
+            Plain Text fields preserve AI-generated code without Rich Text sanitization.
           </p>
         </div>
       </div>
@@ -97,7 +100,27 @@ export function CreateLandingCollectionCard({
         <p className="text-[11px] text-red-400">{error}</p>
       )}
       {success && (
-        <p className="text-[11px] text-emerald-400">{success}</p>
+        <div className="space-y-2">
+          <p className="text-[11px] text-emerald-400">{success}</p>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Collection template embed</p>
+            <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap max-h-32 overflow-y-auto">{templateSnippet}</pre>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 mt-1 text-[10px] gap-1"
+              onClick={async () => {
+                await navigator.clipboard.writeText(templateSnippet)
+                setCopiedSnippet(true)
+                setTimeout(() => setCopiedSnippet(false), 2000)
+              }}
+            >
+              {copiedSnippet ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              Copy embed snippet
+            </Button>
+          </div>
+        </div>
       )}
 
       <Button

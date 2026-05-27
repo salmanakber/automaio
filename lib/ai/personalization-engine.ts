@@ -121,13 +121,19 @@ Return ONLY the inner HTML fragment (no markdown fences, no <html> wrapper).`
     throw new Error('AI returned an invalid format during personalization')
   }
 
-  if (/<!DOCTYPE|<html[\s>]/i.test(html)) {
-    const withBody = html.replace(/<body[^>]*>[\s\S]*?<\/body>/i, `<body>${newBody}</body>`)
-    if (withBody !== html) return withBody
-    return `${html.replace(/<\/body>/i, '')}${newBody}</body>`
-  }
+  // Section-only output — no html/head/body wrappers (scoped at publish time).
+  newBody = newBody
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<\/?html[^>]*>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<\/?body[^>]*>/gi, '')
+    .trim()
 
-  return headAssets ? `${headAssets}\n${newBody}` : newBody
+  const inlineStyles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)]
+    .map((m) => m[0])
+    .join('\n')
+  const styles = [headAssets, inlineStyles].filter(Boolean).join('\n')
+  return styles ? `${styles}\n${newBody}` : newBody
 }
 
 export async function personalizeLandingPageHtml(

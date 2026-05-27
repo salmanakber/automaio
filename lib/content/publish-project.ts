@@ -24,6 +24,9 @@ import { resolveHtmlModeWithOverride, type PublishHtmlModeOverride } from '@/lib
 import { getHtmlLineThreshold } from '@/lib/platform/rendering-settings'
 import { buildProjectIframeUrl } from '@/lib/webflow/embed-page'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
+import { assembleLandingPageForWebflow } from '@/lib/webflow/landing-page-assembler'
+import { collectionSupportsSplitPlainText } from '@/lib/webflow/cms-collection-schema'
+import { buildWebflowCollectionTemplateEmbed } from '@/lib/webflow/collection-template-snippet'
 
 function slugify(value: string) {
   return value
@@ -39,7 +42,13 @@ export type PublishProjectOptions = {
 
 function parsePublishHtmlMode(params: Record<string, unknown>): PublishHtmlModeOverride {
   const raw = params.publishHtmlMode
-  if (raw === 'iframe_embed' || raw === 'rich_text_html' || raw === 'custom_code' || raw === 'auto') {
+  if (
+    raw === 'iframe_embed' ||
+    raw === 'rich_text_html' ||
+    raw === 'custom_code' ||
+    raw === 'split_plain_text' ||
+    raw === 'auto'
+  ) {
     return raw
   }
   return 'auto'
@@ -84,8 +93,9 @@ export async function getProjectPublishPreview(projectId: string) {
   const params = (project.parameters as Record<string, unknown>) ?? {}
   const publishHtmlMode = parsePublishHtmlMode(params)
   const threshold = await getHtmlLineThreshold()
+  const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
 
-  let htmlMode: PublishHtmlMode = 'iframe_embed'
+  let htmlMode: PublishHtmlMode = 'split_plain_text'
   if (integration && htmlForStrategy.trim() && project.contentType !== 'blog_post') {
     const access = await checkCustomCodeAccess(integration.webflowApiKey, integration.webflowSiteId)
     const strategy = resolveHtmlModeWithOverride(
@@ -93,8 +103,17 @@ export async function getProjectPublishPreview(projectId: string) {
       access.ok,
       publishHtmlMode,
       threshold,
+      { hasSplitPlainTextFields: hasSplitFields },
     )
     htmlMode = strategy.htmlMode
+  }
+
+  let assembledLanding
+  if (hasSplitFields && htmlForStrategy.trim() && project.contentType !== 'blog_post') {
+    assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
+      scopeId: project.id,
+      allowJs: true,
+    })
   }
 
   const plan = buildWebflowFieldPlan(
@@ -102,7 +121,7 @@ export async function getProjectPublishPreview(projectId: string) {
     collectionFields,
     integration?.cmsFieldMapping,
     project.cmsCollectionId,
-    { htmlMode },
+    { htmlMode, assembledLanding },
   )
 
   const appUrl = getAppBaseUrl()
@@ -135,6 +154,8 @@ export async function getProjectPublishPreview(projectId: string) {
         ? buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId)
         : null,
     projectEmbedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
+    collectionTemplateSnippet: hasSplitFields ? buildWebflowCollectionTemplateEmbed() : null,
+    usesSplitPlainText: plan.htmlMode === 'split_plain_text',
   }
 }
 
@@ -255,9 +276,10 @@ export async function publishContentProject(
   const projectParams = (project.parameters as Record<string, unknown>) ?? {}
   const publishHtmlMode = parsePublishHtmlMode(projectParams)
   const threshold = await getHtmlLineThreshold()
+  const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
 
   const isHtmlPage = project.contentType !== 'blog_post' && Boolean(htmlForStrategy.trim())
-  let htmlMode: PublishHtmlMode = 'iframe_embed'
+  let htmlMode: PublishHtmlMode = 'split_plain_text'
   if (isHtmlPage) {
     const customCode = await checkCustomCodeAccess(
       integration.webflowApiKey,
@@ -268,8 +290,17 @@ export async function publishContentProject(
       customCode.ok,
       publishHtmlMode,
       threshold,
+      { hasSplitPlainTextFields: hasSplitFields },
     )
     htmlMode = strategy.htmlMode
+  }
+
+  let assembledLanding
+  if (isHtmlPage && hasSplitFields) {
+    assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
+      scopeId: projectId,
+      allowJs: true,
+    })
   }
 
   let plan = buildWebflowFieldPlan(
@@ -277,7 +308,7 @@ export async function publishContentProject(
     collectionFields,
     integration.cmsFieldMapping,
     project.cmsCollectionId,
-    { htmlMode: isHtmlPage ? htmlMode : undefined },
+    { htmlMode: isHtmlPage ? htmlMode : undefined, assembledLanding },
   )
   let fieldData = plan.fieldData
 
@@ -320,8 +351,12 @@ export async function publishContentProject(
   let embedNeedsReconnect = false
   let embedMessage = ''
   let usedRichTextFallback = plan.htmlMode === 'rich_text_html'
+  const usedSplitPlainText = plan.htmlMode === 'split_plain_text'
 
-  if (usedRichTextFallback && isHtmlPage) {
+  if (usedSplitPlainText) {
+    embedMessage =
+      'Landing page published to HTML/CSS/JS Plain Text CMS fields. Add the Automaio collection template embed to your Webflow Collection Template page.'
+  } else if (usedRichTextFallback && isHtmlPage) {
     embedMessage =
       'HTML page published to CMS Rich Text field. Bind a Rich Text element to your body field on the collection template in Webflow Designer.'
   }
@@ -409,8 +444,10 @@ export async function publishContentProject(
     embedNeedsReconnect,
     embedMessage,
     usedRichTextFallback,
+    usedSplitPlainText,
     htmlMode: plan.htmlMode,
     usesEmbed: plan.usesEmbed,
+    collectionTemplateSnippet: usedSplitPlainText ? buildWebflowCollectionTemplateEmbed() : null,
     embedFieldSlug: plan.embedFieldSlug,
     embedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
     collectionEmbedSnippet:

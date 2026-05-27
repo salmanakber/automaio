@@ -57,6 +57,7 @@ type PublishResult = {
   previewUrl?: string
   embedSnippet?: string
   collectionEmbedSnippet?: string
+  collectionTemplateSnippet?: string
   embedNeedsReconnect?: boolean
 }
 
@@ -225,6 +226,7 @@ export function PublishDialog({
           liveUrl: data.liveUrl,
           previewUrl: data.previewUrl,
           embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
+          collectionTemplateSnippet: data.collectionTemplateSnippet,
         })
       }
       onPublished?.({
@@ -324,9 +326,12 @@ export function PublishDialog({
                       Auto ({preview?.htmlLineCount ?? '—'} lines · threshold{' '}
                       {preview?.htmlLineThreshold ?? 4000})
                     </SelectItem>
-                    <SelectItem value="custom_code">Full HTML in CMS body (under line limit)</SelectItem>
-                    <SelectItem value="iframe_embed">Iframe embed in CMS body (over line limit)</SelectItem>
-                    <SelectItem value="rich_text_html">Full HTML in CMS body (force)</SelectItem>
+                    <SelectItem value="split_plain_text">
+                      Split HTML / CSS / JS (Plain Text CMS — recommended)
+                    </SelectItem>
+                    <SelectItem value="custom_code">Full HTML in CMS body (legacy Rich Text)</SelectItem>
+                    <SelectItem value="iframe_embed">Iframe embed in CMS body</SelectItem>
+                    <SelectItem value="rich_text_html">Full HTML in Rich Text (force)</SelectItem>
                   </SelectContent>
                 </Select>
                 {preview?.htmlMode && (
@@ -452,6 +457,28 @@ export function PublishDialog({
                   compact
                 />
               )}
+
+              {(result.type === 'success' || result.type === 'warning') &&
+                result.collectionTemplateSnippet && (
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold">
+                      Webflow collection template embed (one-time setup)
+                    </p>
+                    <pre className="text-[10px] font-mono text-zinc-300 bg-black/40 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                      {result.collectionTemplateSnippet}
+                    </pre>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full h-8 border-zinc-700 text-xs gap-2"
+                      onClick={() => copySnippet(result.collectionTemplateSnippet!)}
+                    >
+                      <Copy className="h-3 w-3" />
+                      {copied ? 'Copied!' : 'Copy collection template embed'}
+                    </Button>
+                  </div>
+                )}
 
               {result.embedNeedsReconnect && (
                 <div className="space-y-3">

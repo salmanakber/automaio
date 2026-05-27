@@ -1,5 +1,6 @@
 import type { CollectionField } from '@/lib/webflow/field-mapper'
 import { resolveRenderingStrategy } from '@/lib/content/rendering-strategy'
+import { collectionSupportsSplitPlainText } from '@/lib/webflow/cms-collection-schema'
 import { SECTION_FIELD_ALIASES } from '@/lib/webflow/section-cms-bindings'
 
 export type CollectionCapabilities = {
@@ -9,13 +10,14 @@ export type CollectionCapabilities = {
   hasSlug: boolean
   hasRichTextBody: boolean
   hasPlainTextBody: boolean
+  hasSplitPlainTextFields: boolean
   hasHeadline: boolean
   hasSeoFields: boolean
   sectionFieldSlugs: string[]
   sectionFieldCount: number
   embedFieldSlugs: string[]
   recommendedContentTypes: Array<'landing_page' | 'blog_post' | 'cms_entry'>
-  renderMode: 'iframe_embed' | 'rich_text_html' | 'custom_code'
+  renderMode: 'split_plain_text' | 'iframe_embed' | 'rich_text_html' | 'custom_code'
   renderReason: string
   htmlLineCount: number
   customCodeAccess: boolean
@@ -61,18 +63,22 @@ export function detectCollectionCapabilities(
 
   const embedFieldSlugs = EMBED_SLUGS.filter((s) => slugs.has(s))
 
+  const hasSplitPlainTextFields = collectionSupportsSplitPlainText(fields)
+
   const hasCustomCodeAccess = options?.hasCustomCodeAccess ?? false
   const htmlLineCount = options?.htmlLineCount ?? 0
   const strategy = resolveRenderingStrategy(
-    htmlLineCount > 0 ? Array(htmlLineCount).fill('').join('\n') : '<html></html>',
+    htmlLineCount > 0 ? Array(htmlLineCount).fill('').join('\n') : '<section></section>',
     hasCustomCodeAccess,
+    undefined,
+    { hasSplitPlainTextFields },
   )
 
   const recommendedContentTypes: CollectionCapabilities['recommendedContentTypes'] = []
   if (richTextBodySlug || plainBodySlug) {
     recommendedContentTypes.push('blog_post', 'cms_entry')
   }
-  if (richTextBodySlug || embedFieldSlugs.length > 0 || sectionFieldSlugs.length > 0) {
+  if (hasSplitPlainTextFields || richTextBodySlug || embedFieldSlugs.length > 0 || sectionFieldSlugs.length > 0) {
     recommendedContentTypes.push('landing_page')
   }
   if (options?.assignedRole === 'blog' && !recommendedContentTypes.includes('blog_post')) {
@@ -91,6 +97,7 @@ export function detectCollectionCapabilities(
     hasSlug: slugs.has('slug'),
     hasRichTextBody: Boolean(richTextBodySlug),
     hasPlainTextBody: Boolean(plainBodySlug),
+    hasSplitPlainTextFields,
     hasHeadline: hasSlugMatch(slugs, HEADLINE_SLUGS),
     hasSeoFields: hasSlugMatch(slugs, SEO_SLUGS),
     sectionFieldSlugs,

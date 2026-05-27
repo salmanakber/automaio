@@ -6,7 +6,7 @@ export const HTML_LINE_THRESHOLD = DEFAULT_HTML_LINE_THRESHOLD
 
 export type RenderingStrategy = {
   lineCount: number
-  strategy: 'custom_code' | 'iframe_embed' | 'rich_text_html'
+  strategy: 'split_plain_text' | 'custom_code' | 'iframe_embed' | 'rich_text_html'
   htmlMode: PublishHtmlMode
   reason: string
 }
@@ -24,12 +24,27 @@ export function countHtmlLines(html: string): number {
  * - Large HTML (≥ threshold) → iframe_embed (iframe snippet in Rich Text)
  * - No custom_code access → rich_text_html fallback
  */
+export type RenderingStrategyOptions = {
+  hasSplitPlainTextFields?: boolean
+}
+
 export function resolveRenderingStrategy(
   html: string,
   hasCustomCodeAccess: boolean,
   threshold: number = DEFAULT_HTML_LINE_THRESHOLD,
+  options?: RenderingStrategyOptions,
 ): RenderingStrategy {
   const lineCount = countHtmlLines(html)
+
+  if (options?.hasSplitPlainTextFields) {
+    return {
+      lineCount,
+      strategy: 'split_plain_text',
+      htmlMode: 'split_plain_text',
+      reason:
+        'Collection has HTML/CSS/JS Plain Text fields — direct SEO-friendly rendering on Webflow',
+    }
+  }
 
   if (!hasCustomCodeAccess) {
     return {
@@ -62,10 +77,12 @@ export function resolveHtmlModeWithOverride(
   hasCustomCodeAccess: boolean,
   override: PublishHtmlModeOverride | undefined,
   threshold: number,
+  options?: RenderingStrategyOptions,
 ): RenderingStrategy {
   if (override && override !== 'auto') {
     const lineCount = countHtmlLines(html)
     const reasons: Record<PublishHtmlMode, string> = {
+      split_plain_text: 'Manual: split HTML/CSS/JS into Plain Text CMS fields',
       custom_code: 'Manual: full HTML in CMS body field',
       iframe_embed: 'Manual: iframe embed snippet in Rich Text field',
       rich_text_html: 'Manual: full HTML in Rich Text field',
@@ -77,5 +94,5 @@ export function resolveHtmlModeWithOverride(
       reason: reasons[override],
     }
   }
-  return resolveRenderingStrategy(html, hasCustomCodeAccess, threshold)
+  return resolveRenderingStrategy(html, hasCustomCodeAccess, threshold, options)
 }

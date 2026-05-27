@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
+import { assembleLandingPageForWebflow, buildDocumentFromSplitParts } from '@/lib/webflow/landing-page-assembler'
 import { extractHeadAssets } from '@/lib/webflow/html-assets'
 
 export const EMBED_RESIZE_SCRIPT = `(function(){function h(){var x=Math.max(document.documentElement.scrollHeight,document.body.scrollHeight);if(window.parent!==window)window.parent.postMessage({type:"automaio-embed-resize",height:x},"*");}window.addEventListener("load",h);if(typeof ResizeObserver!=="undefined")new ResizeObserver(h).observe(document.body);h();})();`
@@ -91,6 +92,18 @@ export async function getProjectEmbedHtml(projectId: string) {
   let html = project.renderedHtml ?? renderProjectHtml(project, params)
   const layoutControls = parseLayoutControls(params)
   html = applyLayoutControlsToHtml(html ?? '', layoutControls)
+
+  if (html?.trim()) {
+    const assembled = assembleLandingPageForWebflow(html, {
+      scopeId: projectId,
+      allowJs: true,
+    })
+    return {
+      html: buildDocumentFromSplitParts(assembled, project.name),
+      name: project.name,
+    }
+  }
+
   return { html: html ?? '', name: project.name }
 }
 
