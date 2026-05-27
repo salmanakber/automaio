@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 
-const devOrigins = ['localhost']
+const devOrigins = ['localhost', 'automaio.kilo1app.com']
 try {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL
   if (appUrl) devOrigins.push(new URL(appUrl).hostname)

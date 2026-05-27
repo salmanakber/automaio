@@ -40,7 +40,7 @@
     <script>
       (function () {
         // Keep in sync with NEXTAUTH_URL / NEXT_PUBLIC_APP_URL in .env
-        var AUTOMAIO_APP_URL = 'https://6ecf-119-157-64-122.ngrok-free.app'
+        var AUTOMAIO_APP_URL = 'https://automaio.kilo1app.com'
 
         var params = new URLSearchParams(window.location.search)
         var fromQuery = params.get('appUrl')
@@ -50,7 +50,7 @@
         var frame = document.getElementById('automaio-frame')
         var fallback = document.getElementById('automaio-fallback')
 
-        if (!base || base.indexOf('YOUR-NGROK') !== -1) {
+        if (!base || base.indexOf('automaio.kilo1app.com') !== -1) {
           frame.style.display = 'none'
           fallback.style.display = 'block'
           return
