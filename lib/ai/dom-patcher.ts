@@ -64,7 +64,7 @@ export function tagTextElements(html: string): { html: string; elements: TextEle
   let idx = 0
 
   const tagPattern =
-    /<(h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em)([^>]*)>([\s\S]*?)<\/\1>/gi
+    /<(h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|footer)([^>]*)>([\s\S]*?)<\/\1>/gi
 
   const tagged = html.replace(tagPattern, (match, tag: string, attrs: string, inner: string) => {
     if (/skip|noscript|script|style/i.test(attrs)) return match
@@ -106,11 +106,12 @@ export function tagTextElements(html: string): { html: string; elements: TextEle
 export function applyTextPatches(
   html: string,
   updates: Record<string, string>,
+  elements?: TextElement[],
 ): string {
-  return html.replace(
-    /(<(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a)[^>]*data-am-id="(\d+)"[^>]*>)([\s\S]*?)(<\/(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a)>)/gi,
+  let result = html.replace(
+    /(<(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|footer)[^>]*\sdata-am-id="(\d+)"[^>]*>)([\s\S]*?)(<\/(?:h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em|footer)>)/gi,
     (match, openTag, id, inner, closeTag) => {
-      const newText = updates[id]
+      const newText = updates[id] ?? updates[String(Number(id))]
       if (newText === undefined) return match
 
       const hasChildElements = /<[a-z][\s>]/i.test(inner.replace(/<br\s*\/?>/gi, ''))
@@ -122,6 +123,29 @@ export function applyTextPatches(
       return `${openTag}${patched}${closeTag}`
     },
   )
+
+  if (!elements?.length) return result
+
+  for (const el of elements) {
+    const newText = updates[el.id] ?? updates[String(Number(el.id))]
+    if (newText === undefined) continue
+
+    const tagPattern = new RegExp(
+      `(<${el.tag}[^>]*\\sdata-am-id="${el.id}"[^>]*>)([\\s\\S]*?)(<\\/${el.tag}>)`,
+      'i',
+    )
+
+    result = result.replace(tagPattern, (match, openTag, inner, closeTag) => {
+      const hasChildElements = /<[a-z][\s>]/i.test(inner.replace(/<br\s*\/?>/gi, ''))
+      if (!hasChildElements) {
+        return `${openTag}${escapeHtml(newText)}${closeTag}`
+      }
+      const patched = inner.replace(/>([^<]+)</, () => `>${escapeHtml(newText)}<`)
+      return `${openTag}${patched}${closeTag}`
+    })
+  }
+
+  return result
 }
 
 function escapeHtml(text: string): string {

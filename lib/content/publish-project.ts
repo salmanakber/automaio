@@ -188,10 +188,16 @@ async function buildProjectPayload(
   const html = isBlogPost ? '' : (project.renderedHtml?.trim() || renderProjectHtml(project, params))
   const blogBody = params.body ?? project.description ?? ''
 
+  const displayName =
+    params.name?.trim() ||
+    params.companyName?.trim() ||
+    project.name?.trim() ||
+    'Landing Page'
+
   if (isBlogPost) {
     return {
-      name: params.name ?? project.name,
-      slug: params.slug ?? slugify(project.name),
+      name: displayName,
+      slug: params.slug?.trim() || slugify(displayName),
       headline: params.headline ?? project.name,
       bodyHtml: blogBody,
       templateHtml: '',
@@ -209,8 +215,8 @@ async function buildProjectPayload(
 
   if (!html && !params.body && !project.description) {
     return {
-      name: params.name ?? project.name,
-      slug: params.slug ?? slugify(project.name),
+      name: displayName,
+      slug: params.slug?.trim() || slugify(displayName),
       headline: params.headline ?? project.name,
       bodyHtml: '',
       templateHtml: '',
@@ -230,8 +236,8 @@ async function buildProjectPayload(
   const bodyHtml = params.body ?? project.description ?? (html ? htmlToPlainSummary(html) : '')
 
   return {
-    name: params.name ?? project.name,
-    slug: params.slug ?? slugify(project.name),
+    name: displayName,
+    slug: params.slug?.trim() || slugify(displayName),
     headline: params.headline ?? project.name,
     bodyHtml,
     templateHtml: html || '',

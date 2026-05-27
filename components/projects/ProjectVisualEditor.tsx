@@ -89,16 +89,22 @@ function buildEditorHtml(raw: string): string {
 
   // If the document structure is missing entirely, wrap the content
   if (!/<html[\s>]/i.test(html) && !html.startsWith('<!DOCTYPE')) {
+    const styleBlocks = [...html.matchAll(/<style[^>]*>[\s\S]*?<\/style>/gi)]
+      .map((m) => m[0])
+      .join('\n')
+    const bodyContent = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').trim()
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   ${prefix}
+  ${styleBlocks}
   <style data-am-editor="true">${EDITOR_CSS}</style>
 </head>
 <body>
-  ${html}
+  ${bodyContent}
   <script data-am-editor="true">${EDITOR_JS}<\/script>
 </body>
 </html>`

@@ -72,9 +72,9 @@ export type PublishFieldPlan = {
 
 /** Logical Automaio keys → common Webflow collection field slugs (blog, CMS, projects, etc.) */
 const FIELD_ALIASES: Record<keyof CmsFieldMapping, string[]> = {
-  name: ['name', 'title'],
+  name: ['title', 'name'],
   slug: ['slug'],
-  headline: ['headline', 'title', 'post-title', 'heading', 'h1'],
+  headline: ['headline', 'post-title', 'heading', 'h1'],
   'body-html': [
     'body-html',
     'body',
@@ -131,6 +131,33 @@ function getOverridesForCollection(
   }
 
   return {}
+}
+
+function slugifyTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80)
+}
+
+/** Webflow required fields (title/name, slug) must always be sent. */
+function ensureRequiredCmsFields(
+  result: Record<string, unknown>,
+  collectionFields: CollectionField[],
+  payload: AutomaioContentPayload,
+): void {
+  const displayName =
+    payload.name?.trim() ||
+    payload.headline?.trim() ||
+    payload.seoTitle?.trim() ||
+    'Landing Page'
+  const itemSlug = payload.slug?.trim() || slugifyTitle(displayName)
+  const slugs = new Set(collectionFields.map((f) => f.slug))
+
+  if (slugs.has('title') && !result.title) result.title = displayName
+  if (slugs.has('name') && !result.name) result.name = displayName
+  if (slugs.has('slug') && !result.slug) result.slug = itemSlug
 }
 
 export function resolveFieldSlug(
@@ -375,7 +402,12 @@ export function buildWebflowFieldPlan(
   }
 
   if (!result.name && slugs.has('name')) result.name = payload.name
+  if (!result.title && slugs.has('title')) {
+    result.title = payload.name?.trim() || payload.headline?.trim() || 'Landing Page'
+  }
   if (!result.slug && slugs.has('slug')) result.slug = payload.slug
+
+  ensureRequiredCmsFields(result, collectionFields, payload)
 
   const sanitized = sanitizeFieldDataForCollection(result, collectionFields)
 

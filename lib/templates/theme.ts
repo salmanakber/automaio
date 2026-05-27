@@ -30,7 +30,9 @@ const THEME_STYLE_ID = 'automaio-template-theme'
 
 export function buildThemeCss(theme: TemplateTheme = DEFAULT_TEMPLATE_THEME): string {
   return `
-:root {
+.ai-landing-wrap,
+.ai-landing-wrapper,
+.ai-template-scope {
   --automaio-primary: ${theme.primary};
   --automaio-primary-text: ${theme.primaryText};
   --automaio-accent: ${theme.accent};
@@ -42,29 +44,39 @@ export function buildThemeCss(theme: TemplateTheme = DEFAULT_TEMPLATE_THEME): st
   --automaio-badge-bg: ${theme.badgeBackground};
   --automaio-badge-text: ${theme.badgeText};
 }
-body {
+.ai-landing-wrap,
+.ai-landing-wrapper {
   color: var(--automaio-text);
   background: var(--automaio-bg);
 }
-.badge {
+.ai-landing-wrap .badge,
+.ai-landing-wrapper .badge {
   background: var(--automaio-badge-bg) !important;
   color: var(--automaio-badge-text) !important;
 }
-p.lead { color: var(--automaio-muted) !important; }
-.cta {
+.ai-landing-wrap p.lead,
+.ai-landing-wrapper p.lead { color: var(--automaio-muted) !important; }
+.ai-landing-wrap .cta,
+.ai-landing-wrapper .cta {
   background: var(--automaio-primary) !important;
   color: var(--automaio-primary-text) !important;
 }
-.card {
+.ai-landing-wrap .card,
+.ai-landing-wrapper .card {
   border-color: var(--automaio-border) !important;
   background: var(--automaio-bg) !important;
 }
-.card p { color: var(--automaio-muted) !important; }
-footer {
+.ai-landing-wrap .card p,
+.ai-landing-wrapper .card p { color: var(--automaio-muted) !important; }
+.ai-landing-wrap .ai-footer,
+.ai-landing-wrapper .ai-footer,
+.ai-landing-wrap footer,
+.ai-landing-wrapper footer {
   border-color: var(--automaio-border) !important;
   color: var(--automaio-muted) !important;
 }
-a.cta:hover { opacity: 0.92; }
+.ai-landing-wrap a.cta:hover,
+.ai-landing-wrapper a.cta:hover { opacity: 0.92; }
 `.trim()
 }
 

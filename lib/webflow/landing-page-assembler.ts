@@ -150,7 +150,15 @@ export function assembleLandingPageForWebflow(
   htmlContent = wrapWithScope(htmlContent, scopeClass)
 
   const rawCss = [imports, inlineCss].filter(Boolean).join('\n\n')
-  const cssContent = scopeCssToTemplate(rawCss, scopeClass)
+  let cssContent = scopeCssToTemplate(rawCss, scopeClass)
+
+  // Fallback: if scoping produced empty output but we had CSS, scope the wrapper only
+  if (!cssContent.trim() && rawCss.trim()) {
+    cssContent = scopeCssToTemplate(
+      `.${scopeClass} { display: block; }\n${rawCss}`,
+      scopeClass,
+    )
+  }
 
   let jsContent = ''
   if (options.allowJs !== false && rawJs.trim()) {

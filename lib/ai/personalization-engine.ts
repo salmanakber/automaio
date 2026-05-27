@@ -8,6 +8,12 @@ import {
   tagTextElements,
   type TextElement,
 } from '@/lib/ai/dom-patcher'
+import {
+  extractInlineStyleBlocks,
+  mergePreservedStyles,
+  resolveUpdateText,
+  stripInlineStyleBlocks,
+} from '@/lib/ai/html-styles'
 import { extractHeadAssets } from '@/lib/webflow/html-assets'
 import { extractRichTextFragment } from '@/lib/webflow/embed-setup'
 
@@ -96,8 +102,9 @@ async function personalizeLandingPageStructural(
   organizationId: string,
   customPrompt?: string,
 ): Promise<string> {
+  const preservedStyles = extractInlineStyleBlocks(html)
   const headAssets = extractHeadAssets(html)
-  const bodyFragment = extractRichTextFragment(html)
+  const bodyFragment = stripInlineStyleBlocks(extractRichTextFragment(html))
   const toneGuidance = buildToneSystemPrompt(context.tonePreset)
   const businessBrief = buildBusinessBrief(context)
 
@@ -129,10 +136,8 @@ Return ONLY the inner HTML fragment (no markdown fences, no <html> wrapper).`
     .replace(/<\/?body[^>]*>/gi, '')
     .trim()
 
-  const inlineStyles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)]
-    .map((m) => m[0])
-    .join('\n')
-  const styles = [headAssets, inlineStyles].filter(Boolean).join('\n')
+  const inlineStyles = extractInlineStyleBlocks(html)
+  const styles = [headAssets, preservedStyles || inlineStyles].filter(Boolean).join('\n')
   return styles ? `${styles}\n${newBody}` : newBody
 }
 
@@ -153,7 +158,7 @@ export async function personalizeLandingPageHtml(
       customPrompt,
     )
     return {
-      html: structuralHtml,
+      html: mergePreservedStyles(cleanHtml, structuralHtml),
       updatedCount: elements.length,
       elements,
       sectionMap: {},
@@ -205,18 +210,55 @@ Return JSON: {"0":"updated text","1":"updated text",...}`
       customPrompt,
     )
     return {
-      html: structuralHtml,
+      html: mergePreservedStyles(cleanHtml, structuralHtml),
       updatedCount: 0,
       elements,
       sectionMap,
     }
   }
 
-  const patchedHtml = applyTextPatches(taggedHtml, updates)
+  const patchedHtml = applyTextPatches(taggedHtml, updates, elements)
+  const mergedHtml = mergePreservedStyles(cleanHtml, patchedHtml)
+
+  const textChanged = elements.some((el) => {
+    const next = resolveUpdateText(updates, el.id)
+    return next !== undefined && next.trim() !== el.text.trim()
+  })
+
+  if (!textChanged && Object.keys(updates).length > 0) {
+    const structuralHtml = await personalizeLandingPageStructural(
+      cleanHtml,
+      context,
+      organizationId,
+      customPrompt,
+    )
+    return {
+      html: mergePreservedStyles(cleanHtml, structuralHtml),
+      updatedCount: Object.keys(updates).length,
+      elements,
+      sectionMap,
+    }
+  }
+
+  if (mergedHtml === cleanHtml && elements.length > 0) {
+    const structuralHtml = await personalizeLandingPageStructural(
+      cleanHtml,
+      context,
+      organizationId,
+      customPrompt,
+    )
+    return {
+      html: mergePreservedStyles(cleanHtml, structuralHtml),
+      updatedCount: Object.keys(updates).length,
+      elements,
+      sectionMap,
+    }
+  }
+
   const updatedCount = Object.keys(updates).length
 
   return {
-    html: patchedHtml,
+    html: mergedHtml,
     updatedCount,
     elements,
     sectionMap,
