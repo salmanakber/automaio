@@ -17,8 +17,31 @@ const SECTION_PATTERNS: Array<{ section: string; test: RegExp }> = [
   { section: 'navigation', test: /\b(nav|header|menu)\b/i },
 ]
 
-function isLeafTextElement(innerHtml: string): boolean {
-  return !/<[a-z][\s>]/i.test(innerHtml.replace(/<br\s*\/?>/gi, ''))
+const TEXT_CLASS_PATTERN =
+  /\b(heading|headline|title|subtitle|subheadline|lead|text-block|paragraph|feature|benefit|cta|button|w-button|w-richtext|display|hero-text)\b/i
+
+function isHeadingTag(tag: string): boolean {
+  return /^h[1-6]$/i.test(tag)
+}
+
+function hasTextClass(attrs: string): boolean {
+  return /class=["'][^"']*["']/i.test(attrs) && TEXT_CLASS_PATTERN.test(attrs)
+}
+
+function extractPlainText(inner: string): string {
+  return inner
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Remove prior personalization markers so re-runs can tag elements again. */
+export function stripPersonalizationMarkers(html: string): string {
+  return html
+    .replace(/\sdata-am-id="[^"]*"/gi, '')
+    .replace(/\sdata-am-kind="[^"]*"/gi, '')
 }
 
 function detectSection(tag: string, attrs: string, text: string): string | undefined {
@@ -41,30 +64,38 @@ export function tagTextElements(html: string): { html: string; elements: TextEle
   let idx = 0
 
   const tagPattern =
-    /<(h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a)([^>]*)>([\s\S]*?)<\/\1>/gi
+    /<(h[1-6]|p|button|li|td|th|blockquote|label|figcaption|span|div|a|strong|em)([^>]*)>([\s\S]*?)<\/\1>/gi
 
   const tagged = html.replace(tagPattern, (match, tag: string, attrs: string, inner: string) => {
-    if (/data-am-id=/i.test(attrs)) return match
     if (/skip|noscript|script|style/i.test(attrs)) return match
 
-    const text = inner
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    const existingId = attrs.match(/data-am-id="(\d+)"/i)?.[1]
+    const text = extractPlainText(inner)
+    const tagLower = tag.toLowerCase()
+    const minLen = isHeadingTag(tag) || tagLower === 'button' || tagLower === 'a' ? 1 : 2
 
-    if (!text || text.length < 2) return match
-    if (tag.toLowerCase() === 'div' && !isLeafTextElement(inner)) return match
-    if (tag.toLowerCase() === 'span' && !isLeafTextElement(inner)) return match
+    if (!text || text.length < minLen) return match
 
-    const id = String(idx++)
+    const isLeaf = !/<[a-z][\s>]/i.test(inner.replace(/<br\s*\/?>/gi, ''))
+    const shouldTag =
+      isHeadingTag(tag) ||
+      tagLower === 'p' ||
+      tagLower === 'button' ||
+      tagLower === 'li' ||
+      tagLower === 'label' ||
+      (tagLower === 'a' && /class=["'][^"']*cta/i.test(attrs)) ||
+      hasTextClass(attrs) ||
+      ((tagLower === 'div' || tagLower === 'span') && isLeaf)
+
+    if (!shouldTag) return match
+
+    const id = existingId ?? String(idx++)
     const section = detectSection(tag, attrs, text)
-    elements.push({ id, tag: tag.toLowerCase(), text, section })
+    elements.push({ id, tag: tagLower, text, section })
 
-    const newAttrs = attrs.includes('data-am-id')
-      ? attrs
-      : `${attrs} data-am-id="${id}" data-am-kind="text"`
+    if (existingId) return match
+
+    const newAttrs = `${attrs} data-am-id="${id}" data-am-kind="text"`
     return `<${tag}${newAttrs}>${inner}</${tag}>`
   })
 

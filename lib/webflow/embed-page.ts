@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
+import { extractHeadAssets } from '@/lib/webflow/html-assets'
 
 export const EMBED_RESIZE_SCRIPT = `(function(){function h(){var x=Math.max(document.documentElement.scrollHeight,document.body.scrollHeight);if(window.parent!==window)window.parent.postMessage({type:"automaio-embed-resize",height:x},"*");}window.addEventListener("load",h);if(typeof ResizeObserver!=="undefined")new ResizeObserver(h).observe(document.body);h();})();`
 
@@ -18,14 +19,13 @@ export function buildSlugIframeUrl(baseUrl: string, siteId: string, slug: string
  * Strips: <nav>, <header> (nav-like), <footer>, and full-document wrappers.
  * Keeps: all <style> blocks and the inner content sections.
  */
-function extractCleanBody(html: string): { styles: string; body: string } {
+function extractCleanBody(html: string): { headAssets: string; inlineStyles: string; body: string } {
   const trimmed = html.trim()
+  const headAssets = extractHeadAssets(trimmed)
 
-  // Extract all <style> blocks
   const styleBlocks = [...trimmed.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[0])
-  const styles = styleBlocks.join('\n')
+  const inlineStyles = styleBlocks.join('\n')
 
-  // Get the body content
   let body = trimmed
   const bodyMatch = trimmed.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
   if (bodyMatch?.[1]) {
@@ -39,16 +39,11 @@ function extractCleanBody(html: string): { styles: string; body: string } {
       .trim()
   }
 
-  // Strip nav elements (navigation bars)
   body = body.replace(/<nav[\s\S]*?<\/nav>/gi, '')
-
-  // Strip header elements that look like navigation (contain <a> or <nav>)
   body = body.replace(/<header[\s\S]*?<\/header>/gi, '')
-
-  // Strip footer elements
   body = body.replace(/<footer[\s\S]*?<\/footer>/gi, '')
 
-  return { styles, body: body.trim() }
+  return { headAssets, inlineStyles, body: body.trim() }
 }
 
 export function buildEmbedHtmlDocument(contentHtml: string, title = 'Automaio') {
@@ -68,7 +63,7 @@ export function buildEmbedHtmlDocument(contentHtml: string, title = 'Automaio') 
 </html>`
   }
 
-  const { styles, body } = extractCleanBody(contentHtml)
+  const { headAssets, inlineStyles, body } = extractCleanBody(contentHtml)
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -76,7 +71,8 @@ export function buildEmbedHtmlDocument(contentHtml: string, title = 'Automaio') 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
-  ${styles}
+  ${headAssets}
+  ${inlineStyles}
   <style>html,body{margin:0;padding:0;background:transparent;}</style>
   <script>${EMBED_RESIZE_SCRIPT}<\/script>
 </head>

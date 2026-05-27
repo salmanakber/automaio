@@ -44,7 +44,16 @@ export function CreateLandingCollectionCard({
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) {
+        if (res.status === 409 && data.alreadyExists && data.existingCollection) {
+          onCreated?.(data.existingCollection)
+          setSuccess(
+            `Collection "${data.existingCollection.displayName ?? name}" already exists — selected it for you.`,
+          )
+          return
+        }
+        throw new Error(data.error ?? 'Failed to create collection')
+      }
 
       setSuccess(
         `Created "${name}" with ${data.fieldCount ?? 8} fields (name, slug, body, SEO).`,

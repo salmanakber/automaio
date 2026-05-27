@@ -64,7 +64,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     const projectParams = (project.parameters as Record<string, string>) ?? {}
-    let baseHtml = project.renderedHtml ?? renderProjectHtml(project, projectParams)
+    const templateBaseHtml = renderProjectHtml({ ...project, renderedHtml: null }, projectParams)
+    let baseHtml = templateBaseHtml?.trim() || project.renderedHtml || renderProjectHtml(project, projectParams)
 
     if (!baseHtml?.trim()) {
       return NextResponse.json(

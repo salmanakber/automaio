@@ -4,9 +4,12 @@ import type { BusinessContext } from '@/lib/ai/business-context-types'
 import {
   applyTextPatches,
   groupElementsBySection,
+  stripPersonalizationMarkers,
   tagTextElements,
   type TextElement,
 } from '@/lib/ai/dom-patcher'
+import { extractHeadAssets } from '@/lib/webflow/html-assets'
+import { extractRichTextFragment } from '@/lib/webflow/embed-setup'
 
 const COPYWRITER_SYSTEM = `You are an expert landing page copywriter and conversion strategist.
 Update ONLY plain text for each element. Preserve HTML structure — never add tags or markdown.
@@ -77,16 +80,78 @@ export type PersonalizationResult = {
   sectionMap: Record<string, number>
 }
 
+function normalizeAiUpdates(raw: Record<string, unknown>): Record<string, string> {
+  const updates: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string' && value.trim()) {
+      updates[String(key)] = value.trim()
+    }
+  }
+  return updates
+}
+
+async function personalizeLandingPageStructural(
+  html: string,
+  context: BusinessContext,
+  organizationId: string,
+  customPrompt?: string,
+): Promise<string> {
+  const headAssets = extractHeadAssets(html)
+  const bodyFragment = extractRichTextFragment(html)
+  const toneGuidance = buildToneSystemPrompt(context.tonePreset)
+  const businessBrief = buildBusinessBrief(context)
+
+  const prompt = `${customPrompt ? `Additional instructions: ${customPrompt}\n\n` : ''}Business context:
+${businessBrief}
+
+Rewrite this landing page HTML for the business above. Keep the same structure, classes, and layout.
+Update headlines, body copy, CTAs, and feature text. Do not remove sections.
+Return ONLY the inner HTML fragment (no markdown fences, no <html> wrapper).`
+
+  const response = await aiOrchestrator.generate({
+    prompt: `${prompt}\n\nHTML:\n${bodyFragment.slice(0, 12000)}`,
+    systemPrompt: `${COPYWRITER_SYSTEM}\n\n${toneGuidance}`,
+    organizationId,
+    maxTokens: 6000,
+    temperature: 0.65,
+  })
+
+  let newBody = response.content.trim().replace(/^```(?:html)?\s*|\s*```$/g, '')
+  if (!newBody.includes('<')) {
+    throw new Error('AI returned an invalid format during personalization')
+  }
+
+  if (/<!DOCTYPE|<html[\s>]/i.test(html)) {
+    const withBody = html.replace(/<body[^>]*>[\s\S]*?<\/body>/i, `<body>${newBody}</body>`)
+    if (withBody !== html) return withBody
+    return `${html.replace(/<\/body>/i, '')}${newBody}</body>`
+  }
+
+  return headAssets ? `${headAssets}\n${newBody}` : newBody
+}
+
 export async function personalizeLandingPageHtml(
   html: string,
   context: BusinessContext,
   organizationId: string,
   customPrompt?: string,
 ): Promise<PersonalizationResult> {
-  const { html: taggedHtml, elements } = tagTextElements(html)
+  const cleanHtml = stripPersonalizationMarkers(html)
+  const { html: taggedHtml, elements } = tagTextElements(cleanHtml)
 
-  if (elements.length === 0) {
-    return { html, updatedCount: 0, elements: [], sectionMap: {} }
+  if (elements.length < 3) {
+    const structuralHtml = await personalizeLandingPageStructural(
+      cleanHtml,
+      context,
+      organizationId,
+      customPrompt,
+    )
+    return {
+      html: structuralHtml,
+      updatedCount: elements.length,
+      elements,
+      sectionMap: {},
+    }
   }
 
   const groups = groupElementsBySection(elements)
@@ -121,9 +186,24 @@ Return JSON: {"0":"updated text","1":"updated text",...}`
   let updates: Record<string, string> = {}
   try {
     const raw = response.content.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
-    updates = JSON.parse(raw) as Record<string, string>
+    updates = normalizeAiUpdates(JSON.parse(raw) as Record<string, unknown>)
   } catch {
     throw new Error('AI returned an invalid format during personalization')
+  }
+
+  if (Object.keys(updates).length === 0) {
+    const structuralHtml = await personalizeLandingPageStructural(
+      cleanHtml,
+      context,
+      organizationId,
+      customPrompt,
+    )
+    return {
+      html: structuralHtml,
+      updatedCount: 0,
+      elements,
+      sectionMap,
+    }
   }
 
   const patchedHtml = applyTextPatches(taggedHtml, updates)

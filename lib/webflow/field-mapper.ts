@@ -4,14 +4,19 @@ import {
 } from '@/lib/webflow/cms-config'
 import {
   extractRichTextFragment,
-  findPlainTextField,
   findRichTextField,
   isFullHtmlDocument,
 } from '@/lib/webflow/embed-setup'
 import { buildProjectIframeUrl } from '@/lib/webflow/embed-page'
-import { buildProjectEmbedSnippet } from '@/lib/webflow/embed-setup'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { htmlToPlainSummary } from '@/lib/content/render-project-html'
+import {
+  buildRichTextIframeEmbed,
+  extractRichTextWithAssets,
+  sanitizeForWebflowRichText,
+} from '@/lib/webflow/html-assets'
+
+export { formatWebflowValidationError } from '@/lib/webflow/webflow-errors'
 
 export type CollectionField = {
   slug: string
@@ -221,12 +226,18 @@ export function buildWebflowFieldPlan(
   const htmlContent = payload.templateHtml?.trim() ?? ''
   const textContent = payload.bodyHtml?.trim() ?? ''
   const isBlogPost = payload.contentType === 'blog_post'
-  const isFullTemplate = !isBlogPost && Boolean(htmlContent && isFullHtmlDocument(htmlContent))
+  const isLandingPage =
+    payload.contentType === 'landing_page' ||
+    payload.contentType === 'cms_entry' ||
+    payload.contentType === 'custom' ||
+    Boolean(payload.automaioTemplateId)
+  const hasLandingHtml = !isBlogPost && isLandingPage && Boolean(htmlContent)
+  const isFullTemplate =
+    !isBlogPost &&
+    Boolean(htmlContent && (hasLandingHtml || isFullHtmlDocument(htmlContent)))
   const htmlMode: PublishHtmlMode =
     options?.htmlMode ?? (isFullTemplate ? 'iframe_embed' : 'rich_text_html')
   const useIframeEmbed = isFullTemplate && htmlMode === 'iframe_embed'
-
-  const isLandingPage = payload.contentType === 'landing_page'
 
   assign('name', payload.name)
   assign('slug', payload.slug)
@@ -259,10 +270,16 @@ export function buildWebflowFieldPlan(
 
     let bodyValue: string
     if (useIframeEmbed && payload.automaioId) {
-      bodyValue = buildProjectEmbedSnippet(appUrl, payload.automaioId)
+      const iframeUrl = buildProjectIframeUrl(appUrl, payload.automaioId)
+      bodyValue = buildRichTextIframeEmbed(appUrl, payload.automaioId, iframeUrl)
     } else {
-      bodyValue =
-        extractRichTextFragment(htmlContent) || htmlContent || textContent || htmlToPlainSummary(htmlContent)
+      bodyValue = sanitizeForWebflowRichText(
+        extractRichTextWithAssets(htmlContent) ||
+          extractRichTextFragment(htmlContent) ||
+          htmlContent ||
+          textContent ||
+          htmlToPlainSummary(htmlContent),
+      )
     }
 
     if (richTextFieldSlug && bodyValue) {
@@ -290,13 +307,18 @@ export function buildWebflowFieldPlan(
       richTextFieldSlug = resolveFieldSlug('body-html', collectionFields, overrides)
     }
     embedFieldSlug = null
-  } else {
-    const primaryContent = textContent || htmlContent
-    assign('body-html', primaryContent)
-    assign('template-html', htmlContent)
-
-    richTextFieldSlug = resolveFieldSlug('body-html', collectionFields, overrides)
-    embedFieldSlug = resolveFieldSlug('template-html', collectionFields, overrides)
+  } else if (htmlContent) {
+    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
+    const bodyValue = sanitizeForWebflowRichText(
+      extractRichTextWithAssets(htmlContent) || htmlContent || textContent,
+    )
+    if (richTextFieldSlug && bodyValue) {
+      result[richTextFieldSlug] = bodyValue
+    } else {
+      assign('body-html', bodyValue)
+      richTextFieldSlug = resolveFieldSlug('body-html', collectionFields, overrides)
+    }
+    embedFieldSlug = null
   }
 
   // Do not spread section/hero/CTA fields into CMS — landing content is HTML or iframe in body only.
@@ -309,19 +331,38 @@ export function buildWebflowFieldPlan(
   if (!result.name && slugs.has('name')) result.name = payload.name
   if (!result.slug && slugs.has('slug')) result.slug = payload.slug
 
-  if (Object.keys(result).length === 0) {
+  const sanitized = sanitizeFieldDataForCollection(result, collectionFields)
+
+  if (Object.keys(sanitized).length === 0) {
     throw new Error(
       'No matching fields found in this Webflow collection. Add a Plain Text field (e.g. template-html) or Rich Text body field, then sync in Settings.',
     )
   }
 
   return {
-    fieldData: result,
+    fieldData: sanitized,
     embedFieldSlug,
     richTextFieldSlug,
     usesEmbed: Boolean(isFullTemplate && useIframeEmbed && payload.automaioId && !isBlogPost),
     htmlMode: isFullTemplate ? htmlMode : 'rich_text_html',
   }
+}
+
+/** Drop fields that are not in the Webflow collection schema. */
+export function sanitizeFieldDataForCollection(
+  fieldData: Record<string, unknown>,
+  collectionFields: CollectionField[],
+): Record<string, unknown> {
+  const allowed = new Set(collectionFields.map((f) => f.slug))
+  const out: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(fieldData)) {
+    if (!allowed.has(key)) continue
+    if (value === undefined || value === null || value === '') continue
+    out[key] = value
+  }
+
+  return out
 }
 
 export function buildWebflowFieldData(
@@ -335,32 +376,3 @@ export function buildWebflowFieldData(
     .fieldData
 }
 
-export function formatWebflowValidationError(error: unknown): string {
-  const msg = error instanceof Error ? error.message : String(error)
-  if (!msg.includes('validation_error') && !msg.includes('Field not described in schema')) {
-    return msg
-  }
-
-  try {
-    const jsonStart = msg.indexOf('{')
-    if (jsonStart >= 0) {
-      const parsed = JSON.parse(msg.slice(jsonStart)) as {
-        details?: Array<{ param: string; description: string }>
-      }
-      const unknown = parsed.details
-        ?.filter((d) => d.description?.includes('not described in schema'))
-        .map((d) => d.param)
-
-      if (unknown?.length) {
-        return (
-          `Your Webflow collection doesn't have these fields: ${unknown.join(', ')}. ` +
-          'Sync Webflow in Settings and try again.'
-        )
-      }
-    }
-  } catch {
-    // fall through
-  }
-
-  return 'Webflow rejected the publish. Sync your collection in Settings and try again.'
-}
