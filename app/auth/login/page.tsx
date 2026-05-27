@@ -22,7 +22,7 @@ function LoginContent() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/auth/me', { credentials: 'include', cache: 'no-store', headers: { 'ngrok-skip-browser-warning': '1' } })
+    fetch('/api/auth/me', { credentials: 'include', cache: 'no-store',  })
       .then((r) => r.json())
       .then((d) => {
         if (d.user) window.location.replace(redirectTo)

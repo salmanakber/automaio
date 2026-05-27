@@ -21,7 +21,7 @@ export function useOrganizations() {
     const fetchOrganizations = async () => {
       try {
         const res = await fetch('/api/organizations', {
-          headers: { 'ngrok-skip-browser-warning': '1' },
+          
         })
         const data = await res.json()
         setOrganizations(data.organizations || [])
@@ -39,7 +39,7 @@ export function useOrganizations() {
     try {
       const res = await fetch('/api/organizations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, slug, description }),
       })
 

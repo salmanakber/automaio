@@ -69,18 +69,18 @@ export function AuthPanel({
   }, [])
 
   useEffect(() => {
-    fetch('/api/auth/providers', { credentials: 'include', headers: { 'ngrok-skip-browser-warning': '1' } })
+    fetch('/api/auth/providers', { credentials: 'include',  })
       .then((r) => r.json())
       .then((d) => setGoogleEnabled(Boolean(d.google)))
       .catch(() => setGoogleEnabled(false))
   }, [])
 
   const finishAuth = useCallback(async () => {
-    const meRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store', headers: { 'ngrok-skip-browser-warning': '1' } })
+    const meRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store',  })
     const me = await parseAuthResponse(meRes)
     if (!me.user) {
       setError(
-        'Signed in, but the session cookie was not saved. Use the same host as NEXT_PUBLIC_APP_URL in .env (all localhost or all ngrok).',
+        'Signed in, but the session cookie was not saved. Use the same host as NEXT_PUBLIC_APP_URL in .env (e.g. https://automaio.kilo1app.com).',
       )
       return false
     }
@@ -107,7 +107,7 @@ export function AuthPanel({
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ email, password }),
       })
@@ -144,7 +144,7 @@ export function AuthPanel({
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           email,

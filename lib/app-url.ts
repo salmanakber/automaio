@@ -1,6 +1,7 @@
 /**
  * Public base URL for OAuth redirects, Webflow app settings, and absolute links.
- * Set NEXTAUTH_URL (server) and NEXT_PUBLIC_APP_URL (client) to your ngrok HTTPS URL.
+ * Set NEXTAUTH_URL (server) and NEXT_PUBLIC_APP_URL (client) to your live HTTPS URL
+ * (e.g. https://automaio.kilo1app.com).
  */
 export function getAppBaseUrl(): string {
   return (

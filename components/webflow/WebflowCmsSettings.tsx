@@ -330,8 +330,34 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
                 </div>
               )}
 
+              <div className="grid sm:grid-cols-2 gap-3 mb-2">
+                <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-1">
+                  <p className="text-sm font-semibold text-violet-700">Landing pages</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    HTML templates with AI personalization. Uses <strong>Pages collection</strong> below.
+                    Automaio auto-detects fields and sets up iframe embed or CMS HTML.
+                  </p>
+                  {selectedPagesCollection && (
+                    <p className="text-[11px] font-medium">
+                      → {collections.find((c) => c.id === selectedPagesCollection)?.name ?? 'Configured'}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 space-y-1">
+                  <p className="text-sm font-semibold text-blue-700">Blog posts</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Rich text articles only. Uses <strong>Blog collection</strong> below — not for HTML landing pages.
+                  </p>
+                  {selectedBlogCollection && (
+                    <p className="text-[11px] font-medium">
+                      → {collections.find((c) => c.id === selectedBlogCollection)?.name ?? 'Configured'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
-                <p className="text-sm font-medium">CMS collections</p>
+                <p className="text-sm font-medium">Content type → CMS collection mapping</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   These are <strong>CMS collections</strong> from your Webflow site (synced via API).
                   Static Designer pages (Home, About, etc.) are listed separately below — HTML projects

@@ -31,8 +31,9 @@ export function WebflowSetupNotice({ context }: WebflowSetupNoticeProps) {
         <AlertDescription className="text-sm space-y-2">
           <p>
             The fixed URI <code className="text-xs">*.webflow-ext.com</code> is correct — Webflow
-            hosts the extension shell. Your app loads inside it via{' '}
-            <code className="text-xs">npm run webflow:extension</code> + ngrok.
+            hosts the extension shell. Your app loads inside it from{' '}
+            <code className="text-xs">https://automaio.kilo1app.com</code> (or your{' '}
+            <code className="text-xs">NEXT_PUBLIC_APP_URL</code>).
           </p>
           <p className="text-muted-foreground">
             If you see a blank panel or connection error, run{' '}
@@ -67,7 +68,7 @@ export function WebflowSetupNotice({ context }: WebflowSetupNoticeProps) {
         <AlertDescription className="text-sm">
           Browser is on <code className="text-xs">{origin}</code> but{' '}
           <code className="text-xs">NEXT_PUBLIC_APP_URL</code> is{' '}
-          <code className="text-xs">{publicAppUrl}</code>. Update both to the same ngrok URL and
+          <code className="text-xs">{publicAppUrl}</code>. Update both to the same live URL and
           restart the dev server.
         </AlertDescription>
       </Alert>

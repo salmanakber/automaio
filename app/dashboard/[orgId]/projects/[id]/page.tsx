@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   ChevronLeft,
@@ -48,8 +48,10 @@ import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 export default function ProjectStudioPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const projectId = params.id as string
   const orgId = params.orgId as string
+  const justOnboarded = searchParams.get('onboarded') === '1'
   const editorRef = useRef<ProjectVisualEditorHandle>(null)
 
   const [project, setProject] = useState<Record<string, unknown> | null>(null)
@@ -73,7 +75,7 @@ export default function ProjectStudioPage() {
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
       credentials: 'same-origin',
     })
     const data = await parseJsonResponse<{ project?: Record<string, unknown>; error?: string }>(res)
@@ -93,7 +95,7 @@ export default function ProjectStudioPage() {
     setProject(nextProject)
     await fetch(`/api/projects/${projectId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parameters: nextProject.parameters }),
     })
   }
@@ -105,7 +107,7 @@ export default function ProjectStudioPage() {
       if (project?.parameters) {
         const res = await fetch(`/api/projects/${projectId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ parameters: project.parameters }),
           credentials: 'same-origin',
         })
@@ -125,7 +127,7 @@ export default function ProjectStudioPage() {
   const handleImportHtml = async (html: string) => {
     const res = await fetch(`/api/projects/${projectId}/html`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ renderedHtml: html }),
       credentials: 'same-origin',
     })
@@ -139,7 +141,7 @@ export default function ProjectStudioPage() {
     try {
       const res = await fetch(`/api/projects/${projectId}/seo`, {
         method: 'POST',
-        headers: { 'ngrok-skip-browser-warning': '1' },
+        
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'SEO generation failed')
@@ -302,6 +304,24 @@ export default function ProjectStudioPage() {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
+          {justOnboarded && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 max-w-lg w-full px-4">
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/90 backdrop-blur px-4 py-3 text-sm text-emerald-300 flex items-center justify-between gap-3 shadow-lg">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  Landing page personalized! Refine in the studio, then publish.
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-emerald-700 text-emerald-300 shrink-0"
+                  onClick={() => setShowPublish(true)}
+                >
+                  Publish
+                </Button>
+              </div>
+            </div>
+          )}
           <aside className="w-80 border-r border-zinc-800 bg-[#09090b] flex flex-col shrink-0">
             <div className="py-3 px-4 border-b border-zinc-800">
               <span className="text-xs font-bold uppercase tracking-widest text-blue-500">Content</span>

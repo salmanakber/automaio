@@ -107,7 +107,7 @@ export function LandingPageOnboarding({
       if (projectId) {
         fetch(`/api/projects/${projectId}/onboarding`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ onboardingDraft: form }),
         }).catch(() => {})
       }
@@ -133,7 +133,7 @@ export function LandingPageOnboarding({
     try {
       const res = await fetch('/api/onboarding/extract-website', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organizationId: orgId,
           websiteUrl: form.websiteUrl || undefined,

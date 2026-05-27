@@ -34,7 +34,7 @@ export function CreateLandingCollectionCard({
     try {
       const res = await fetch('/api/integrations/webflow/collections', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organizationId: orgId,
           integrationId,

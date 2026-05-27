@@ -90,7 +90,7 @@ export function PublishDialog({
     setPreviewError('')
     try {
       const res = await fetch(`/api/projects/${projectId}/publish-preview`, {
-        headers: { 'ngrok-skip-browser-warning': '1' },
+        
       })
       const data = await parseJsonResponse<PublishPreview & { error?: string }>(res)
       if (!res.ok) throw new Error(data.error ?? 'Preview failed')
@@ -124,13 +124,13 @@ export function PublishDialog({
     try {
       await fetch(`/api/projects/${projectId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ showOnWebsite, publishSite }),
       })
 
       const res = await fetch(`/api/projects/${projectId}?action=publish`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publishSite }),
       })
       const data = await res.json()

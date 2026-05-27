@@ -66,7 +66,7 @@ export function ProjectPublishPanel({
     setLoadingPreview(true)
     setPreviewError('')
     fetch(`/api/projects/${projectId}/publish-preview`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then((d) => {
@@ -96,7 +96,7 @@ export function ProjectPublishPanel({
     try {
       const res = await fetch(`/api/projects/${projectId}?action=publish`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publishSite: true }),
       })
       const data = await res.json()

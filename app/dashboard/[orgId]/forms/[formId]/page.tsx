@@ -63,7 +63,7 @@ export default function FormDetailPage() {
   const [assignMsg, setAssignMsg] = useState('')
 
   const load = () => {
-    fetch(`/api/forms/${formId}`, { headers: { 'ngrok-skip-browser-warning': '1' } })
+    fetch(`/api/forms/${formId}`, {  })
       .then((r) => r.json())
       .then((d) => {
         const f = d.form as FormDetail | undefined
@@ -79,7 +79,7 @@ export default function FormDetailPage() {
 
   useEffect(() => {
     fetch(`/api/integrations/webflow?orgId=${orgId}`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then((d) => setIntegrations(d.integrations ?? []))
@@ -91,7 +91,7 @@ export default function FormDetailPage() {
       return
     }
     fetch(`/api/integrations/webflow/pages?integrationId=${integrationId}`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then((d) => setPages(d.pages ?? []))
@@ -105,7 +105,7 @@ export default function FormDetailPage() {
       const pageTitle = pages.find((p) => p.id === pageId)?.title
       const res = await fetch(`/api/forms/${formId}/assign-page`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ integrationId, pageId, pageTitle, publishSite: true }),
       })
       const data = await res.json()
@@ -130,7 +130,7 @@ export default function FormDetailPage() {
     try {
       const res = await fetch(`/api/forms/${formId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           fields,

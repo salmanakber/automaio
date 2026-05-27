@@ -33,7 +33,8 @@ export function DesignerAuthOnboarding({
   if (!urls) {
     return (
       <p className="text-sm text-destructive">
-        Set <code className="text-xs">NEXT_PUBLIC_APP_URL</code> in .env to your ngrok HTTPS URL,
+        Set <code className="text-xs">NEXT_PUBLIC_APP_URL</code> in .env to your live HTTPS URL
+        (https://automaio.kilo1app.com),
         then restart <code className="text-xs">npm run dev</code>.
       </p>
     )

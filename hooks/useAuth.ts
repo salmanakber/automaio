@@ -17,7 +17,7 @@ export function useAuth() {
       const res = await fetch('/api/auth/me', {
         credentials: 'include',
         cache: 'no-store',
-        headers: { 'ngrok-skip-browser-warning': '1' },
+        
       })
       const data = await res.json()
       setUser(data.user ?? null)
@@ -51,7 +51,7 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', headers: { 'ngrok-skip-browser-warning': '1' } })
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include',  })
       setUser(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to logout')

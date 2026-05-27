@@ -32,9 +32,9 @@
     <div id="automaio-fallback">
       <p><strong>Automaio</strong> could not load the app.</p>
       <p>
-        Run <code>npm run dev</code> and <code>npm run webflow:extension</code>, and set
-        <code>AUTOMAIO_APP_URL</code> in this file to your ngrok HTTPS URL (same as
-        <code>NEXTAUTH_URL</code> in .env).
+        Set <code>AUTOMAIO_APP_URL</code> in this file to your live app URL (same as
+        <code>NEXTAUTH_URL</code> in .env), e.g.
+        <code>https://automaio.kilo1app.com</code>.
       </p>
     </div>
     <script>
@@ -50,7 +50,7 @@
         var frame = document.getElementById('automaio-frame')
         var fallback = document.getElementById('automaio-fallback')
 
-        if (!base || base.indexOf('automaio.kilo1app.com') !== -1) {
+        if (!base || base.indexOf('localhost') !== -1 || base.indexOf('127.0.0.1') !== -1) {
           frame.style.display = 'none'
           fallback.style.display = 'block'
           return

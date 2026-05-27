@@ -10,7 +10,7 @@ export function isRequestSecure(req: NextRequest): boolean {
 /**
  * Set the session cookie.
  * - localhost (HTTP)  → Secure=false, SameSite=Lax
- * - ngrok/prod (HTTPS) → Secure=true, SameSite=None  (needed for cross-site
+ * - production HTTPS → Secure=true, SameSite=None  (needed for cross-site
  *   redirects like the Webflow OAuth callback)
  */
 export function setAuthCookie(response: NextResponse, token: string, req: NextRequest) {

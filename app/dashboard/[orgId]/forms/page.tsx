@@ -39,7 +39,7 @@ export default function FormsPage() {
 
   useEffect(() => {
     setAppUrl(window.location.origin)
-    fetch(`/api/forms?orgId=${orgId}`, { headers: { 'ngrok-skip-browser-warning': '1' } })
+    fetch(`/api/forms?orgId=${orgId}`, {  })
       .then((r) => r.json())
       .then((d) => setForms(d.forms ?? []))
   }, [orgId])
@@ -48,7 +48,7 @@ export default function FormsPage() {
     e.preventDefault()
     const res = await fetch('/api/forms', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ organizationId: orgId, name, fields: DEFAULT_FIELDS }),
     })
     if (res.ok) {

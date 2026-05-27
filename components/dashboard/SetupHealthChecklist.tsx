@@ -18,7 +18,7 @@ export function SetupHealthChecklist({ orgId, compact = false }: SetupHealthChec
 
   useEffect(() => {
     fetch(`/api/organizations/${orgId}/setup-status`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then(setStatus)

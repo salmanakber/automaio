@@ -20,7 +20,11 @@ export default function TemplatesGalleryPage() {
   const [industry, setIndustry] = useState('All')
 
   const handleUseTemplate = (template: TemplateOption) => {
-    const qs = new URLSearchParams({ templateId: template.id, name: template.name })
+    const qs = new URLSearchParams({
+      templateId: template.id,
+      name: template.name,
+      type: 'landing_page',
+    })
     router.push(`/dashboard/${orgId}/projects/new?${qs.toString()}`)
   }
 
@@ -28,9 +32,9 @@ export default function TemplatesGalleryPage() {
     <DashboardShell
       orgId={orgId}
       title="Template gallery"
-      description="Browse prebuilt designs. Pick one and publish to Webflow in minutes."
+      description="Pick a landing page design — AI personalizes it for your business in minutes."
       actions={
-        <Link href={`/dashboard/${orgId}/projects/new`}>
+        <Link href={`/dashboard/${orgId}/projects/new?type=landing_page`}>
           <Button variant="outline">
             <Plus className="size-4 mr-2" />
             Blank project

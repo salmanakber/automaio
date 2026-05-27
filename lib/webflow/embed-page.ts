@@ -139,7 +139,6 @@ export function embedHtmlResponse(html: string, title?: string) {
       'Cache-Control': 'public, max-age=60',
       'Content-Security-Policy': 'frame-ancestors *',
       'X-Frame-Options': 'ALLOWALL',
-      'ngrok-skip-browser-warning': '1',
     },
   })
 }

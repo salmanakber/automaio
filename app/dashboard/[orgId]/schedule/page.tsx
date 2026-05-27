@@ -45,7 +45,7 @@ export default function SchedulePage() {
   const [stats, setStats] = useState<{ published: number; onWebsite: number; scheduled: number } | null>(null)
 
   useEffect(() => {
-    fetch(`/api/schedule/overview?orgId=${orgId}`, { headers: { 'ngrok-skip-browser-warning': '1' } })
+    fetch(`/api/schedule/overview?orgId=${orgId}`, {  })
       .then((r) => r.json())
       .then((d) => {
         setTimeline(d.timeline ?? [])

@@ -38,7 +38,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     const q = filter === 'all' ? '' : `&category=${filter}`
     fetch(`/api/projects?orgId=${orgId}${q}`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then((d) => setProjects(d.projects ?? []))
@@ -48,15 +48,20 @@ export default function ProjectsPage() {
   return (
     <DashboardShell
       orgId={orgId}
-      title="Projects & CMS"
-      description="Create blog posts, CMS entries, and custom content — schedule or publish to Webflow."
+      title="Landing pages"
+      description="AI-personalized landing pages for Webflow — create, refine in the studio, then publish."
       actions={
-        <Link href={`/dashboard/${orgId}/projects/new`}>
-          <Button>
-            <Plus className="size-4 mr-2" />
-            New project
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/dashboard/${orgId}/get-started`}>
+            <Button variant="outline" size="sm">Quick start</Button>
+          </Link>
+          <Link href={`/dashboard/${orgId}/projects/new`}>
+            <Button size="sm">
+              <Plus className="size-4 mr-2" />
+              New landing page
+            </Button>
+          </Link>
+        </div>
       }
     >
       <div className="flex gap-2 mb-6 flex-wrap">

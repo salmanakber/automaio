@@ -52,10 +52,10 @@ export default function EmailPage() {
   const [loading, setLoading] = useState(false)
 
   const load = () => {
-    fetch(`/api/email-campaigns?orgId=${orgId}`, { headers: { 'ngrok-skip-browser-warning': '1' } })
+    fetch(`/api/email-campaigns?orgId=${orgId}`, {  })
       .then((r) => r.json())
       .then((d) => setCampaigns(d.campaigns ?? []))
-    fetch(`/api/subscribers?orgId=${orgId}`, { headers: { 'ngrok-skip-browser-warning': '1' } })
+    fetch(`/api/subscribers?orgId=${orgId}`, {  })
       .then((r) => r.json())
       .then((d) => setSubscribers(d.subscribers ?? []))
   }
@@ -70,7 +70,7 @@ export default function EmailPage() {
     try {
       const res = await fetch('/api/email-campaigns', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationId: orgId, ...form, frequency }),
       })
       if (!res.ok) throw new Error('Failed')
@@ -86,7 +86,7 @@ export default function EmailPage() {
     e.preventDefault()
     await fetch('/api/subscribers', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ organizationId: orgId, email: subEmail }),
     })
     setSubEmail('')
@@ -98,7 +98,7 @@ export default function EmailPage() {
     setLoading(true)
     await fetch(`/api/email-campaigns/${id}?action=send-now`, {
       method: 'POST',
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
     load()
     setLoading(false)
@@ -109,7 +109,7 @@ export default function EmailPage() {
     setLoading(true)
     await fetch(`/api/email-campaigns/${id}?action=schedule`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scheduledFor: new Date(scheduledAt).toISOString(), frequency }),
     })
     setScheduleId(null)

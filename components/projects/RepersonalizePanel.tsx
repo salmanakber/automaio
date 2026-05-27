@@ -87,7 +87,7 @@ export function RepersonalizePanel({
     try {
       const res = await fetch(`/api/projects/${projectId}/personalize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           onboarding: formToOnboardingInput(onboarding),
           businessContext: ctx,
@@ -101,7 +101,7 @@ export function RepersonalizePanel({
 
       await fetch(`/api/projects/${projectId}/onboarding`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clearDraft: true, onboardingComplete: true }),
       })
 

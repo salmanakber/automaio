@@ -327,7 +327,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     try {
       const res = await fetch(`/api/projects/${projectId}/ai-element`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: selected.text, tag: selected.tag, prompt: aiPrompt }),
       })
       const data = await res.json()
@@ -368,7 +368,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
 
       const res = await fetch(`/api/projects/${projectId}/ai-enhance`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, mode: 'text-only', elements }),
       })
       const data = await res.json()
@@ -422,7 +422,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
 
       const res = await fetch(`/api/projects/${projectId}/html`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ renderedHtml: cleanHtml }),
         credentials: 'same-origin',
       })

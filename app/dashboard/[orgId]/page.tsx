@@ -62,7 +62,7 @@ export default function OrgOverviewPage() {
 
   useEffect(() => {
     fetch(`/api/schedule/overview?orgId=${orgId}`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then((d) => {

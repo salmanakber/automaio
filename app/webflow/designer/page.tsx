@@ -37,7 +37,7 @@ export default function WebflowDesignerPage() {
     setChecking(true)
     return fetch('/api/auth/me', {
       credentials: 'include',
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then((d) => {
@@ -66,14 +66,14 @@ export default function WebflowDesignerPage() {
     }
     checkAuth().then((ok) => {
       if (ok) {
-        fetch('/api/organizations', { headers: { 'ngrok-skip-browser-warning': '1' } })
+        fetch('/api/organizations', {  })
           .then((r) => r.json())
           .then((d) => {
             const id = d.organizations?.[0]?.id
             if (id) {
               setOrgId(id)
               fetch(`/api/organizations/${id}/setup-status`, {
-                headers: { 'ngrok-skip-browser-warning': '1' },
+                
               })
                 .then((r) => r.json())
                 .then(setSetupStatus)
@@ -181,7 +181,7 @@ export default function WebflowDesignerPage() {
                   await fetch('/api/auth/logout', {
                     method: 'POST',
                     credentials: 'include',
-                    headers: { 'ngrok-skip-browser-warning': '1' },
+                    
                   })
                   setAuthenticated(false)
                   setUserEmail(null)

@@ -74,7 +74,7 @@ export function ElementEditorPanel({
     try {
       const res = await fetch(`/api/projects/${projectId}/ai-element`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: element.text, tag: element.tag, prompt: aiPrompt }),
       })
       const data = await res.json()

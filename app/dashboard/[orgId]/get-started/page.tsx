@@ -84,7 +84,7 @@ export default function GetStartedPage() {
 
   useEffect(() => {
     fetch(`/api/integrations/webflow?orgId=${orgId}`, {
-      headers: { 'ngrok-skip-browser-warning': '1' },
+      
     })
       .then((r) => r.json())
       .then((d) => {
@@ -121,7 +121,7 @@ export default function GetStartedPage() {
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organizationId: orgId,
           name: projectName,
