@@ -22,6 +22,21 @@
       '</p>'
   }
 
+  function hideTemplateShell(target) {
+    if (!target) return
+    var container = target.closest('main') || target.parentElement || document.body
+    if (!container) return
+    var children = container.children
+    for (var i = 0; i < children.length; i++) {
+      var child = children[i]
+      if (child === target || child.id === 'ai-page-root') continue
+      if (child.contains(target)) continue
+      child.setAttribute('data-automaio-hidden', 'true')
+      child.style.setProperty('display', 'none', 'important')
+    }
+    document.documentElement.setAttribute('data-automaio-active', 'true')
+  }
+
   function injectScopedCss(css, scopeId) {
     if (!css || !css.trim()) return null
     var id = scopeId || 'automaio-runtime-styles'
@@ -108,17 +123,26 @@
       return
     }
 
+    target.setAttribute('data-automaio-page-id', pageId)
     target.setAttribute('data-automaio-loading', 'true')
     target.innerHTML =
-      '<p style="font-family:system-ui;padding:2rem;color:#64748b;text-align:center;font-size:14px;margin:0">Loading…</p>'
+      '<p style="font-family:system-ui;padding:2rem;color:#64748b;text-align:center;font-size:14px;margin:0">Loading page from Automaio…</p>'
 
     try {
       var schema = await fetchSchema(apiBase, pageId)
       var renderBundle = schema.render || {}
 
+      if (!renderBundle.htmlContent && !(schema.sections && schema.sections.length)) {
+        throw new Error('Page has no renderable HTML yet — personalize or save HTML in Automaio first.')
+      }
+
       injectScopedCss(renderBundle.cssContent, 'automaio-runtime-' + pageId)
       renderSections(target, schema)
       runIsolatedJs(renderBundle.jsContent)
+
+      if (options && options.hideShell !== false) {
+        hideTemplateShell(target)
+      }
 
       target.removeAttribute('data-automaio-loading')
       target.setAttribute('data-automaio-rendered', schema.version || '1')
@@ -132,19 +156,25 @@
   }
 
   global.AutomaioRuntime = {
-    version: '1.0.0',
+    version: '1.0.1',
     render: render,
   }
 
-  // Auto-init when root has data-automaio-page-id
-  document.addEventListener('DOMContentLoaded', function () {
-    var root = document.querySelector('[data-automaio-page-id]')
+  // Auto-init when root has data-automaio-page-id (manual embed path)
+  function autoInit() {
+    var root = document.getElementById('ai-page-root') || document.querySelector('[data-automaio-page-id]')
     if (!root) return
     var pageId = root.getAttribute('data-automaio-page-id')
-    if (!pageId || !pageId.trim()) return
+    if (!pageId || !pageId.trim() || pageId.indexOf('{{') !== -1) return
     render({
       pageId: pageId.trim(),
       target: root,
     })
-  })
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoInit)
+  } else {
+    autoInit()
+  }
 })(typeof window !== 'undefined' ? window : globalThis)

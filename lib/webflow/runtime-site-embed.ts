@@ -3,7 +3,7 @@ import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { prisma } from '@/lib/prisma'
 import { isCustomCodePermissionError, isEmbedRecoverableError } from '@/lib/webflow/embed-permissions'
 
-const RUNTIME_SCRIPT_VERSION = '1.0.0'
+const RUNTIME_SCRIPT_VERSION = '1.0.1'
 const RUNTIME_SCRIPT_DISPLAY_NAME = 'Automaio Runtime Bootstrap'
 
 export type AutomaioRuntimeMeta = {
@@ -26,20 +26,25 @@ type CollectionsJson = {
 export function buildRuntimeInlineBootstrap(webflowSiteId: string, apiUrl: string): string {
   const base = apiUrl.replace(/\/$/, '')
   return `(function(){var u="${base}",s="${webflowSiteId}";
-function mkRoot(){var r=document.getElementById("ai-page-root");if(!r){r=document.createElement("div");r.id="ai-page-root";var m=document.querySelector("main")||document.querySelector("[role=main]")||document.body;if(m.firstChild)m.insertBefore(r,m.firstChild);else m.appendChild(r);}return r;}
-function findPageId(){var r=document.getElementById("ai-page-root");if(r){var p=r.getAttribute("data-automaio-page-id")||r.dataset.automaioPageId;if(p&&p.trim()&&!/\\{\\{/.test(p))return p.trim();}
-var els=document.querySelectorAll("[data-automaio-page-id],[data-page-id]");
-for(var i=0;i<els.length;i++){var v=(els[i].getAttribute("data-automaio-page-id")||els[i].getAttribute("data-page-id")||"").trim();if(v&&!/\\{\\{/.test(v)&&v.length>=20)return v;}
-var rx=/^[a-z0-9]{20,32}$/i;
-var nodes=document.querySelectorAll("p,span,div,h1,h2,h3,h4,h5,h6,small,pre,code");
-for(var j=0;j<nodes.length;j++){var t=(nodes[j].textContent||"").trim();if(t.length>=20&&t.length<=32&&rx.test(t)&&t.indexOf(" ")===-1)return t;}
+function mkRoot(){var r=document.getElementById("ai-page-root");if(!r){r=document.createElement("div");r.id="ai-page-root";r.setAttribute("data-automaio-root","true");var m=document.querySelector("main")||document.querySelector("[role=main]")||document.body;m.insertBefore(r,m.firstChild);}return r;}
+function showStatus(msg,isErr){var r=mkRoot();r.innerHTML='<p style="font-family:system-ui;padding:1rem 1.25rem;color:'+(isErr?"#b45309":"#64748b")+';font-size:13px;margin:0;line-height:1.5">'+msg+'</p>';}
+function parsePageIdFromJson(text){if(!text||text.indexOf("pageId")===-1)return null;try{var j=JSON.parse(text.trim());if(j.pageId&&String(j.pageId).trim())return String(j.pageId).trim();}catch(e){var m=text.match(/"pageId"\\s*:\\s*"([^"]+)"/);if(m)return m[1];}return null;}
+function isValidPageId(v){return v&&v.length>=10&&v.length<=40&&/^[a-z0-9_-]+$/i.test(v)&&v.indexOf(" ")===-1&&!/\\{\\{/.test(v);}
+function findPageId(){var r=document.getElementById("ai-page-root");if(r){var p=r.getAttribute("data-automaio-page-id")||r.dataset.automaioPageId;if(isValidPageId(p))return p.trim();}
+var els=document.querySelectorAll("[data-automaio-page-id],[data-page-id],[data-automaio-config]");
+for(var i=0;i<els.length;i++){var v=(els[i].getAttribute("data-automaio-page-id")||els[i].getAttribute("data-page-id")||"").trim();if(isValidPageId(v))return v;var cfg=els[i].getAttribute("data-automaio-config");if(cfg){var pid=parsePageIdFromJson(cfg);if(isValidPageId(pid))return pid;}}
+var nodes=document.querySelectorAll("script[type='application/json'],pre,code,p,span,div,h1,h2,h3,h4,h5,h6,small");
+for(var j=0;j<nodes.length;j++){var t=(nodes[j].textContent||"").trim();if(!t)continue;if(t.indexOf("pageId")>-1){var pid2=parsePageIdFromJson(t);if(isValidPageId(pid2))return pid2;}
+if(isValidPageId(t)&&t.length>=20)return t;}
 return null;}
-function render(pageId){mkRoot();function go(){window.AutomaioRuntime.render({pageId:pageId,target:"#ai-page-root",apiBase:u});}
+function render(pageId){var root=mkRoot();root.setAttribute("data-automaio-page-id",pageId);function go(){window.AutomaioRuntime.render({pageId:pageId,target:"#ai-page-root",apiBase:u,hideShell:true});}
 if(window.AutomaioRuntime)return go();
-var sc=document.createElement("script");sc.src=u+"/webflow/runtime.js";sc.defer=true;sc.onload=go;document.head.appendChild(sc);}
+var sc=document.createElement("script");sc.src=u+"/webflow/runtime.js?v=1.0.1";sc.onload=go;sc.onerror=function(){showStatus("Automaio: failed to load runtime.js from "+u,true);};document.head.appendChild(sc);}
 var pid=findPageId();if(pid){render(pid);return;}
-var sl=location.pathname.split("/").filter(Boolean).pop();if(!sl)return;
-fetch(u+"/api/runtime/resolve?siteId="+encodeURIComponent(s)+"&slug="+encodeURIComponent(sl)).then(function(r){return r.json();}).then(function(d){if(d.pageId)render(d.pageId);}).catch(function(){});})();`
+showStatus("Automaio: resolving page…",false);
+var sl=location.pathname.split("/").filter(Boolean).pop();
+if(!sl){showStatus("Automaio: Page ID not found. Bind <strong>Page ID</strong> or <strong>Runtime Config</strong> to a visible text field on your collection template, or add the #ai-page-root embed.",true);return;}
+fetch(u+"/api/runtime/resolve?siteId="+encodeURIComponent(s)+"&slug="+encodeURIComponent(sl)).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});}).then(function(res){if(res.d&&res.d.pageId){render(res.d.pageId);return;}showStatus("Automaio: no page for slug \\""+sl+"\\". Publish from Automaio and ensure CMS slug matches.",true);}).catch(function(){showStatus("Automaio: could not resolve page. Bind Page ID / Runtime Config on your collection template.",true);});})();`
 }
 
 function readCollectionsJson(raw: unknown): CollectionsJson {

@@ -28,7 +28,15 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404, headers: RUNTIME_CORS })
     }
 
-    if (project.status !== 'published' && !project.webflowCmsItemId) {
+    const hasRenderableContent =
+      Boolean(project.renderedHtml?.trim()) ||
+      Boolean((project.parameters as Record<string, unknown>)?.pageSchema)
+
+    if (
+      project.status !== 'published' &&
+      !project.webflowCmsItemId &&
+      !hasRenderableContent
+    ) {
       return NextResponse.json({ error: 'Page not published yet' }, { status: 403, headers: RUNTIME_CORS })
     }
 
