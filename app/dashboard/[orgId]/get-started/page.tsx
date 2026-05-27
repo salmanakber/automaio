@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,11 +16,18 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TemplatePicker, type TemplateOption } from '@/components/campaigns/TemplatePicker'
+import { LandingPageOnboarding, type OnboardingFormData } from '@/components/projects/LandingPageOnboarding'
 import { SetupHealthChecklist } from '@/components/dashboard/SetupHealthChecklist'
-import { CheckCircle2, ArrowLeft, ArrowRight, ExternalLink, Loader2 } from 'lucide-react'
+import {
+  loadWizardDraft,
+  saveWizardDraft,
+  clearWizardDraft,
+  onboardingStorageKey,
+} from '@/lib/onboarding/persistence'
+import { CheckCircle2, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
 import { isWebflowOAuthConfigured } from '@/lib/integrations/webflow-oauth'
 
-const STEPS = ['Connect Webflow', 'Pick template', 'Publish live'] as const
+const STEPS = ['Connect Webflow', 'Pick template', 'AI personalize', 'Open studio'] as const
 
 type Integration = {
   id: string
@@ -31,7 +38,6 @@ type Integration = {
 
 export default function GetStartedPage() {
   const params = useParams()
-  const router = useRouter()
   const orgId = params.orgId as string
 
   const [step, setStep] = useState(0)
@@ -40,7 +46,7 @@ export default function GetStartedPage() {
   const [collectionId, setCollectionId] = useState('')
   const [template, setTemplate] = useState<TemplateOption | null>(null)
   const [projectName, setProjectName] = useState('')
-  const [headline, setHeadline] = useState('')
+  const [onboardingData, setOnboardingData] = useState<OnboardingFormData | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState<{
@@ -50,6 +56,31 @@ export default function GetStartedPage() {
   } | null>(null)
 
   const oauthAvailable = isWebflowOAuthConfigured()
+  const wizardRestored = useRef(false)
+
+  useEffect(() => {
+    const draft = loadWizardDraft(orgId)
+    if (draft && !wizardRestored.current) {
+      wizardRestored.current = true
+      if (draft.step) setStep(draft.step)
+      if (draft.projectName) setProjectName(draft.projectName)
+      if (draft.integrationId) setIntegrationId(draft.integrationId)
+      if (draft.collectionId) setCollectionId(draft.collectionId)
+      if (draft.onboardingData) setOnboardingData(draft.onboardingData)
+    }
+  }, [orgId])
+
+  useEffect(() => {
+    if (step === 4) return
+    saveWizardDraft(orgId, {
+      step,
+      projectName,
+      templateId: template?.id,
+      integrationId,
+      collectionId,
+      onboardingData: onboardingData ?? undefined,
+    })
+  }, [orgId, step, projectName, template, integrationId, collectionId, onboardingData])
 
   useEffect(() => {
     fetch(`/api/integrations/webflow?orgId=${orgId}`, {
@@ -68,7 +99,10 @@ export default function GetStartedPage() {
             setCollectionId(cols[0].id)
           }
         }
-        if (list.length > 0) setStep(1)
+        if (list.length > 0) {
+          const draft = loadWizardDraft(orgId)
+          if (!draft) setStep(1)
+        }
       })
   }, [orgId])
 
@@ -77,10 +111,10 @@ export default function GetStartedPage() {
 
   const canNextStep0 = integrations.length > 0 && integrationId && collectionId
   const canNextStep1 = Boolean(template && projectName.trim())
-  const canPublish = canNextStep0 && canNextStep1
+  const canPersonalize = canNextStep0 && canNextStep1 && Boolean(onboardingData)
 
-  const publish = async () => {
-    if (!canPublish || !template) return
+  const createAndPersonalize = async () => {
+    if (!canPersonalize || !template || !onboardingData) return
     setPublishing(true)
     setError('')
 
@@ -91,42 +125,47 @@ export default function GetStartedPage() {
         body: JSON.stringify({
           organizationId: orgId,
           name: projectName,
-          description: headline || projectName,
-          category: 'blog',
-          contentType: 'blog_post',
+          description: onboardingData.businessDescription || projectName,
+          category: 'project',
+          contentType: 'landing_page',
           templateId: template.id,
           parameters: {
             name: projectName,
-            headline: headline || projectName,
-            subheadline: template.description ?? '',
-            body: headline || projectName,
-            ctaText: 'Learn more',
+            headline: onboardingData.businessDescription?.split('.')[0] || projectName,
+            subheadline: onboardingData.offer || template.description || '',
+            body: onboardingData.businessDescription || projectName,
+            ctaText: 'Get started',
+            audience: onboardingData.targetAudience || '',
+            offer: onboardingData.offer || '',
           },
           webflowIntegrationId: integrationId,
           cmsCollectionId: collectionId,
           showOnWebsite: true,
-          publishSite: true,
+          publishSite: false,
+          aiEnhance: true,
+          onboarding: {
+            websiteUrl: onboardingData.websiteUrl || undefined,
+            businessDescription: onboardingData.businessDescription || undefined,
+            primaryGoal: onboardingData.primaryGoal || undefined,
+            targetAudience: onboardingData.targetAudience || undefined,
+            offer: onboardingData.offer || undefined,
+            tonePreset: onboardingData.tonePreset,
+            ctaGoal: onboardingData.ctaGoal,
+          },
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      const pubRes = await fetch(`/api/projects/${data.project.id}?action=publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
-        body: JSON.stringify({ publishSite: true }),
-      })
-      const pubData = await pubRes.json()
-      if (!pubRes.ok) throw new Error(pubData.error ?? 'Publish failed')
-
       setSuccess({
         projectId: data.project.id,
-        liveUrl: pubData.liveUrl ?? null,
-        message: pubData.embedMessage ?? 'Your content is live on Webflow!',
+        liveUrl: null,
+        message: 'Your landing page has been personalized! Open the visual editor to refine and publish.',
       })
-      setStep(3)
+      clearWizardDraft(orgId)
+      setStep(4)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Publish failed')
+      setError(err instanceof Error ? err.message : 'Personalization failed')
     } finally {
       setPublishing(false)
     }
@@ -135,8 +174,8 @@ export default function GetStartedPage() {
   return (
     <DashboardShell
       orgId={orgId}
-      title="First publish wizard"
-      description="Connect Webflow, pick a template, and go live in under 5 minutes."
+      title="Landing page wizard"
+      description="Connect Webflow, pick a template, let AI personalize your page, then refine in the visual editor."
     >
       <SetupHealthChecklist orgId={orgId} compact />
 
@@ -145,14 +184,14 @@ export default function GetStartedPage() {
           <div key={label} className="flex items-center gap-2 flex-1">
             <div
               className={`size-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                i < step || step === 3
+                i < step || step === 4
                   ? 'bg-primary text-primary-foreground'
                   : i === step
                     ? 'bg-primary/20 text-primary border-2 border-primary'
                     : 'bg-muted text-muted-foreground'
               }`}
             >
-              {i < step || (step === 3 && i <= 2) ? <CheckCircle2 className="size-4" /> : i + 1}
+              {i < step || (step === 4 && i <= 3) ? <CheckCircle2 className="size-4" /> : i + 1}
             </div>
             <span className="text-xs font-medium hidden sm:block truncate">{label}</span>
             {i < STEPS.length - 1 && <div className="h-px flex-1 bg-border min-w-4" />}
@@ -166,30 +205,19 @@ export default function GetStartedPage() {
         </div>
       )}
 
-      {step === 3 && success ? (
+      {step === 4 && success ? (
         <Card className="max-w-2xl border-emerald-500/30 bg-emerald-500/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-emerald-700">
               <CheckCircle2 className="size-6" />
-              You&apos;re live!
+              Landing page personalized!
             </CardTitle>
             <CardDescription>{success.message}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {success.liveUrl && (
-              <a
-                href={success.liveUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 text-sm text-primary underline"
-              >
-                View on your Webflow site
-                <ExternalLink className="size-3.5" />
-              </a>
-            )}
             <div className="flex flex-wrap gap-3">
               <Link href={`/dashboard/${orgId}/projects/${success.projectId}`}>
-                <Button>Manage project</Button>
+                <Button>Open visual editor</Button>
               </Link>
               <Link href={`/dashboard/${orgId}`}>
                 <Button variant="outline">Back to dashboard</Button>
@@ -257,35 +285,25 @@ export default function GetStartedPage() {
         <div className="max-w-4xl space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Step 2 — Pick a template</CardTitle>
-              <CardDescription>Choose a design — you can customize copy before publishing</CardDescription>
+              <CardTitle>Step 2 — Pick a landing page template</CardTitle>
+              <CardDescription>Choose a design — AI will personalize it in the next step</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Project name</Label>
-                  <Input
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    placeholder="Spring Product Launch"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Headline</Label>
-                  <Input
-                    value={headline}
-                    onChange={(e) => setHeadline(e.target.value)}
-                    placeholder="Your main headline"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>Project name</Label>
+                <Input
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="Spring Product Launch"
+                />
               </div>
               <TemplatePicker
                 selectedId={template?.id}
                 onSelect={(t) => {
                   setTemplate(t)
                   if (!projectName) setProjectName(t.name)
-                  if (!headline) setHeadline(t.name)
                 }}
+                categoryFilter="landing"
               />
             </CardContent>
           </Card>
@@ -299,12 +317,29 @@ export default function GetStartedPage() {
             </Button>
           </div>
         </div>
+      ) : step === 2 ? (
+        <div className="max-w-3xl space-y-6">
+          <LandingPageOnboarding
+            orgId={orgId}
+            compact
+            storageKey={onboardingStorageKey(orgId)}
+            onComplete={(data) => {
+              setOnboardingData(data)
+              setStep(3)
+            }}
+          />
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep(1)}>
+              <ArrowLeft className="size-4 mr-1" /> Back
+            </Button>
+          </div>
+        </div>
       ) : (
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>Step 3 — Publish live</CardTitle>
+            <CardTitle>Step 4 — Personalize with AI</CardTitle>
             <CardDescription>
-              Automaio will save to CMS, install the embed, and publish your Webflow site automatically.
+              AI will rewrite your landing page copy based on your business context while preserving the template design.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -312,19 +347,22 @@ export default function GetStartedPage() {
               <p><strong>Project:</strong> {projectName}</p>
               <p><strong>Template:</strong> {template?.name}</p>
               <p><strong>Site:</strong> {selectedIntegration?.siteName}</p>
+              {onboardingData?.businessDescription && (
+                <p><strong>Business:</strong> {onboardingData.businessDescription.slice(0, 120)}…</p>
+              )}
             </div>
             <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep(1)}>
+              <Button variant="outline" onClick={() => setStep(2)}>
                 <ArrowLeft className="size-4 mr-1" /> Back
               </Button>
-              <Button onClick={publish} disabled={publishing || !canPublish}>
+              <Button onClick={createAndPersonalize} disabled={publishing || !canPersonalize}>
                 {publishing ? (
                   <>
                     <Loader2 className="size-4 mr-2 animate-spin" />
-                    Publishing…
+                    Personalizing…
                   </>
                 ) : (
-                  'Publish to Webflow'
+                  'Personalize landing page'
                 )}
               </Button>
             </div>

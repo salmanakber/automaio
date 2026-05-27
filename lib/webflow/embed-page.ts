@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
+import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
 
 export const EMBED_RESIZE_SCRIPT = `(function(){function h(){var x=Math.max(document.documentElement.scrollHeight,document.body.scrollHeight);if(window.parent!==window)window.parent.postMessage({type:"automaio-embed-resize",height:x},"*");}window.addEventListener("load",h);if(typeof ResizeObserver!=="undefined")new ResizeObserver(h).observe(document.body);h();})();`
 
@@ -91,7 +92,9 @@ export async function getProjectEmbedHtml(projectId: string) {
   if (!project) return null
 
   const params = (project.parameters as Record<string, string>) ?? {}
-  const html = project.renderedHtml ?? renderProjectHtml(project, params)
+  let html = project.renderedHtml ?? renderProjectHtml(project, params)
+  const layoutControls = parseLayoutControls(params)
+  html = applyLayoutControlsToHtml(html ?? '', layoutControls)
   return { html: html ?? '', name: project.name }
 }
 

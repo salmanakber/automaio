@@ -18,7 +18,9 @@ import {
 } from '@/components/ui/select'
 import { TemplatePicker } from '@/components/campaigns/TemplatePicker'
 import { RichTextEditor } from '@/components/editor/RichTextEditor'
+import { LandingPageOnboarding, type OnboardingFormData } from '@/components/projects/LandingPageOnboarding'
 import { getDefaultCollectionForContentType } from '@/lib/webflow/collection-defaults'
+import { onboardingStorageKey } from '@/lib/onboarding/persistence'
 
 type Integration = {
   id: string
@@ -48,7 +50,9 @@ export default function NewProjectPage() {
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now')
   const [scheduledAt, setScheduledAt] = useState('')
   const [frequency, setFrequency] = useState('once')
-  const [aiEnhance, setAiEnhance] = useState(false)
+  const [aiEnhance, setAiEnhance] = useState(true)
+  const [onboardingData, setOnboardingData] = useState<OnboardingFormData | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(true)
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -86,6 +90,10 @@ export default function NewProjectPage() {
   const handleContentTypeChange = (value: string) => {
     setContentType(value)
     if (value === 'blog_post') setTemplateId(null)
+    if (value === 'landing_page') {
+      setAiEnhance(true)
+      setShowOnboarding(true)
+    }
     const integration = integrations.find((i) => i.id === integrationId)
     if (integration) {
       const defaultCol = getDefaultCollectionForContentType(integration, value)
@@ -115,17 +123,30 @@ export default function NewProjectPage() {
           contentType,
           templateId: isBlogPost ? null : templateId,
           parameters: {
-            headline: headline || name,
-            body,
+            headline: onboardingData?.businessDescription?.split('.')[0] || headline || name,
+            body: onboardingData?.businessDescription || body,
             name,
-            subheadline: description || body,
-            ctaText: 'Learn more',
+            subheadline: description || onboardingData?.offer || body,
+            ctaText: 'Get started',
+            audience: onboardingData?.targetAudience || '',
+            offer: onboardingData?.offer || '',
           },
           webflowIntegrationId: integrationId || null,
           cmsCollectionId: collectionId || null,
           showOnWebsite,
           publishSite,
-          aiEnhance,
+          aiEnhance: isLandingPage ? (aiEnhance || Boolean(onboardingData)) : aiEnhance,
+          onboarding: onboardingData
+            ? {
+                websiteUrl: onboardingData.websiteUrl || undefined,
+                businessDescription: onboardingData.businessDescription || undefined,
+                primaryGoal: onboardingData.primaryGoal || undefined,
+                targetAudience: onboardingData.targetAudience || undefined,
+                offer: onboardingData.offer || undefined,
+                tonePreset: onboardingData.tonePreset,
+                ctaGoal: onboardingData.ctaGoal,
+              }
+            : undefined,
         }),
       })
 
@@ -253,6 +274,34 @@ export default function NewProjectPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isLandingPage && showOnboarding && (
+              <LandingPageOnboarding
+                orgId={orgId}
+                storageKey={onboardingStorageKey(orgId)}
+                onComplete={(data) => {
+                  setOnboardingData(data)
+                  setAiEnhance(true)
+                  setShowOnboarding(false)
+                  if (data.businessDescription && !name) {
+                    setName(data.businessDescription.split(/[.,]/)[0]?.slice(0, 60) || name)
+                  }
+                }}
+                onSkip={() => setShowOnboarding(false)}
+              />
+            )}
+            {isLandingPage && !showOnboarding && onboardingData && (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm">
+                AI onboarding complete — your template will be personalized automatically.
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto p-0 ml-2"
+                  onClick={() => setShowOnboarding(true)}
+                >
+                  Edit answers
+                </Button>
+              </div>
+            )}
             {isLandingPage && (
               <TemplatePicker
                 selectedId={templateId ?? undefined}
@@ -280,7 +329,9 @@ export default function NewProjectPage() {
             {isLandingPage && (
               <div className="flex items-center gap-3">
                 <Switch checked={aiEnhance} onCheckedChange={setAiEnhance} id="ai-enhance" />
-                <Label htmlFor="ai-enhance">Enhance content with AI before publishing</Label>
+                <Label htmlFor="ai-enhance">
+                  AI personalize landing page from onboarding answers
+                </Label>
               </div>
             )}
           </CardContent>

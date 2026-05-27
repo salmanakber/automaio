@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Info, Megaphone, Globe, Search, FileUp, Loader2, Sparkles } from 'lucide-react'
+import { Info, Megaphone, Globe, Search, FileUp, Loader2, Sparkles, Layout } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { parseLayoutControls, DEFAULT_LAYOUT_CONTROLS } from '@/lib/webflow/layout-controls'
+import type { LayoutControls } from '@/lib/ai/business-context-types'
 
 type SidebarFieldsProps = {
   project: Record<string, unknown> & {
@@ -35,7 +38,17 @@ export function SidebarFields({
 
   const params = project.parameters ?? {}
   const isBlog = project.contentType === 'blog_post'
+  const isLanding = project.contentType === 'landing_page'
   const showSeo = isBlog || project.contentType !== 'email'
+  const layoutControls = parseLayoutControls(params)
+
+  const updateLayout = (key: keyof LayoutControls, value: boolean) => {
+    const next = { ...layoutControls, [key]: value }
+    onUpdate({
+      ...project,
+      parameters: { ...params, layoutControls: JSON.stringify(next) },
+    })
+  }
 
   const updateParam = (key: string, value: string) => {
     onUpdate({
@@ -185,6 +198,49 @@ export function SidebarFields({
           </AccordionItem>
         )}
 
+        {isLanding && (
+          <AccordionItem value="layout" className="border-zinc-800 px-4">
+            <AccordionTrigger className="hover:no-underline py-4">
+              <div className="flex items-center gap-2">
+                <Layout className="h-4 w-4 text-orange-500" />
+                <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Webflow Layout</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-3 pb-6">
+              <LayoutToggle
+                label="Show header"
+                checked={layoutControls.showHeader ?? DEFAULT_LAYOUT_CONTROLS.showHeader!}
+                onChange={(v) => updateLayout('showHeader', v)}
+              />
+              <LayoutToggle
+                label="Show footer"
+                checked={layoutControls.showFooter ?? DEFAULT_LAYOUT_CONTROLS.showFooter!}
+                onChange={(v) => updateLayout('showFooter', v)}
+              />
+              <LayoutToggle
+                label="Full width layout"
+                checked={layoutControls.fullWidth ?? DEFAULT_LAYOUT_CONTROLS.fullWidth!}
+                onChange={(v) => updateLayout('fullWidth', v)}
+              />
+              <LayoutToggle
+                label="Remove container constraints"
+                checked={layoutControls.removeContainerConstraints ?? DEFAULT_LAYOUT_CONTROLS.removeContainerConstraints!}
+                onChange={(v) => updateLayout('removeContainerConstraints', v)}
+              />
+              <LayoutToggle
+                label="Landing page focus mode"
+                checked={layoutControls.landingPageFocusMode ?? DEFAULT_LAYOUT_CONTROLS.landingPageFocusMode!}
+                onChange={(v) => updateLayout('landingPageFocusMode', v)}
+              />
+              <LayoutToggle
+                label="Clean embed mode"
+                checked={layoutControls.cleanEmbedMode ?? DEFAULT_LAYOUT_CONTROLS.cleanEmbedMode!}
+                onChange={(v) => updateLayout('cleanEmbedMode', v)}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        )}
+
         {!isBlog && (
           <AccordionItem value="import" className="border-zinc-800 px-4">
             <AccordionTrigger className="hover:no-underline py-4">
@@ -233,6 +289,23 @@ export function SidebarFields({
           <p>Click any element on the canvas to edit. SEO syncs to Webflow on publish.</p>
         </div>
       </div>
+    </div>
+  )
+}
+
+function LayoutToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <Label className="text-[10px] text-zinc-500 uppercase">{label}</Label>
+      <Switch checked={checked} onCheckedChange={onChange} />
     </div>
   )
 }

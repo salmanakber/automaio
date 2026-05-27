@@ -3,6 +3,10 @@ import { validateSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAccess } from '@/lib/api/org-access'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
+import { extractBusinessContext, businessContextToParameters } from '@/lib/ai/business-context'
+import { personalizeProject } from '@/lib/ai/personalization-engine'
+import { applyLayoutControlsToHtml, DEFAULT_LAYOUT_CONTROLS } from '@/lib/webflow/layout-controls'
+import type { OnboardingInput } from '@/lib/ai/business-context-types'
 
 export async function GET(req: NextRequest) {
   try {
@@ -61,6 +65,7 @@ export async function POST(req: NextRequest) {
       showOnWebsite = true,
       publishSite = false,
       aiEnhance = false,
+      onboarding,
     } = body
 
     if (!organizationId || !name) {
@@ -68,6 +73,22 @@ export async function POST(req: NextRequest) {
     }
 
     await requireOrgAccess(user, organizationId)
+
+    let mergedParameters = (parameters as Record<string, string>) ?? {}
+    let extractedContext = null
+
+    if (onboarding && typeof onboarding === 'object') {
+      extractedContext = await extractBusinessContext(
+        onboarding as OnboardingInput,
+        organizationId,
+      )
+      mergedParameters = {
+        ...mergedParameters,
+        ...businessContextToParameters(extractedContext),
+        businessContext: JSON.stringify(extractedContext),
+        layoutControls: JSON.stringify(DEFAULT_LAYOUT_CONTROLS),
+      }
+    }
 
     let renderedHtml: string | null = null
     if (templateId) {
@@ -77,33 +98,68 @@ export async function POST(req: NextRequest) {
       if (template) {
         renderedHtml = renderProjectHtml(
           { name, description, category, template, renderedHtml: null },
-          (parameters as Record<string, string>) ?? {},
+          mergedParameters,
         )
       }
     }
 
+    const shouldPersonalize = aiEnhance || Boolean(onboarding)
+
     const project = await prisma.contentProject.create({
       data: {
         organizationId,
-        name,
-        description,
+        name: mergedParameters.companyName || name,
+        description: mergedParameters.body || description,
         category,
         contentType,
         templateId: templateId || null,
-        parameters: parameters ?? {},
+        parameters: mergedParameters,
         webflowIntegrationId: webflowIntegrationId || null,
         cmsCollectionId: cmsCollectionId || null,
         sourceCmsItemId: sourceCmsItemId || null,
         showOnWebsite,
         publishSite,
-        aiEnhance,
+        aiEnhance: shouldPersonalize,
         renderedHtml,
         createdById: user.id,
       },
       include: { template: { select: { id: true, name: true } } },
     })
 
-    return NextResponse.json({ project }, { status: 201 })
+    if (shouldPersonalize && renderedHtml?.trim()) {
+      try {
+        const fullProject = await prisma.contentProject.findUnique({
+          where: { id: project.id },
+          include: { template: true },
+        })
+        if (fullProject) {
+          if (extractedContext) {
+            const baseHtml = applyLayoutControlsToHtml(renderedHtml, DEFAULT_LAYOUT_CONTROLS)
+            const result = await personalizeProject(fullProject, extractedContext, baseHtml)
+            await prisma.contentProject.update({
+              where: { id: project.id },
+              data: {
+                renderedHtml: result.html,
+                parameters: {
+                  ...result.parameters,
+                  businessContext: JSON.stringify(extractedContext),
+                  layoutControls: JSON.stringify(DEFAULT_LAYOUT_CONTROLS),
+                },
+              },
+            })
+          }
+        }
+      } catch (err) {
+        console.error('[Automaio] Auto-personalization failed:', err)
+      }
+    }
+
+    const finalProject = await prisma.contentProject.findUnique({
+      where: { id: project.id },
+      include: { template: { select: { id: true, name: true } } },
+    })
+
+    return NextResponse.json({ project: finalProject ?? project }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create project'
     const status = message === 'Forbidden' ? 403 : 500

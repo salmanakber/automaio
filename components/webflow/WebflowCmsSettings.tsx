@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { WEBFLOW_CMS_SETUP_GUIDE, AUTOMAIO_CAMPAIGNS_COLLECTION_NAME } from '@/lib/webflow/cms-config'
+import { CreateLandingCollectionCard } from '@/components/webflow/CreateLandingCollectionCard'
 import { RefreshCw, Plug, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { isWebflowOAuthConfigured } from '@/lib/integrations/webflow-oauth'
 
@@ -359,8 +360,27 @@ export function WebflowCmsSettings({ orgId }: WebflowCmsSettingsProps) {
 
                 {collections.length === 0 && (
                   <p className="text-xs text-amber-600">
-                    No collections found. Click Sync, or create a CMS collection in Webflow Designer → CMS.
+                    No collections found. Click Sync, or create a landing page collection below.
                   </p>
+                )}
+
+                {active && (
+                  <CreateLandingCollectionCard
+                    orgId={orgId}
+                    integrationId={active.id}
+                    onCreated={async (collection) => {
+                      setSelectedPagesCollection(collection.id)
+                      await fetch(`/api/integrations/webflow/${active.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          templatesCollectionId: collection.id,
+                          sync: true,
+                        }),
+                      })
+                      load()
+                    }}
+                  />
                 )}
 
                 <div className="space-y-2">

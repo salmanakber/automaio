@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { generateCampaignPageHtml } from '@/lib/ai/campaign-page-generator'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { aiOrchestrator } from '@/lib/ai/orchestrator'
+import { buildToneSystemPrompt } from '@/lib/ai/tone-presets'
+import type { BusinessContext } from '@/lib/ai/business-context-types'
 import type { TemplateStructure } from '@/lib/templates/starter-templates'
 
 type RouteParams = { params: Promise<{ id: string }> }
@@ -39,6 +41,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Describe what you want AI to create' }, { status: 400 })
     }
 
+    const projectParams = (project.parameters as Record<string, string>) ?? {}
+
     // ── Text-only mode: update just the text, not the HTML structure ──
     if (mode === 'text-only' && elements && typeof elements === 'object') {
       const elementEntries = Object.entries(elements as Record<string, { text: string; tag: string }>)
@@ -50,10 +54,21 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         .map(([key, el]) => `[${key}] <${el.tag}> ${el.text}`)
         .join('\n')
 
+      const toneGuidance = buildToneSystemPrompt(projectParams.tone)
+      let businessBrief = ''
+      if (projectParams.businessContext) {
+        try {
+          const ctx = JSON.parse(projectParams.businessContext) as BusinessContext
+          businessBrief = `\nBusiness context:\n${ctx.companyName ? `Company: ${ctx.companyName}\n` : ''}${ctx.description ? `About: ${ctx.description}\n` : ''}${ctx.targetAudience ? `Audience: ${ctx.targetAudience}\n` : ''}${ctx.offer ? `Offer: ${ctx.offer}\n` : ''}${ctx.ctaGoal ? `CTA goal: ${ctx.ctaGoal}\n` : ''}`
+        } catch {
+          // ignore parse errors
+        }
+      }
+
       const response = await aiOrchestrator.generate({
-        prompt: `Project brief:\n${prompt}\n\nCurrent text elements (one per line, format: [id] <tag> text):\n${inputBlock}\n\nReturn a JSON object where each key is the element id and the value is the updated text string. Example: {"0":"New headline","1":"New paragraph text"}\n\nReturn ONLY valid JSON. No markdown fences, no explanation.`,
+        prompt: `Project brief:\n${prompt}${businessBrief}\n\nCurrent text elements (one per line, format: [id] <tag> text):\n${inputBlock}\n\nReturn a JSON object where each key is the element id and the value is the updated text string. Example: {"0":"New headline","1":"New paragraph text"}\n\nReturn ONLY valid JSON. No markdown fences, no explanation.`,
         systemPrompt:
-          'You are an expert marketing copywriter. Update ONLY the plain text for each element. Do NOT add HTML tags, markdown, or code. Keep each element appropriate for its HTML tag. Preserve approximate length unless the brief requires otherwise. Return ONLY a JSON object mapping element IDs to updated plain text strings. Never modify code blocks, scripts, or styles.',
+          `You are an expert landing page copywriter and conversion strategist. Update ONLY the plain text for each element. Do NOT add HTML tags, markdown, or code. Keep each element appropriate for its HTML tag. Preserve approximate length unless the brief requires otherwise. Return ONLY a JSON object mapping element IDs to updated plain text strings. Never modify code blocks, scripts, or styles.\n\n${toneGuidance}`,
         organizationId: project.organizationId,
         maxTokens: 3000,
         temperature: 0.7,
@@ -72,7 +87,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     // ── Full mode: regenerate entire HTML (expensive) ──
-    const projectParams = (project.parameters as Record<string, string>) ?? {}
     let baseHtml = project.renderedHtml ?? renderProjectHtml(project, projectParams)
 
     if (!baseHtml?.trim() && !project.template) {

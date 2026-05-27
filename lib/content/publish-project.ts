@@ -20,6 +20,13 @@ import { buildWebflowLiveUrl } from '@/lib/webflow/live-url'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
+import { resolveRenderingStrategy } from '@/lib/content/rendering-strategy'
+import {
+  buildSectionCmsContent,
+  bindSectionContentToCmsFields,
+  buildSectionCmsMappingPreview,
+} from '@/lib/webflow/section-cms-bindings'
+import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 
 function slugify(value: string) {
   return value
@@ -51,10 +58,22 @@ export async function getProjectPublishPreview(projectId: string) {
     project.cmsCollectionId,
   )
 
+  const businessContext = parseStoredBusinessContext(
+    (project.parameters as Record<string, unknown>) ?? {},
+  )
+  const sectionContent = buildSectionCmsContent(
+    payload.templateHtml ?? payload.bodyHtml ?? '',
+    (project.parameters as Record<string, string>) ?? {},
+    businessContext,
+  )
+  const sectionCmsFields = bindSectionContentToCmsFields(sectionContent, collectionFields)
+  payload.custom = { ...(payload.custom ?? {}), ...sectionCmsFields }
+
   let htmlMode: PublishHtmlMode = 'iframe_embed'
   if (integration && payload.templateHtml?.trim() && project.contentType !== 'blog_post') {
     const access = await checkCustomCodeAccess(integration.webflowApiKey, integration.webflowSiteId)
-    if (!access.ok) htmlMode = 'rich_text_html'
+    const strategy = resolveRenderingStrategy(payload.templateHtml ?? '', access.ok)
+    htmlMode = strategy.htmlMode
   }
 
   const plan = buildWebflowFieldPlan(
@@ -82,13 +101,16 @@ export async function getProjectPublishPreview(projectId: string) {
     })),
     canPublish: Object.keys(plan.fieldData).length > 0,
     resolvedFields: Object.keys(plan.fieldData),
+    sectionCmsFields: Object.keys(sectionCmsFields),
+    sectionCmsMapping: buildSectionCmsMappingPreview(sectionContent, collectionFields),
+    sectionCmsMappedCount: Object.keys(sectionCmsFields).length,
     hasTemplateHtml: Boolean(payload.templateHtml?.trim()),
     usesEmbed: plan.usesEmbed,
     htmlMode: plan.htmlMode,
     embedFieldSlug: plan.embedFieldSlug,
     embedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
     collectionEmbedSnippet:
-      plan.usesEmbed
+      plan.usesEmbed && integration
         ? buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId)
         : null,
     projectEmbedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
@@ -212,6 +234,17 @@ export async function publishContentProject(
 
   const collectionFields = await getCollectionFields(integration, project.cmsCollectionId)
 
+  const businessContext = parseStoredBusinessContext(
+    (project.parameters as Record<string, unknown>) ?? {},
+  )
+  const sectionContent = buildSectionCmsContent(
+    payload.templateHtml ?? payload.bodyHtml ?? '',
+    (project.parameters as Record<string, string>) ?? {},
+    businessContext,
+  )
+  const sectionCmsFields = bindSectionContentToCmsFields(sectionContent, collectionFields)
+  payload.custom = { ...(payload.custom ?? {}), ...sectionCmsFields }
+
   const isHtmlPage = project.contentType !== 'blog_post' && Boolean(payload.templateHtml?.trim())
   let htmlMode: PublishHtmlMode = 'iframe_embed'
   if (isHtmlPage) {
@@ -219,7 +252,8 @@ export async function publishContentProject(
       integration.webflowApiKey,
       integration.webflowSiteId,
     )
-    if (!customCode.ok) htmlMode = 'rich_text_html'
+    const strategy = resolveRenderingStrategy(payload.templateHtml ?? '', customCode.ok)
+    htmlMode = strategy.htmlMode
   }
 
   let plan = buildWebflowFieldPlan(

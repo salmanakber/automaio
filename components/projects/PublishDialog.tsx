@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Dialog,
@@ -13,7 +13,23 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { ExternalLink, Globe, Layout, Loader2, CheckCircle2, AlertCircle, Copy, Plug } from 'lucide-react'
+import {
+  ExternalLink,
+  Globe,
+  Layout,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
+  Plug,
+  RefreshCw,
+} from 'lucide-react'
+import {
+  SectionCmsMappingPreview,
+  type SectionCmsMappingRow,
+} from '@/components/projects/SectionCmsMappingPreview'
+import { CreateLandingCollectionCard } from '@/components/webflow/CreateLandingCollectionCard'
+import { parseJsonResponse } from '@/lib/api/parse-json-response'
 
 type PublishDialogProps = {
   open: boolean
@@ -32,6 +48,16 @@ type PublishResult = {
   embedNeedsReconnect?: boolean
 }
 
+type PublishPreview = {
+  sectionCmsMapping?: SectionCmsMappingRow[]
+  sectionCmsMappedCount?: number
+  canPublish?: boolean
+  htmlMode?: string
+  usesEmbed?: boolean
+  resolvedFields?: string[]
+  error?: string
+}
+
 export function PublishDialog({
   open,
   onOpenChange,
@@ -41,10 +67,50 @@ export function PublishDialog({
   onPublished,
 }: PublishDialogProps) {
   const [publishing, setPublishing] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [preview, setPreview] = useState<PublishPreview | null>(null)
+  const [previewError, setPreviewError] = useState('')
   const [showOnWebsite, setShowOnWebsite] = useState(Boolean(project?.showOnWebsite))
   const [publishSite, setPublishSite] = useState(project?.publishSite !== false)
   const [result, setResult] = useState<PublishResult | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const isLandingPage = project?.contentType === 'landing_page'
+  const integrationId = project?.webflowIntegrationId as string | undefined
+  const missingSectionFields =
+    preview?.sectionCmsMapping?.some((r) => r.status === 'missing_field') ?? false
+
+  const loadPreview = async () => {
+    if (!project?.cmsCollectionId) {
+      setPreview(null)
+      setPreviewError('Select a CMS collection before publishing.')
+      return
+    }
+    setPreviewLoading(true)
+    setPreviewError('')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/publish-preview`, {
+        headers: { 'ngrok-skip-browser-warning': '1' },
+      })
+      const data = await parseJsonResponse<PublishPreview & { error?: string }>(res)
+      if (!res.ok) throw new Error(data.error ?? 'Preview failed')
+      setPreview(data)
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : 'Could not load publish preview')
+      setPreview(null)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return
+    setShowOnWebsite(Boolean(project?.showOnWebsite))
+    setPublishSite(project?.publishSite !== false)
+    setResult(null)
+    if (isLandingPage) loadPreview()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, projectId, project?.cmsCollectionId, isLandingPage])
 
   const copySnippet = async (snippet: string) => {
     await navigator.clipboard.writeText(snippet)
@@ -102,14 +168,14 @@ export function PublishDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#09090b] border-zinc-800 text-white sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-[#09090b] border-zinc-800 text-white sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-blue-500" />
             Publish to Webflow
           </DialogTitle>
           <DialogDescription className="text-zinc-500 text-xs mt-2">
-            Syncs content, SEO fields, and iframe embed for HTML pages.
+            Syncs content, SEO fields, section CMS data, and iframe embed for HTML pages.
           </DialogDescription>
         </DialogHeader>
 
@@ -126,8 +192,70 @@ export function PublishDialog({
                 </p>
               </div>
             </div>
-            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Ready</Badge>
+            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+              {preview?.canPublish === false ? 'Check fields' : 'Ready'}
+            </Badge>
           </div>
+
+          {isLandingPage && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">
+                  Publish preview
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[10px] text-zinc-500 gap-1"
+                  onClick={loadPreview}
+                  disabled={previewLoading}
+                >
+                  <RefreshCw className={`h-3 w-3 ${previewLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+
+              {previewLoading && (
+                <div className="flex items-center gap-2 text-xs text-zinc-500 py-4 justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading field mapping…
+                </div>
+              )}
+
+              {previewError && !previewLoading && (
+                <p className="text-xs text-amber-400/90 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+                  {previewError}
+                </p>
+              )}
+
+              {preview?.sectionCmsMapping && !previewLoading && (
+                <SectionCmsMappingPreview
+                  rows={preview.sectionCmsMapping}
+                  mappedCount={preview.sectionCmsMappedCount}
+                />
+              )}
+
+              {missingSectionFields && integrationId && !previewLoading && (
+                <CreateLandingCollectionCard
+                  orgId={orgId}
+                  integrationId={integrationId}
+                  onCreated={() => loadPreview()}
+                  compact
+                />
+              )}
+
+              {preview?.htmlMode && !previewLoading && (
+                <p className="text-[10px] text-zinc-600">
+                  Rendering: {preview.htmlMode.replace('_', ' ')}
+                  {preview.usesEmbed ? ' · iframe embed' : ''}
+                  {preview.resolvedFields?.length
+                    ? ` · ${preview.resolvedFields.length} CMS fields`
+                    : ''}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="flex items-center justify-between px-1">
@@ -234,7 +362,7 @@ export function PublishDialog({
           <Button
             className="flex-1 bg-blue-600 hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] gap-2"
             onClick={publish}
-            disabled={publishing}
+            disabled={publishing || (preview !== null && preview.canPublish === false)}
           >
             {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
             Go Live

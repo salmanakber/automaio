@@ -16,6 +16,7 @@ import {
   ZoomIn,
   ZoomOut,
   Wand2,
+  RefreshCw,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -40,7 +41,9 @@ import { SidebarFields } from '@/components/projects/SidebarFields'
 import { ElementEditorPanel, type SelectedElement } from '@/components/projects/ElementEditorPanel'
 import { PublishDialog } from '@/components/projects/PublishDialog'
 import { AiProgressOverlay } from '@/components/projects/AiProgressOverlay'
+import { RepersonalizePanel } from '@/components/projects/RepersonalizePanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
+import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 
 export default function ProjectStudioPage() {
   const params = useParams()
@@ -64,6 +67,8 @@ export default function ProjectStudioPage() {
   const [aiStep, setAiStep] = useState(0)
   const [seoGenerating, setSeoGenerating] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [repersonalizeOpen, setRepersonalizeOpen] = useState(false)
+  const [repersonalizing, setRepersonalizing] = useState(false)
   const seoAutoTried = useRef(false)
 
   const load = useCallback(async () => {
@@ -197,6 +202,15 @@ export default function ProjectStudioPage() {
   }
 
   const renderedHtml = (project?.renderedHtml as string) || ''
+  const isLandingPage = project?.contentType === 'landing_page'
+  const hasBusinessContext = Boolean(
+    parseStoredBusinessContext((project?.parameters as Record<string, unknown>) ?? {}),
+  )
+
+  const handleRepersonalized = async (updated: Record<string, unknown>) => {
+    setProject(updated)
+    await load()
+  }
 
   return (
     <TooltipProvider>
@@ -256,6 +270,17 @@ export default function ProjectStudioPage() {
             >
               <Wand2 className="h-3.5 w-3.5" /> AI Generate
             </Button>
+            {isLandingPage && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1.5"
+                onClick={() => setRepersonalizeOpen(true)}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                {hasBusinessContext ? 'Re-personalize' : 'Personalize'}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -345,7 +370,23 @@ export default function ProjectStudioPage() {
           onPublished={load}
         />
 
-        <AiProgressOverlay open={aiProgress} step={aiStep} label="AI is updating your template" />
+        <AiProgressOverlay
+          open={aiProgress || repersonalizing}
+          step={aiStep}
+          label={repersonalizing ? 'Re-personalizing your landing page' : 'AI is updating your template'}
+        />
+
+        {isLandingPage && (
+          <RepersonalizePanel
+            open={repersonalizeOpen}
+            onOpenChange={setRepersonalizeOpen}
+            orgId={orgId}
+            projectId={projectId}
+            projectParameters={(project?.parameters as Record<string, unknown>) ?? {}}
+            onComplete={handleRepersonalized}
+            onRunningChange={setRepersonalizing}
+          />
+        )}
 
         <Dialog open={aiOpen} onOpenChange={setAiOpen}>
           <DialogContent className="bg-[#0c0c0e] border-zinc-800 text-white sm:max-w-lg">
