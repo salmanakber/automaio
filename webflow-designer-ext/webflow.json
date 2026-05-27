@@ -1,0 +1,7 @@
+{
+  "name": "Automaio",
+  "description": "AI marketing campaigns and HTML templates for Webflow CMS.",
+  "apiVersion": "2",
+  "size": "large",
+  "publicDir": "public"
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Automaio",
+  "description": "AI-powered marketing campaigns for Webflow. Choose templates, generate content, and publish to Webflow CMS.",
+  "category": "Marketing",
+  "scopes": ["cms:read", "cms:write", "sites:read", "sites:write", "custom_code:read", "custom_code:write"],
+  "features": [
+    "Prebuilt HTML campaign templates",
+    "AI content generation",
+    "One-click publish to Webflow CMS",
+    "Collection field mapping",
+    "Live preview before publish"
+  ],
+  "cmsCollection": {
+    "name": "Automaio Campaigns",
+    "requiredFields": [
+      "name",
+      "slug",
+      "template-html",
+      "headline",
+      "automaio-campaign-id"
+    ]
+  },
+  "embedScript": "/webflow/embed.js",
+  "documentation": "https://github.com/automaio/docs"
+}

@@ -1,0 +1,706 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Users & Authentication
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String?    // Hashed password (null for OAuth-only accounts)
+  googleId  String?    @unique
+  firstName String?
+  lastName  String?
+  avatar    String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  organizations  Organization[]
+  teamMembers    TeamMember[]
+  campaigns      Campaign[]
+  contentProjects ContentProject[]
+  emailCampaigns EmailCampaign[]
+  leadForms      LeadForm[]
+  sessions       Session[]
+
+  @@index([email])
+}
+
+model Session {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String     @unique
+  expiresAt DateTime
+  createdAt DateTime   @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+// Organization & Team Management
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  description String?
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  teamMembers          TeamMember[]
+  campaigns            Campaign[]
+  webflowIntegrations  WebflowIntegration[]
+  aiModelConfigs       AIModelConfig[]
+  campaignTemplates    CampaignTemplate[]
+  templatePerformance  TemplatePerformance[]
+  subscriptionMetrics  SubscriptionMetrics[]
+  aiCostAnalytics      AICostAnalytics[]
+  promptIntelligence   PromptIntelligence[]
+  campaignSimulations  CampaignSimulation[]
+  agencyClients        AgencyClient[]
+  observabilityLogs    AIObservabilityLog[]
+  trendData            TrendData[]
+  contentLibrary       ContentAssetLibrary[]
+  experiments          Experiment[]
+  automationRules      AutomationRule[]
+  complianceRules      ComplianceRule[]
+  contentProjects      ContentProject[]
+  emailCampaigns       EmailCampaign[]
+  emailSubscribers     EmailSubscriber[]
+  leadForms            LeadForm[]
+
+  @@index([ownerId])
+  @@index([slug])
+}
+
+model TeamMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String   @default("member") // owner, admin, member
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// Campaign Management
+model Campaign {
+  id               String   @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  industry         String   // e.g., "SaaS", "E-commerce", "B2B"
+  targetAudience   String
+  goals            String[] // Array of campaign goals
+  status           String   @default("draft") // draft, scheduled, active, paused, completed
+  aiModel          String   @default("gpt-4o-mini")
+  templateId       String?
+  template         CampaignTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  renderedHtml     String?  @db.Text // Merged template HTML for Webflow CMS
+  webflowCmsItemId String?  // Webflow CMS collection item ID
+  createdById      String
+  createdBy        User     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  contentAssets       ContentAsset[]
+  campaignSchedules   CampaignSchedule[]
+  funnelPages         FunnelPage[]
+  campaignAnalytics   CampaignAnalytics[]
+  intelligence        CampaignIntelligence?
+  simulations         CampaignSimulation[]
+  costAnalytics       AICostAnalytics[]
+  experiments         Experiment[]
+  emailCampaigns      EmailCampaign[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdById])
+}
+
+// Campaign Templates & Industry Intelligence
+model CampaignTemplate {
+  id                  String   @id @default(cuid())
+  organizationId      String?
+  organization        Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String
+  industry            String
+  description         String?
+  templateStructure   Json     // JSONB structure for template
+  bestPractices       String[] // Array of best practices
+  avgPerformanceMetrics Json?  // Performance benchmarks
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  campaigns           Campaign[]
+  contentProjects     ContentProject[]
+
+  @@index([industry])
+  @@index([organizationId])
+}
+
+// Content Projects — blog posts, CMS entries, custom pages
+model ContentProject {
+  id                   String   @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String?
+  category             String   @default("project") // project, blog, cms, custom
+  contentType          String   @default("cms_entry") // blog_post, cms_entry, landing_page, custom
+  status               String   @default("draft") // draft, scheduled, published, failed
+  templateId           String?
+  template             CampaignTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  parameters           Json?    // template placeholders or CMS field values
+  sourceCmsItemId      String?  // enhance existing Webflow CMS item
+  webflowIntegrationId String?
+  cmsCollectionId      String?
+  webflowCmsItemId     String?
+  renderedHtml         String?  @db.Text
+  showOnWebsite        Boolean  @default(true)
+  publishSite          Boolean  @default(false)
+  scheduledFor         DateTime?
+  aiEnhance            Boolean  @default(false)
+  createdById          String
+  createdBy            User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  schedules ProjectSchedule[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([category])
+  @@index([scheduledFor])
+}
+
+model ProjectSchedule {
+  id                   String   @id @default(cuid())
+  projectId            String
+  project              ContentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scheduledFor         DateTime
+  frequency            String   @default("once") // once, daily, twice_daily, weekly
+  status               String   @default("scheduled") // scheduled, sent, failed, cancelled
+  optimizationStrategy Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([scheduledFor])
+  @@index([status])
+}
+
+// Email Campaigns with recurring frequency
+model EmailCampaign {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  subject        String
+  htmlBody       String   @db.Text
+  status         String   @default("draft") // draft, scheduled, active, paused, completed
+  frequency      String   @default("once") // once, daily, twice_daily, weekly
+  nextSendAt     DateTime?
+  campaignId     String?
+  campaign       Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  schedules EmailSchedule[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([nextSendAt])
+}
+
+model EmailSchedule {
+  id                   String   @id @default(cuid())
+  emailCampaignId      String
+  emailCampaign        EmailCampaign @relation(fields: [emailCampaignId], references: [id], onDelete: Cascade)
+  scheduledFor         DateTime
+  frequency            String   @default("once")
+  status               String   @default("scheduled")
+  optimizationStrategy Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([emailCampaignId])
+  @@index([scheduledFor])
+  @@index([status])
+}
+
+model EmailSubscriber {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  firstName      String?
+  lastName       String?
+  status         String   @default("active") // active, unsubscribed, bounced
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([status])
+}
+
+// Dynamic lead capture forms
+model LeadForm {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  fields         Json     // [{ id, label, type, required, placeholder }]
+  settings       Json?    // { successMessage, redirectUrl, notifyEmail }
+  embedToken     String   @unique @default(cuid())
+  status         String   @default("active") // active, paused
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  submissions FormSubmission[]
+
+  @@index([organizationId])
+  @@index([embedToken])
+}
+
+model FormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  form      LeadForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  data      Json
+  sourceUrl String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([formId])
+  @@index([createdAt])
+}
+
+// Generated Content Assets
+model ContentAsset {
+  id                 String   @id @default(cuid())
+  campaignId         String
+  campaign           Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  assetType          String   // headline, body_copy, cta, subject_line, visual_description
+  content            String   @db.Text
+  aiGenerated        Boolean  @default(true)
+  performanceMetrics Json?    // Engagement metrics
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([assetType])
+}
+
+// Campaign Schedule & Optimization
+model CampaignSchedule {
+  id                   String   @id @default(cuid())
+  campaignId           String
+  campaign             Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scheduledFor         DateTime
+  channel              String   // email, social, webflow, multi
+  optimizationStrategy Json?    // A/B testing, timing, audience segmentation
+  status               String   @default("scheduled") // scheduled, sent, failed
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([scheduledFor])
+  @@index([status])
+}
+
+// Webflow Integration
+model WebflowIntegration {
+  id                String   @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  webflowSiteId     String
+  webflowApiKey     String   @db.Text // Should be encrypted in production
+  siteName          String?
+  collections       Json?    // Webflow collections metadata
+  campaignsCollectionId String? // CMS collection for Automaio campaigns
+  templatesCollectionId String? // CMS collection for template library (optional)
+  cmsFieldMapping   Json?    // Maps Automaio fields → Webflow CMS field slugs
+  syncedAt          DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  funnelPages FunnelPage[]
+
+  @@index([organizationId])
+  @@index([webflowSiteId])
+}
+
+// Funnel Pages & Landing Page Builder
+model FunnelPage {
+  id                        String   @id @default(cuid())
+  campaignId                String
+  campaign                  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  webflowIntegrationId      String?
+  webflowIntegration        WebflowIntegration? @relation(fields: [webflowIntegrationId], references: [id], onDelete: SetNull)
+  pageName                  String
+  pageType                  String   // landing, email, followup, thank_you
+  webflowPageId             String?
+  contentStructure          Json     // Page layout and content structure
+  seoOptimized              Boolean  @default(false)
+  conversionTrackingEnabled Boolean  @default(false)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([webflowIntegrationId])
+}
+
+// Performance Analytics
+model CampaignAnalytics {
+  id             String   @id @default(cuid())
+  campaignId     String
+  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  metricDate     DateTime @db.Date
+  impressions    Int      @default(0)
+  clicks         Int      @default(0)
+  conversions    Int      @default(0)
+  revenue        Decimal  @default(0) @db.Decimal(10, 2)
+  engagementRate Decimal  @default(0) @db.Decimal(5, 2)
+  roi            Decimal  @default(0) @db.Decimal(5, 2)
+  createdAt      DateTime @default(now())
+
+  @@unique([campaignId, metricDate])
+  @@index([campaignId])
+  @@index([metricDate])
+}
+
+// AI Model Configuration
+model AIModelConfig {
+  id               String   @id @default(cuid())
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  modelName        String
+  apiKey           String?  @db.Text // Encrypted
+  isActive         Boolean  @default(true)
+  maxTokens        Int      @default(2000)
+  temperature      Decimal  @default(0.7) @db.Decimal(3, 2)
+  fallbackOrder    Int?
+  configMetadata   Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([modelName])
+}
+
+// 13. Template Intelligence & Improvement System
+model TemplatePerformance {
+  id                    String   @id @default(cuid())
+  templateId            String
+  campaignTemplateId    String?
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  industry              String
+  totalUsage            Int      @default(0)
+  totalConversions      Int      @default(0)
+  conversionRate        Decimal  @default(0) @db.Decimal(5, 2)
+  avgEngagement         Decimal  @default(0) @db.Decimal(5, 2)
+  performanceScore      Decimal  @default(0) @db.Decimal(5, 2) // 0-100
+  suggestedImprovements Json?    // AI-generated improvement suggestions
+  usageHeatmap          Json?    // Usage vs conversion impact
+  lastAnalyzedAt        DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([industry])
+  @@index([templateId])
+}
+
+// 14. Campaign Performance Intelligence Layer
+model CampaignIntelligence {
+  id                       String   @id @default(cuid())
+  campaignId               String
+  campaign                 Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  successScore             Decimal  @default(0) @db.Decimal(5, 2) // AI-based scoring 0-100
+  funnelDropOffStages      Json?    // Stage-by-stage drop-off analysis
+  hookPerformanceData      Json?    // Which hooks/intros work best
+  ctaEffectiveness         Decimal  @default(0) @db.Decimal(5, 2)
+  engagementToConversion   Decimal  @default(0) @db.Decimal(5, 2)
+  aiAnalysisSummary        String?  @db.Text // "Why this campaign worked/failed"
+  autoRecommendations      Json?    // AI-generated next steps
+  predictedNextResult      Json?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@unique([campaignId])
+  @@index([campaignId])
+}
+
+// 15. Subscription & Revenue Intelligence System
+model SubscriptionMetrics {
+  id                      String   @id @default(cuid())
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  metricsDate             DateTime @db.Date
+  mrr                     Decimal  @default(0) @db.Decimal(12, 2) // Monthly Recurring Revenue
+  arr                     Decimal  @default(0) @db.Decimal(12, 2) // Annual Recurring Revenue
+  activeSubscriptions     Int      @default(0)
+  churnRate               Decimal  @default(0) @db.Decimal(5, 2)
+  churnPredictionScore    Decimal  @default(0) @db.Decimal(5, 2)
+  cohortRetention         Json?    // Monthly user retention cohorts
+  freeToPaidConversion    Decimal  @default(0) @db.Decimal(5, 2)
+  trialUsageHeatmap       Json?
+  revenuePerIndustry      Json?    // Revenue breakdown by industry
+  createdAt               DateTime @default(now())
+
+  @@unique([organizationId, metricsDate])
+  @@index([organizationId])
+  @@index([metricsDate])
+}
+
+// 16. AI Cost Optimization & Profit Engine
+model AICostAnalytics {
+  id                      String   @id @default(cuid())
+  campaignId              String?
+  campaign                Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  costDate                DateTime @db.Date
+  totalTokensUsed         Int      @default(0)
+  costPerToken            Decimal  @default(0) @db.Decimal(10, 4)
+  costPerCampaign         Decimal  @default(0) @db.Decimal(10, 2)
+  costPerModel            Json?    // Cost breakdown by AI model
+  automaticModelSwitch    Boolean  @default(false)
+  profitEstimate          Decimal  @default(0) @db.Decimal(10, 2)
+  tokenWasteDetected      Int      @default(0)
+  cacheSavings            Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt               DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([campaignId])
+  @@index([costDate])
+}
+
+// 17. Prompt Intelligence & Evolution System
+model PromptIntelligence {
+  id                     String   @id @default(cuid())
+  organizationId         String
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  promptContent          String   @db.Text
+  promptType             String   // system, user, template, industry-specific
+  industry               String?
+  performanceScore       Decimal  @default(0) @db.Decimal(5, 2)
+  usageCount             Int      @default(0)
+  averageOutputQuality   Decimal  @default(0) @db.Decimal(5, 2)
+  promptDriftScore       Decimal  @default(0) @db.Decimal(5, 2) // Quality degradation over time
+  suggestedRewritings    Json?    // AI-generated improvement suggestions
+  abTestPerformance      Json?    // A/B testing results
+  bestPatternDiscovery   Json?    // Successful patterns discovered
+  version                Int      @default(1)
+  isActive               Boolean  @default(true)
+  lastUsedAt             DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([promptType])
+  @@index([industry])
+}
+
+// 18. Campaign Replay & Simulation Engine
+model CampaignSimulation {
+  id                      String   @id @default(cuid())
+  campaignId              String?
+  campaign                Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  originalCampaignId      String?
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  simulationName          String
+  simulationType          String   // "replay", "what-if", "improvement"
+  originalParameters      Json     // Original campaign parameters
+  modifiedParameters      Json     // Simulated modifications (different hook, industry, CTA)
+  predictedEngagement     Decimal  @default(0) @db.Decimal(5, 2)
+  predictedConversion     Decimal  @default(0) @db.Decimal(5, 2)
+  predictedRevenue        Decimal  @default(0) @db.Decimal(10, 2)
+  expectedVsActual        Json?    // Comparison with actual results
+  aiRecommendations       String?  @db.Text
+  createdAt               DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([campaignId])
+}
+
+// 19. Multi-Tenant Agency Control Center
+model AgencyClient {
+  id                      String   @id @default(cuid())
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientName              String
+  clientEmail             String
+  clientWebsite           String?
+  whiteLabelEnabled       Boolean  @default(false)
+  customBrandingJson      Json?
+  clientAiSettings        Json?    // Client-specific AI configuration
+  isolationLevel          String   @default("workspace") // workspace, sandbox, full
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([organizationId])
+  @@unique([organizationId, clientEmail])
+}
+
+// 20. Real-Time AI Observability Dashboard
+model AIObservabilityLog {
+  id                      String   @id @default(cuid())
+  organizationId          String?
+  organization            Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestId               String   @unique
+  modelName               String
+  latencyMs               Int
+  tokenCount              Int
+  failureReason           String?
+  fallbackChain           Json?    // Which models were tried
+  requestStatus           String   // "success", "failed", "retried"
+  aiProviderResponse      Json?
+  webflowSyncStatus       String?  // For sync operations
+  errorTrace              String?  @db.Text
+  campaignId              String?
+  createdAt               DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([modelName])
+  @@index([requestStatus])
+  @@index([createdAt])
+}
+
+// 21. Trend Intelligence Engine
+model TrendData {
+  id                      String   @id @default(cuid())
+  organizationId          String?
+  organization            Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  industry                String
+  trendTopic              String
+  trendScore              Decimal  @default(0) @db.Decimal(5, 2) // Popularity/virality score
+  viralityPattern         Json?
+  seasonalityData         Json?
+  geoDistribution         Json?   // Geographic trend distribution
+  competitorMentions      Int      @default(0)
+  suggestedCampaignAngles Json?
+  trendingFromDate        DateTime
+  trendingToDate          DateTime?
+  createdAt               DateTime @default(now())
+
+  @@index([industry])
+  @@index([trendScore])
+  @@index([organizationId])
+}
+
+// 22. Asset Management & Content Library
+model ContentAssetLibrary {
+  id                      String   @id @default(cuid())
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assetName               String
+  assetType               String   // image, video, text_block, component
+  assetUrl                String
+  assetMetadata           Json?
+  aiGeneratedTags         String[]
+  brandAssetVersion       Int      @default(1)
+  crossCampaignUsage      Int      @default(0)
+  lastUsedAt              DateTime?
+  performanceData         Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([assetType])
+}
+
+// 23. Experimentation & Growth Lab
+model Experiment {
+  id                      String   @id @default(cuid())
+  campaignId              String?
+  campaign                Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  experimentName          String
+  experimentType          String   // "a_b_test", "multivariate", "hook_test", "cta_test"
+  controlVariant          Json     // Control version
+  testVariants            Json     // Test variations
+  statisticalConfidence   Decimal  @default(0) @db.Decimal(5, 2)
+  winningVariant          String?
+  autoPromote             Boolean  @default(false)
+  totalParticipants       Int      @default(0)
+  conversionsByVariant    Json?
+  status                  String   @default("running") // running, completed, paused
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([campaignId])
+  @@index([status])
+}
+
+// 24. Automation Rule Builder
+model AutomationRule {
+  id                      String   @id @default(cuid())
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ruleName                String
+  triggerCondition        Json     // IF conditions (campaign type, cost, engagement, industry)
+  actionType              String   // "use_template", "switch_model", "regenerate_content", "schedule_campaign"
+  actionConfig            Json     // Action configuration details
+  isActive                Boolean  @default(true)
+  executionCount          Int      @default(0)
+  lastExecutedAt          DateTime?
+  customWorkflowJson      Json?    // Custom automation workflow (Zapier-like)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+// 25. Compliance & Content Safety Layer
+model ComplianceRule {
+  id                      String   @id @default(cuid())
+  organizationId          String?
+  organization            Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ruleName                String
+  ruleType                String   // "policy_enforcement", "tone_check", "regional_compliance", "claim_validation"
+  blockUnsafeClaims       Boolean  @default(true)
+  blockUnsafeIndustries   String[]
+  brandToneRules          Json?
+  regionalComplianceRules Json?   // EU, US, etc. rules
+  contentApprovalRequired Boolean  @default(false)
+  autoFlagProblematicContent Boolean @default(true)
+  isActive                Boolean  @default(true)
+  appliedToOrganization   Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+

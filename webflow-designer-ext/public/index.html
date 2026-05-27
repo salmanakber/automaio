@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Automaio</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0a0a;
+      }
+      #automaio-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+      }
+      #automaio-fallback {
+        display: none;
+        font-family: system-ui, sans-serif;
+        padding: 1rem;
+        font-size: 13px;
+        color: #e2e8f0;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe id="automaio-frame" title="Automaio"></iframe>
+    <div id="automaio-fallback">
+      <p><strong>Automaio</strong> could not load the app.</p>
+      <p>
+        Run <code>npm run dev</code> and <code>npm run webflow:extension</code>, and set
+        <code>AUTOMAIO_APP_URL</code> in this file to your ngrok HTTPS URL (same as
+        <code>NEXTAUTH_URL</code> in .env).
+      </p>
+    </div>
+    <script>
+      (function () {
+        // Keep in sync with NEXTAUTH_URL / NEXT_PUBLIC_APP_URL in .env
+        var AUTOMAIO_APP_URL = 'https://6ecf-119-157-64-122.ngrok-free.app'
+
+        var params = new URLSearchParams(window.location.search)
+        var fromQuery = params.get('appUrl')
+        if (fromQuery) AUTOMAIO_APP_URL = fromQuery
+
+        var base = AUTOMAIO_APP_URL.replace(/\/$/, '')
+        var frame = document.getElementById('automaio-frame')
+        var fallback = document.getElementById('automaio-fallback')
+
+        if (!base || base.indexOf('YOUR-NGROK') !== -1) {
+          frame.style.display = 'none'
+          fallback.style.display = 'block'
+          return
+        }
+
+        var installed = params.get('installed') === '1'
+        var qs = new URLSearchParams()
+        qs.set('embedded', '1')
+        if (installed) qs.set('installed', '1')
+        frame.src = base + '/webflow/designer?' + qs.toString()
+        frame.onerror = function () {
+          frame.style.display = 'none'
+          fallback.style.display = 'block'
+        }
+      })()
+    </script>
+  </body>
+</html>
