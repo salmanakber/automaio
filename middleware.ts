@@ -6,11 +6,17 @@ export function middleware(request: NextRequest) {
 
   // Public routes that don't require authentication
   const publicRoutes = ['/', '/auth/login', '/auth/signup', '/webflow/designer', '/webflow/install']
+  const isPublicWebflowAsset =
+    /^\/webflow\/(runtime|embed|form-embed)\.js$/i.test(pathname) ||
+    pathname === '/webflow/designer-extension.json'
+
   const isPublicRoute =
     publicRoutes.includes(pathname) ||
+    isPublicWebflowAsset ||
     pathname.startsWith('/api/integrations/webflow/oauth') ||
     pathname.startsWith('/api/forms/public') ||
     pathname.startsWith('/api/public/embed') ||
+    pathname.startsWith('/api/runtime/') ||
     pathname.startsWith('/webflow/embed') ||
     pathname.startsWith('/webflow/form-embed')
 
