@@ -7,6 +7,7 @@ import { personalizeProject } from '@/lib/ai/personalization-engine'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
+import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
 import type { BusinessContext, OnboardingInput } from '@/lib/ai/business-context-types'
 
 type RouteParams = { params: Promise<{ id: string }> }
@@ -111,11 +112,21 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       }
     }
 
+    const pageSchema = buildLandingPageSchema(
+      { ...project, renderedHtml: resultHtml },
+      resultHtml,
+    )
+
     const updated = await prisma.contentProject.update({
       where: { id },
       data: {
         renderedHtml: resultHtml,
-        parameters: mergedParams,
+        parameters: {
+          ...mergedParams,
+          pageSchema: JSON.stringify(pageSchema),
+          runtimeVersion: String(pageSchema.version),
+          pageId: id,
+        },
         aiEnhance: true,
         description: context.description ?? project.description,
         name: context.companyName && context.companyName.length > 2 ? context.companyName : project.name,

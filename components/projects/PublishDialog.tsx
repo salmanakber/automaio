@@ -326,8 +326,11 @@ export function PublishDialog({
                       Auto ({preview?.htmlLineCount ?? '—'} lines · threshold{' '}
                       {preview?.htmlLineThreshold ?? 4000})
                     </SelectItem>
+                    <SelectItem value="remote_runtime">
+                      Remote runtime (recommended — Page ID in CMS)
+                    </SelectItem>
                     <SelectItem value="split_plain_text">
-                      Split HTML / CSS / JS (Plain Text CMS — recommended)
+                      Legacy: split HTML / CSS / JS in CMS fields
                     </SelectItem>
                     <SelectItem value="custom_code">Full HTML in CMS body (legacy Rich Text)</SelectItem>
                     <SelectItem value="iframe_embed">Iframe embed in CMS body</SelectItem>

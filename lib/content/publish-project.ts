@@ -25,8 +25,13 @@ import { getHtmlLineThreshold } from '@/lib/platform/rendering-settings'
 import { buildProjectIframeUrl } from '@/lib/webflow/embed-page'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
 import { assembleLandingPageForWebflow } from '@/lib/webflow/landing-page-assembler'
-import { collectionSupportsSplitPlainText } from '@/lib/webflow/cms-collection-schema'
+import {
+  collectionSupportsRemoteRuntime,
+  collectionSupportsSplitPlainText,
+} from '@/lib/webflow/cms-collection-schema'
 import { buildWebflowCollectionTemplateEmbed } from '@/lib/webflow/collection-template-snippet'
+import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
+import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
 
 function slugify(value: string) {
   return value
@@ -47,6 +52,7 @@ function parsePublishHtmlMode(params: Record<string, unknown>): PublishHtmlModeO
     raw === 'rich_text_html' ||
     raw === 'custom_code' ||
     raw === 'split_plain_text' ||
+    raw === 'remote_runtime' ||
     raw === 'auto'
   ) {
     return raw
@@ -93,9 +99,10 @@ export async function getProjectPublishPreview(projectId: string) {
   const params = (project.parameters as Record<string, unknown>) ?? {}
   const publishHtmlMode = parsePublishHtmlMode(params)
   const threshold = await getHtmlLineThreshold()
+  const hasRuntimeFields = collectionSupportsRemoteRuntime(collectionFields)
   const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
 
-  let htmlMode: PublishHtmlMode = 'split_plain_text'
+  let htmlMode: PublishHtmlMode = 'remote_runtime'
   if (integration && htmlForStrategy.trim() && project.contentType !== 'blog_post') {
     const access = await checkCustomCodeAccess(integration.webflowApiKey, integration.webflowSiteId)
     const strategy = resolveHtmlModeWithOverride(
@@ -103,17 +110,21 @@ export async function getProjectPublishPreview(projectId: string) {
       access.ok,
       publishHtmlMode,
       threshold,
-      { hasSplitPlainTextFields: hasSplitFields },
+      { hasRemoteRuntimeFields: hasRuntimeFields, hasSplitPlainTextFields: hasSplitFields },
     )
     htmlMode = strategy.htmlMode
   }
 
+  let pageSchema
   let assembledLanding
-  if (hasSplitFields && htmlForStrategy.trim() && project.contentType !== 'blog_post') {
-    assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
-      scopeId: project.id,
-      allowJs: true,
-    })
+  if (htmlForStrategy.trim() && project.contentType !== 'blog_post') {
+    pageSchema = buildLandingPageSchema(project, htmlForStrategy)
+    if (hasSplitFields && htmlMode === 'split_plain_text') {
+      assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
+        scopeId: project.id,
+        allowJs: true,
+      })
+    }
   }
 
   const plan = buildWebflowFieldPlan(
@@ -121,7 +132,7 @@ export async function getProjectPublishPreview(projectId: string) {
     collectionFields,
     integration?.cmsFieldMapping,
     project.cmsCollectionId,
-    { htmlMode, assembledLanding },
+    { htmlMode, assembledLanding, pageSchema },
   )
 
   const appUrl = getAppBaseUrl()
@@ -154,8 +165,14 @@ export async function getProjectPublishPreview(projectId: string) {
         ? buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId)
         : null,
     projectEmbedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
-    collectionTemplateSnippet: hasSplitFields ? buildWebflowCollectionTemplateEmbed() : null,
+    collectionTemplateSnippet: hasRuntimeFields
+      ? buildWebflowRuntimeCollectionEmbed(appUrl)
+      : hasSplitFields
+        ? buildWebflowCollectionTemplateEmbed()
+        : null,
     usesSplitPlainText: plan.htmlMode === 'split_plain_text',
+    usesRemoteRuntime: plan.htmlMode === 'remote_runtime',
+    runtimeUrl: `${appUrl}/webflow/runtime.js`,
   }
 }
 
@@ -282,10 +299,11 @@ export async function publishContentProject(
   const projectParams = (project.parameters as Record<string, unknown>) ?? {}
   const publishHtmlMode = parsePublishHtmlMode(projectParams)
   const threshold = await getHtmlLineThreshold()
+  const hasRuntimeFields = collectionSupportsRemoteRuntime(collectionFields)
   const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
 
   const isHtmlPage = project.contentType !== 'blog_post' && Boolean(htmlForStrategy.trim())
-  let htmlMode: PublishHtmlMode = 'split_plain_text'
+  let htmlMode: PublishHtmlMode = 'remote_runtime'
   if (isHtmlPage) {
     const customCode = await checkCustomCodeAccess(
       integration.webflowApiKey,
@@ -296,17 +314,21 @@ export async function publishContentProject(
       customCode.ok,
       publishHtmlMode,
       threshold,
-      { hasSplitPlainTextFields: hasSplitFields },
+      { hasRemoteRuntimeFields: hasRuntimeFields, hasSplitPlainTextFields: hasSplitFields },
     )
     htmlMode = strategy.htmlMode
   }
 
+  let pageSchema
   let assembledLanding
-  if (isHtmlPage && hasSplitFields) {
-    assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
-      scopeId: projectId,
-      allowJs: true,
-    })
+  if (isHtmlPage) {
+    pageSchema = buildLandingPageSchema(project, htmlForStrategy)
+    if (hasSplitFields && htmlMode === 'split_plain_text') {
+      assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
+        scopeId: projectId,
+        allowJs: true,
+      })
+    }
   }
 
   let plan = buildWebflowFieldPlan(
@@ -314,7 +336,7 @@ export async function publishContentProject(
     collectionFields,
     integration.cmsFieldMapping,
     project.cmsCollectionId,
-    { htmlMode: isHtmlPage ? htmlMode : undefined, assembledLanding },
+    { htmlMode: isHtmlPage ? htmlMode : undefined, assembledLanding, pageSchema },
   )
   let fieldData = plan.fieldData
 
@@ -344,12 +366,23 @@ export async function publishContentProject(
 
   const html = htmlForStrategy || payload.bodyHtml || ''
 
+  const existingParams = (project.parameters as Record<string, unknown>) ?? {}
+  const schemaParams = pageSchema
+    ? {
+        ...existingParams,
+        pageSchema: JSON.stringify(pageSchema),
+        runtimeVersion: String(pageSchema.version),
+        pageId: projectId,
+      }
+    : existingParams
+
   await prisma.contentProject.update({
     where: { id: projectId },
     data: {
       renderedHtml: html,
       webflowCmsItemId: cmsItemId,
       status: 'published',
+      parameters: schemaParams,
     },
   })
 
@@ -358,8 +391,12 @@ export async function publishContentProject(
   let embedMessage = ''
   let usedRichTextFallback = plan.htmlMode === 'rich_text_html'
   const usedSplitPlainText = plan.htmlMode === 'split_plain_text'
+  const usedRemoteRuntime = plan.htmlMode === 'remote_runtime'
 
-  if (usedSplitPlainText) {
+  if (usedRemoteRuntime) {
+    embedMessage =
+      'Published with remote runtime. Webflow CMS stores Page ID + SEO only — add the runtime embed snippet to your Collection Template (one-time setup). Content updates deploy without republishing CMS HTML.'
+  } else if (usedSplitPlainText) {
     embedMessage =
       'Landing page published to HTML/CSS/JS Plain Text CMS fields. Add the Automaio collection template embed to your Webflow Collection Template page.'
   } else if (usedRichTextFallback && isHtmlPage) {
@@ -428,12 +465,11 @@ export async function publishContentProject(
   const appUrl = getAppBaseUrl()
   const previewUrl = buildProjectIframeUrl(appUrl, projectId)
 
-  const existingParams = (project.parameters as Record<string, unknown>) ?? {}
   await prisma.contentProject.update({
     where: { id: projectId },
     data: {
       parameters: {
-        ...existingParams,
+        ...schemaParams,
         liveUrl,
         previewUrl,
       },
@@ -451,9 +487,16 @@ export async function publishContentProject(
     embedMessage,
     usedRichTextFallback,
     usedSplitPlainText,
+    usedRemoteRuntime,
     htmlMode: plan.htmlMode,
     usesEmbed: plan.usesEmbed,
-    collectionTemplateSnippet: usedSplitPlainText ? buildWebflowCollectionTemplateEmbed() : null,
+    collectionTemplateSnippet: usedRemoteRuntime
+      ? buildWebflowRuntimeCollectionEmbed(appUrl)
+      : usedSplitPlainText
+        ? buildWebflowCollectionTemplateEmbed()
+        : null,
+    runtimeUrl: `${appUrl}/webflow/runtime.js`,
+    runtimeApiUrl: `${appUrl}/api/runtime/pages/${projectId}`,
     embedFieldSlug: plan.embedFieldSlug,
     embedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
     collectionEmbedSnippet:

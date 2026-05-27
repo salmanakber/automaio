@@ -17,9 +17,13 @@ import {
 } from '@/lib/webflow/html-assets'
 import type { AssembledLandingPage } from '@/lib/webflow/landing-page-assembler'
 import {
+  collectionSupportsRemoteRuntime,
   collectionSupportsSplitPlainText,
+  resolveRuntimeFieldSlug,
   resolveSplitFieldSlug,
 } from '@/lib/webflow/cms-collection-schema'
+import { buildRuntimeConfigJson } from '@/lib/runtime/build-page-schema'
+import type { LandingPageSchema } from '@/lib/runtime/types'
 
 export { formatWebflowValidationError } from '@/lib/webflow/webflow-errors'
 
@@ -51,6 +55,7 @@ export type AutomaioContentPayload = {
 
 /** How landing page HTML is delivered to Webflow CMS. */
 export type PublishHtmlMode =
+  | 'remote_runtime'
   | 'split_plain_text'
   | 'iframe_embed'
   | 'rich_text_html'
@@ -58,8 +63,10 @@ export type PublishHtmlMode =
 
 export type BuildFieldPlanOptions = {
   htmlMode?: PublishHtmlMode
-  /** Pre-assembled HTML/CSS/JS for split Plain Text CMS fields. */
+  /** Pre-assembled HTML/CSS/JS for legacy split Plain Text CMS fields. */
   assembledLanding?: AssembledLandingPage
+  /** Platform page schema (source of truth for remote runtime). */
+  pageSchema?: LandingPageSchema
 }
 
 export type PublishFieldPlan = {
@@ -101,6 +108,8 @@ const FIELD_ALIASES: Record<keyof CmsFieldMapping, string[]> = {
   'html-content': ['html-content', 'html_content', 'html'],
   'css-content': ['css-content', 'css_content', 'css'],
   'js-content': ['js-content', 'js_content', 'js'],
+  'page-id': ['page-id', 'page_id', 'automaio-page-id', 'automaio-id', 'automaio-campaign-id'],
+  'runtime-config': ['runtime-config', 'runtime_config'],
   'preview-image': ['preview-image', 'preview_image', 'preview-image-url'],
   'template-id': ['template-id', 'template_id', 'automaio-template-id'],
   industry: ['industry', 'category', 'tag', 'sector'],
@@ -222,6 +231,17 @@ export function previewFieldMapping(
     })
   }
 
+  if (plan.htmlMode === 'remote_runtime') {
+    rows.push({
+      logicalKey: 'runtime-setup',
+      label: 'Remote runtime',
+      webflowSlug: 'page-id + runtime.js',
+      value: 'Webflow shell only — content from Automaio API',
+      included: true,
+      note: 'SEO-friendly, no HTML blobs in CMS',
+    })
+  }
+
   if (plan.htmlMode === 'split_plain_text') {
     rows.push({
       logicalKey: 'collection-template',
@@ -286,15 +306,30 @@ export function buildWebflowFieldPlan(
     payload.contentType === 'custom' ||
     Boolean(payload.automaioTemplateId)
   const hasLandingHtml = !isBlogPost && isLandingPage && Boolean(htmlContent)
+  const hasRuntimeFields = collectionSupportsRemoteRuntime(collectionFields)
   const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
   const isFullTemplate =
     !isBlogPost &&
     Boolean(htmlContent && (hasLandingHtml || isFullHtmlDocument(htmlContent)))
-  const resolvedMode = options?.htmlMode ?? (hasSplitFields ? 'split_plain_text' : 'iframe_embed')
+  const resolvedMode =
+    options?.htmlMode ??
+    (hasRuntimeFields ? 'remote_runtime' : hasSplitFields ? 'split_plain_text' : 'iframe_embed')
+  const useRemoteRuntime =
+    hasRuntimeFields &&
+    resolvedMode === 'remote_runtime' &&
+    Boolean(payload.automaioId || options?.pageSchema)
   const useSplitPlainText =
-    hasSplitFields && resolvedMode === 'split_plain_text' && Boolean(options?.assembledLanding)
-  const htmlMode: PublishHtmlMode = useSplitPlainText ? 'split_plain_text' : resolvedMode
-  const useIframeEmbed = isFullTemplate && htmlMode === 'iframe_embed' && !useSplitPlainText
+    !useRemoteRuntime &&
+    hasSplitFields &&
+    resolvedMode === 'split_plain_text' &&
+    Boolean(options?.assembledLanding)
+  const htmlMode: PublishHtmlMode = useRemoteRuntime
+    ? 'remote_runtime'
+    : useSplitPlainText
+      ? 'split_plain_text'
+      : resolvedMode
+  const useIframeEmbed =
+    isFullTemplate && htmlMode === 'iframe_embed' && !useSplitPlainText && !useRemoteRuntime
 
   assign('name', payload.name)
   assign('slug', payload.slug)
@@ -322,7 +357,18 @@ export function buildWebflowFieldPlan(
   let embedFieldSlug: string | null = null
   let richTextFieldSlug: string | null = null
 
-  if (useSplitPlainText && options?.assembledLanding) {
+  if (useRemoteRuntime && payload.automaioId) {
+    const pageId = payload.automaioId
+    const runtimeConfig = buildRuntimeConfigJson(pageId)
+
+    const pageIdSlug = resolveRuntimeFieldSlug('pageId', collectionFields)
+    if (pageIdSlug) result[pageIdSlug] = pageId
+
+    assign('page-id', pageId)
+    assign('automaio-campaign-id', pageId)
+    assign('runtime-config', runtimeConfig)
+    assign('preview-image', payload.previewImage)
+  } else if (useSplitPlainText && options?.assembledLanding) {
     const split = options.assembledLanding
     const htmlSlug = resolveSplitFieldSlug('html', collectionFields)
     const cssSlug = resolveSplitFieldSlug('css', collectionFields)
@@ -422,9 +468,20 @@ export function buildWebflowFieldPlan(
     embedFieldSlug,
     richTextFieldSlug,
     usesEmbed: Boolean(
-      isFullTemplate && useIframeEmbed && payload.automaioId && !isBlogPost && !useSplitPlainText,
+      isFullTemplate &&
+        useIframeEmbed &&
+        payload.automaioId &&
+        !isBlogPost &&
+        !useSplitPlainText &&
+        !useRemoteRuntime,
     ),
-    htmlMode: useSplitPlainText ? 'split_plain_text' : isFullTemplate ? htmlMode : 'rich_text_html',
+    htmlMode: useRemoteRuntime
+      ? 'remote_runtime'
+      : useSplitPlainText
+        ? 'split_plain_text'
+        : isFullTemplate
+          ? htmlMode
+          : 'rich_text_html',
   }
 }
 

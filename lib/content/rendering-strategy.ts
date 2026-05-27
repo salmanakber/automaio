@@ -6,7 +6,7 @@ export const HTML_LINE_THRESHOLD = DEFAULT_HTML_LINE_THRESHOLD
 
 export type RenderingStrategy = {
   lineCount: number
-  strategy: 'split_plain_text' | 'custom_code' | 'iframe_embed' | 'rich_text_html'
+  strategy: 'remote_runtime' | 'split_plain_text' | 'custom_code' | 'iframe_embed' | 'rich_text_html'
   htmlMode: PublishHtmlMode
   reason: string
 }
@@ -25,6 +25,7 @@ export function countHtmlLines(html: string): number {
  * - No custom_code access → rich_text_html fallback
  */
 export type RenderingStrategyOptions = {
+  hasRemoteRuntimeFields?: boolean
   hasSplitPlainTextFields?: boolean
 }
 
@@ -35,6 +36,16 @@ export function resolveRenderingStrategy(
   options?: RenderingStrategyOptions,
 ): RenderingStrategy {
   const lineCount = countHtmlLines(html)
+
+  if (options?.hasRemoteRuntimeFields) {
+    return {
+      lineCount,
+      strategy: 'remote_runtime',
+      htmlMode: 'remote_runtime',
+      reason:
+        'Remote runtime — Webflow stores Page ID only; platform renders via runtime.js',
+    }
+  }
 
   if (options?.hasSplitPlainTextFields) {
     return {
@@ -82,7 +93,8 @@ export function resolveHtmlModeWithOverride(
   if (override && override !== 'auto') {
     const lineCount = countHtmlLines(html)
     const reasons: Record<PublishHtmlMode, string> = {
-      split_plain_text: 'Manual: split HTML/CSS/JS into Plain Text CMS fields',
+      remote_runtime: 'Manual: remote runtime (Page ID in CMS, render from platform API)',
+      split_plain_text: 'Manual: split HTML/CSS/JS into Plain Text CMS fields (legacy)',
       custom_code: 'Manual: full HTML in CMS body field',
       iframe_embed: 'Manual: iframe embed snippet in Rich Text field',
       rich_text_html: 'Manual: full HTML in Rich Text field',

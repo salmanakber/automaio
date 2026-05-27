@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { buildWebflowCollectionTemplateEmbed } from '@/lib/webflow/collection-template-snippet'
+import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
 import { Copy, Check, Loader2, Plus, Layers } from 'lucide-react'
 
 type CreateLandingCollectionCardProps = {
@@ -27,7 +27,7 @@ export function CreateLandingCollectionCard({
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [copiedSnippet, setCopiedSnippet] = useState(false)
-  const templateSnippet = buildWebflowCollectionTemplateEmbed()
+  const templateSnippet = buildWebflowRuntimeCollectionEmbed()
 
   const create = async () => {
     if (!name.trim()) return
@@ -59,7 +59,7 @@ export function CreateLandingCollectionCard({
       }
 
       setSuccess(
-        `Created "${name}" with ${data.fieldCount ?? 10} fields (HTML, CSS, JS, SEO). Add the collection template embed in Webflow Designer.`,
+        `Created "${name}" with ${data.fieldCount ?? 9} fields (Page ID + SEO). Add the runtime embed to your Webflow collection template.`,
       )
       onCreated?.(data.collection)
     } catch (err) {
@@ -78,8 +78,8 @@ export function CreateLandingCollectionCard({
         <div>
           <p className="text-xs font-bold text-zinc-200">Create landing page collection</p>
           <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
-            Creates Title, Slug, HTML Content, CSS Content, JS Content, SEO, and status fields.
-            Plain Text fields preserve AI-generated code without Rich Text sanitization.
+            Creates Title, Slug, Page ID, SEO, and status fields. Content renders via Automaio
+            runtime.js — no HTML/CSS blobs stored in Webflow CMS.
           </p>
         </div>
       </div>
@@ -103,7 +103,7 @@ export function CreateLandingCollectionCard({
         <div className="space-y-2">
           <p className="text-[11px] text-emerald-400">{success}</p>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2">
-            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Collection template embed</p>
+              <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Runtime collection template embed</p>
             <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap max-h-32 overflow-y-auto">{templateSnippet}</pre>
             <Button
               type="button"

@@ -1,9 +1,9 @@
 /**
- * Webflow CMS Collection Template embed snippet.
- * Add this to your Collection Template page in Webflow Designer as a single Embed element.
+ * Legacy Webflow CMS Collection Template embed (HTML/CSS/JS in CMS fields).
+ * Prefer buildWebflowRuntimeCollectionEmbed() from runtime-embed.ts for new collections.
  */
 export function buildWebflowCollectionTemplateEmbed(): string {
-  return `<!-- Automaio AI Landing Page Renderer -->
+  return `<!-- Automaio Legacy Renderer (deprecated — use runtime.js instead) -->
 <style>
 {{wf {"path":"css-content","type":"PlainText"} }}
 </style>
@@ -16,9 +16,8 @@ export function buildWebflowCollectionTemplateEmbed(): string {
 }
 
 export const WEBFLOW_COLLECTION_TEMPLATE_SETUP = [
-  'Open your Webflow site → CMS → Landing Pages collection → Collection Template page.',
-  'Add an Embed element where the page content should appear.',
-  'Paste the Automaio collection template snippet into the Embed.',
-  'Bind SEO Title and SEO Description fields to your page SEO settings.',
-  'Publish the Webflow site. Each CMS item renders its own HTML/CSS/JS.',
+  'Prefer the Remote Runtime embed (runtime.js) for new collections.',
+  'Legacy split HTML/CSS/JS embed is only for older collections.',
 ] as const
+
+export { buildWebflowRuntimeCollectionEmbed, WEBFLOW_RUNTIME_TEMPLATE_SETUP } from '@/lib/webflow/runtime-embed'
