@@ -15,7 +15,7 @@ export type CollectionCapabilities = {
   sectionFieldCount: number
   embedFieldSlugs: string[]
   recommendedContentTypes: Array<'landing_page' | 'blog_post' | 'cms_entry'>
-  renderMode: 'iframe_embed' | 'rich_text_html'
+  renderMode: 'iframe_embed' | 'rich_text_html' | 'custom_code'
   renderReason: string
   htmlLineCount: number
   customCodeAccess: boolean

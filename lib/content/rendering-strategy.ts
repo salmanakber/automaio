@@ -1,7 +1,8 @@
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
+import { DEFAULT_HTML_LINE_THRESHOLD } from '@/lib/platform/rendering-settings'
 
-/** Line threshold for automatic rendering strategy (enhancementContext.md). */
-export const HTML_LINE_THRESHOLD = 4000
+/** @deprecated Use getHtmlLineThreshold() for admin-configurable value. */
+export const HTML_LINE_THRESHOLD = DEFAULT_HTML_LINE_THRESHOLD
 
 export type RenderingStrategy = {
   lineCount: number
@@ -10,6 +11,8 @@ export type RenderingStrategy = {
   reason: string
 }
 
+export type PublishHtmlModeOverride = PublishHtmlMode | 'auto'
+
 export function countHtmlLines(html: string): number {
   if (!html?.trim()) return 0
   return html.split('\n').length
@@ -17,13 +20,14 @@ export function countHtmlLines(html: string): number {
 
 /**
  * Decide how to deliver HTML on Webflow:
- * - Small HTML (<4000 lines) with custom_code access → rich_text_html (native CMS rendering, better SEO)
- * - Large HTML (≥4000 lines) → iframe_embed (stability/performance)
+ * - Small HTML (< threshold) with custom_code access → custom_code (Plain Text / embed field)
+ * - Large HTML (≥ threshold) → iframe_embed (iframe snippet in Rich Text)
  * - No custom_code access → rich_text_html fallback
  */
 export function resolveRenderingStrategy(
   html: string,
   hasCustomCodeAccess: boolean,
+  threshold: number = DEFAULT_HTML_LINE_THRESHOLD,
 ): RenderingStrategy {
   const lineCount = countHtmlLines(html)
 
@@ -36,19 +40,42 @@ export function resolveRenderingStrategy(
     }
   }
 
-  if (lineCount >= HTML_LINE_THRESHOLD) {
+  if (lineCount >= threshold) {
     return {
       lineCount,
       strategy: 'iframe_embed',
       htmlMode: 'iframe_embed',
-      reason: `HTML exceeds ${HTML_LINE_THRESHOLD} lines — using iframe embed for stability`,
+      reason: `HTML exceeds ${threshold} lines — iframe embed in Rich Text field`,
     }
   }
 
   return {
     lineCount,
     strategy: 'custom_code',
-    htmlMode: 'rich_text_html',
-    reason: `HTML under ${HTML_LINE_THRESHOLD} lines — using direct CMS HTML for native rendering and SEO`,
+    htmlMode: 'custom_code',
+    reason: `HTML under ${threshold} lines — direct custom code / Plain Text field`,
   }
+}
+
+export function resolveHtmlModeWithOverride(
+  html: string,
+  hasCustomCodeAccess: boolean,
+  override: PublishHtmlModeOverride | undefined,
+  threshold: number,
+): RenderingStrategy {
+  if (override && override !== 'auto') {
+    const lineCount = countHtmlLines(html)
+    const reasons: Record<PublishHtmlMode, string> = {
+      custom_code: 'Manual: HTML in custom code / Plain Text field',
+      iframe_embed: 'Manual: iframe embed snippet in Rich Text field',
+      rich_text_html: 'Manual: full HTML in Rich Text field',
+    }
+    return {
+      lineCount,
+      strategy: override === 'custom_code' ? 'custom_code' : override,
+      htmlMode: override,
+      reason: reasons[override],
+    }
+  }
+  return resolveRenderingStrategy(html, hasCustomCodeAccess, threshold)
 }

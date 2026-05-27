@@ -5,6 +5,7 @@ import { requireOrgAccess } from '@/lib/api/org-access'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { extractBusinessContext, businessContextToParameters } from '@/lib/ai/business-context'
 import { personalizeProject } from '@/lib/ai/personalization-engine'
+import { enhanceBlogBody } from '@/lib/ai/blog-enhance'
 import { applyLayoutControlsToHtml, DEFAULT_LAYOUT_CONTROLS } from '@/lib/webflow/layout-controls'
 import type { OnboardingInput } from '@/lib/ai/business-context-types'
 
@@ -151,6 +152,35 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         console.error('[Automaio] Auto-personalization failed:', err)
+      }
+    }
+
+    if (shouldPersonalize && contentType === 'blog_post' && extractedContext) {
+      try {
+        const params = (project.parameters as Record<string, string>) ?? {}
+        const body = params.body ?? mergedParameters.body ?? ''
+        if (body.trim()) {
+          const enhanced = await enhanceBlogBody(
+            body,
+            mergedParameters.name ?? name,
+            organizationId,
+            extractedContext,
+          )
+          await prisma.contentProject.update({
+            where: { id: project.id },
+            data: {
+              parameters: {
+                ...params,
+                ...mergedParameters,
+                body: enhanced,
+                businessContext: JSON.stringify(extractedContext),
+              },
+              description: enhanced.slice(0, 200),
+            },
+          })
+        }
+      } catch (err) {
+        console.error('[Automaio] Blog AI enhancement failed:', err)
       }
     }
 

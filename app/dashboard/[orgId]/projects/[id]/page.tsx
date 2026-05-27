@@ -42,6 +42,7 @@ import { ElementEditorPanel, type SelectedElement } from '@/components/projects/
 import { PublishDialog } from '@/components/projects/PublishDialog'
 import { AiProgressOverlay } from '@/components/projects/AiProgressOverlay'
 import { RepersonalizePanel } from '@/components/projects/RepersonalizePanel'
+import { BlogStudioPanel } from '@/components/projects/BlogStudioPanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 
@@ -205,6 +206,7 @@ export default function ProjectStudioPage() {
 
   const renderedHtml = (project?.renderedHtml as string) || ''
   const isLandingPage = project?.contentType === 'landing_page'
+  const isBlogPost = project?.contentType === 'blog_post'
   const hasBusinessContext = Boolean(
     parseStoredBusinessContext((project?.parameters as Record<string, unknown>) ?? {}),
   )
@@ -237,6 +239,8 @@ export default function ProjectStudioPage() {
           </div>
 
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+            {!isBlogPost && (
+            <>
             <div className="flex items-center bg-zinc-900 rounded-full border border-zinc-800 p-1 shadow-2xl">
               <ViewportButton icon={Monitor} active={viewport === 'desktop'} onClick={() => setViewport('desktop')} label="Desktop" />
               <ViewportButton icon={Tablet} active={viewport === 'tablet'} onClick={() => setViewport('tablet')} label="Tablet" />
@@ -251,6 +255,8 @@ export default function ProjectStudioPage() {
                 <ZoomIn className="h-3.5 w-3.5" />
               </Button>
             </div>
+            </>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -264,6 +270,7 @@ export default function ProjectStudioPage() {
                 <CheckCircle2 className="h-3 w-3" /> Saved
               </span>
             )}
+            {!isBlogPost && (
             <Button
               variant="outline"
               size="sm"
@@ -272,6 +279,7 @@ export default function ProjectStudioPage() {
             >
               <Wand2 className="h-3.5 w-3.5" /> AI Generate
             </Button>
+            )}
             {isLandingPage && (
               <Button
                 variant="outline"
@@ -337,7 +345,8 @@ export default function ProjectStudioPage() {
             </div>
           </aside>
 
-          <main className="flex-1 bg-[#121214] relative overflow-hidden flex items-center justify-center p-6">
+          <main className={`flex-1 bg-[#121214] relative overflow-hidden flex items-center justify-center p-6 ${isBlogPost ? 'overflow-y-auto' : ''}`}>
+            {!isBlogPost && (
             <div className="absolute top-4 left-4 z-10 flex gap-2">
               <Badge variant="outline" className="bg-zinc-900 border-zinc-800 text-zinc-400 font-mono text-[10px]">
                 {viewport === 'desktop' ? '1440px' : viewport === 'tablet' ? '768px' : '375px'}
@@ -348,7 +357,15 @@ export default function ProjectStudioPage() {
                 </Badge>
               )}
             </div>
+            )}
 
+            {isBlogPost ? (
+              <BlogStudioPanel
+                project={project!}
+                projectId={projectId}
+                onUpdate={saveParameters}
+              />
+            ) : (
             <motion.div
               animate={{
                 width: viewport === 'desktop' ? '100%' : viewport === 'tablet' ? '768px' : '375px',
@@ -378,6 +395,7 @@ export default function ProjectStudioPage() {
                 }}
               />
             </motion.div>
+            )}
           </main>
         </div>
 

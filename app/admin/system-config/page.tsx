@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 
 type SystemInfo = {
@@ -11,6 +14,74 @@ type SystemInfo = {
   features: Record<string, boolean>
   integrations: Record<string, boolean>
   queueHealth: Record<string, { status?: string; waiting?: number; active?: number }>
+}
+
+function RenderingSettingsCard() {
+  const [threshold, setThreshold] = useState('4000')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    fetch('/api/admin/rendering-settings')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.settings?.htmlLineThreshold) {
+          setThreshold(String(d.settings.htmlLineThreshold))
+        }
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    setMessage('')
+    try {
+      const res = await fetch('/api/admin/rendering-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ htmlLineThreshold: Number(threshold) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Save failed')
+      setMessage('Saved.')
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <CardContent>
+        <Loader2 className="size-5 animate-spin" />
+      </CardContent>
+    )
+  }
+
+  return (
+    <CardContent className="space-y-4">
+      <div className="space-y-2 max-w-xs">
+        <Label htmlFor="html-threshold">HTML line threshold</Label>
+        <Input
+          id="html-threshold"
+          type="number"
+          min={100}
+          max={50000}
+          value={threshold}
+          onChange={(e) => setThreshold(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Below this → custom code field. At or above → iframe embed in Rich Text.
+        </p>
+      </div>
+      <Button onClick={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save threshold'}
+      </Button>
+      {message && <p className="text-sm text-muted-foreground">{message}</p>}
+    </CardContent>
+  )
 }
 
 export default function SystemConfiguration() {
@@ -45,6 +116,16 @@ export default function SystemConfiguration() {
                   {info.environment}
                 </Badge>
               </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Rendering limits</CardTitle>
+                <CardDescription>
+                  HTML line threshold for automatic custom code vs iframe embed (landing pages).
+                </CardDescription>
+              </CardHeader>
+              <RenderingSettingsCard />
             </Card>
 
             <Card>

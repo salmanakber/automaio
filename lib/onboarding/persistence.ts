@@ -82,6 +82,33 @@ export function parseStoredOnboardingDraft(
   }
 }
 
+export type LandingWizardDraft = {
+  step: number
+  projectName: string
+  templateId?: string | null
+  templateName?: string
+  integrationId?: string
+  collectionId?: string
+  onboardingData?: OnboardingFormData
+  onboardingSkipped?: boolean
+}
+
+export function landingWizardStorageKey(orgId: string) {
+  return `${STORAGE_PREFIX}:${orgId}:landing-wizard`
+}
+
+export function loadLandingWizardDraft(orgId: string): LandingWizardDraft | null {
+  return loadOnboardingDraft(landingWizardStorageKey(orgId)) as LandingWizardDraft | null
+}
+
+export function saveLandingWizardDraft(orgId: string, draft: LandingWizardDraft) {
+  saveOnboardingDraft(landingWizardStorageKey(orgId), draft as unknown as OnboardingDraft)
+}
+
+export function clearLandingWizardDraft(orgId: string) {
+  clearOnboardingDraft(landingWizardStorageKey(orgId))
+}
+
 export type WizardDraft = {
   step: number
   projectName: string
@@ -100,7 +127,7 @@ export function loadWizardDraft(orgId: string): WizardDraft | null {
 }
 
 export function saveWizardDraft(orgId: string, draft: WizardDraft) {
-  saveOnboardingDraft(wizardStorageKey(orgId), draft as OnboardingDraft)
+  saveOnboardingDraft(wizardStorageKey(orgId), draft as unknown as OnboardingDraft)
 }
 
 export function clearWizardDraft(orgId: string) {

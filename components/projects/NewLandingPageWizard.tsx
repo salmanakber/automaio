@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,8 @@ import {
   getCollectionRoleLabel,
   type CollectionCapabilities,
 } from '@/lib/webflow/collection-detect'
-import { onboardingStorageKey } from '@/lib/onboarding/persistence'
+import { onboardingStorageKey, loadLandingWizardDraft, saveLandingWizardDraft, clearLandingWizardDraft, clearOnboardingDraft } from '@/lib/onboarding/persistence'
+import { countHtmlLines } from '@/lib/content/rendering-strategy'
 import {
   ArrowLeft,
   ArrowRight,
@@ -33,6 +34,7 @@ import {
   Layout,
   Globe,
   Zap,
+  RefreshCw,
 } from 'lucide-react'
 
 const STEPS = ['Template', 'Business AI', 'Webflow', 'Create'] as const
@@ -78,27 +80,83 @@ export function NewLandingPageWizard({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const [collectionsLoading, setCollectionsLoading] = useState(false)
+  const [templateLineCount, setTemplateLineCount] = useState(0)
+  const draftRestored = useRef(false)
+
+  const refreshIntegrations = useCallback(async () => {
+    setCollectionsLoading(true)
+    try {
+      const res = await fetch(`/api/integrations/webflow?orgId=${orgId}&refresh=1`, {
+        credentials: 'same-origin',
+      })
+      const d = await res.json()
+      const list = d.integrations ?? []
+      setIntegrations(list)
+      return list as Integration[]
+    } finally {
+      setCollectionsLoading(false)
+    }
+  }, [orgId])
+
   useEffect(() => {
-    fetch(`/api/integrations/webflow?orgId=${orgId}`, {
-      
+    if (draftRestored.current) return
+    draftRestored.current = true
+    const draft = loadLandingWizardDraft(orgId)
+    if (draft) {
+      if (draft.step !== undefined) setStep(draft.step)
+      if (draft.templateId) setTemplateId(draft.templateId)
+      if (draft.templateName) setTemplateName(draft.templateName)
+      if (draft.projectName) setProjectName(draft.projectName)
+      if (draft.integrationId) setIntegrationId(draft.integrationId)
+      if (draft.collectionId) setCollectionId(draft.collectionId)
+      if (draft.onboardingData) setOnboardingData(draft.onboardingData)
+      if (draft.onboardingSkipped) setOnboardingSkipped(true)
+    }
+  }, [orgId])
+
+  useEffect(() => {
+    saveLandingWizardDraft(orgId, {
+      step,
+      projectName,
+      templateId,
+      templateName,
+      integrationId,
+      collectionId,
+      onboardingData: onboardingData ?? undefined,
+      onboardingSkipped,
     })
+  }, [orgId, step, projectName, templateId, templateName, integrationId, collectionId, onboardingData, onboardingSkipped])
+
+  useEffect(() => {
+    refreshIntegrations().then((list) => {
+      if (list[0] && !integrationId) {
+        setIntegrationId(list[0].id)
+        const pagesCol = getDefaultCollectionForContentType(list[0], 'landing_page')
+        if (pagesCol && !collectionId) setCollectionId(pagesCol)
+        fetch(`/api/integrations/webflow/${list[0].id}/embed-status`, { credentials: 'same-origin' })
+          .then((r) => r.json())
+          .then((status) => setEmbedAccess(Boolean(status.customCodeAccess)))
+          .catch(() => {})
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, refreshIntegrations])
+
+  useEffect(() => {
+    if (!templateId) {
+      setTemplateLineCount(0)
+      return
+    }
+    fetch(`/api/templates/${templateId}`, { credentials: 'same-origin' })
       .then((r) => r.json())
       .then((d) => {
-        const list = d.integrations ?? []
-        setIntegrations(list)
-        if (list[0]) {
-          setIntegrationId(list[0].id)
-          const pagesCol = getDefaultCollectionForContentType(list[0], 'landing_page')
-          if (pagesCol) setCollectionId(pagesCol)
-          fetch(`/api/integrations/webflow/${list[0].id}/embed-status`, {
-            
-          })
-            .then((r) => r.json())
-            .then((status) => setEmbedAccess(Boolean(status.customCodeAccess)))
-            .catch(() => {})
-        }
+        const structure = d.template?.templateStructure
+        const html = typeof structure === 'string' ? structure : JSON.stringify(structure ?? '')
+        setTemplateLineCount(countHtmlLines(html))
       })
-  }, [orgId])
+      .catch(() => setTemplateLineCount(200))
+  }, [templateId])
 
   const selectedIntegration = integrations.find((i) => i.id === integrationId)
   const collections = selectedIntegration?.collections?.collections ?? []
@@ -110,8 +168,8 @@ export function NewLandingPageWizard({
     }
     setDetectLoading(true)
     fetch(
-      `/api/integrations/webflow/${integrationId}/collection-detect?collectionId=${collectionId}&htmlLines=200`,
-      {  },
+      `/api/integrations/webflow/${integrationId}/collection-detect?collectionId=${collectionId}&htmlLines=${templateLineCount || 200}`,
+      { credentials: 'same-origin' },
     )
       .then((r) => r.json())
       .then((d) => {
@@ -120,7 +178,7 @@ export function NewLandingPageWizard({
       })
       .catch(() => setCollectionCaps(null))
       .finally(() => setDetectLoading(false))
-  }, [integrationId, collectionId])
+  }, [integrationId, collectionId, templateLineCount])
 
   const canStep0 = Boolean(templateId && projectName.trim())
   const canStep2 = Boolean(integrationId && collectionId)
@@ -170,6 +228,8 @@ export function NewLandingPageWizard({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      clearLandingWizardDraft(orgId)
+      clearOnboardingDraft(onboardingStorageKey(orgId))
       router.push(`/dashboard/${orgId}/projects/${data.project.id}?onboarded=1`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create landing page')
@@ -307,7 +367,20 @@ export function NewLandingPageWizard({
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label>Webflow site</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Webflow site</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => refreshIntegrations()}
+                      disabled={collectionsLoading}
+                    >
+                      <RefreshCw className={`h-3 w-3 ${collectionsLoading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
                   <Select value={integrationId} onValueChange={setIntegrationId}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -324,11 +397,7 @@ export function NewLandingPageWizard({
                     integrationId={integrationId}
                     onCreated={async (collection) => {
                       setCollectionId(collection.id)
-                      const res = await fetch(`/api/integrations/webflow?orgId=${orgId}`, {
-                        
-                      })
-                      const d = await res.json()
-                      setIntegrations(d.integrations ?? [])
+                      await refreshIntegrations()
                     }}
                     compact
                   />
@@ -336,6 +405,11 @@ export function NewLandingPageWizard({
 
                 <div className="space-y-2">
                   <Label>Landing pages CMS collection</Label>
+                  {collections.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No collections found. Create one below or in Webflow, then Refresh.
+                    </p>
+                  ) : (
                   <Select value={collectionId} onValueChange={setCollectionId}>
                     <SelectTrigger><SelectValue placeholder="Select collection" /></SelectTrigger>
                     <SelectContent>
@@ -352,6 +426,7 @@ export function NewLandingPageWizard({
                       })}
                     </SelectContent>
                   </Select>
+                  )}
                   <p className="text-[11px] text-muted-foreground">
                     Blog collections are for articles only. Use a Pages / Landing Pages collection for HTML templates.
                   </p>

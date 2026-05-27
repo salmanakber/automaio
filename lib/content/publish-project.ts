@@ -20,7 +20,9 @@ import { buildWebflowLiveUrl } from '@/lib/webflow/live-url'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
-import { resolveRenderingStrategy } from '@/lib/content/rendering-strategy'
+import { resolveHtmlModeWithOverride, type PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
+import { getHtmlLineThreshold } from '@/lib/platform/rendering-settings'
+import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
 import {
   buildSectionCmsContent,
   bindSectionContentToCmsFields,
@@ -40,6 +42,32 @@ export type PublishProjectOptions = {
   publishSite?: boolean
 }
 
+function parsePublishHtmlMode(params: Record<string, unknown>): PublishHtmlModeOverride {
+  const raw = params.publishHtmlMode
+  if (raw === 'iframe_embed' || raw === 'rich_text_html' || raw === 'custom_code' || raw === 'auto') {
+    return raw
+  }
+  return 'auto'
+}
+
+async function prepareProjectHtml(
+  project: NonNullable<Awaited<ReturnType<typeof prisma.contentProject.findUnique>>> & {
+    template?: { templateStructure: unknown } | null
+  },
+): Promise<{ payload: AutomaioContentPayload; htmlForStrategy: string }> {
+  const payload = await buildProjectPayload(project)
+  const params = (project.parameters as Record<string, unknown>) ?? {}
+  const layoutControls = parseLayoutControls(params)
+
+  let htmlForStrategy = payload.templateHtml ?? payload.bodyHtml ?? ''
+  if (project.contentType !== 'blog_post' && htmlForStrategy.trim()) {
+    htmlForStrategy = applyLayoutControlsToHtml(htmlForStrategy, layoutControls)
+    payload.templateHtml = htmlForStrategy
+  }
+
+  return { payload, htmlForStrategy }
+}
+
 export async function getProjectPublishPreview(projectId: string) {
   const project = await prisma.contentProject.findUnique({
     where: { id: projectId },
@@ -52,15 +80,17 @@ export async function getProjectPublishPreview(projectId: string) {
     ? await prisma.webflowIntegration.findUnique({ where: { id: project.webflowIntegrationId } })
     : null
 
-  const payload = await buildProjectPayload(project)
+  const { payload, htmlForStrategy } = await prepareProjectHtml(project)
   const collectionFields = await getCollectionFields(
     integration,
     project.cmsCollectionId,
   )
 
-  const businessContext = parseStoredBusinessContext(
-    (project.parameters as Record<string, unknown>) ?? {},
-  )
+  const params = (project.parameters as Record<string, unknown>) ?? {}
+  const publishHtmlMode = parsePublishHtmlMode(params)
+  const threshold = await getHtmlLineThreshold()
+
+  const businessContext = parseStoredBusinessContext(params)
   const sectionContent = buildSectionCmsContent(
     payload.templateHtml ?? payload.bodyHtml ?? '',
     (project.parameters as Record<string, string>) ?? {},
@@ -70,9 +100,14 @@ export async function getProjectPublishPreview(projectId: string) {
   payload.custom = { ...(payload.custom ?? {}), ...sectionCmsFields }
 
   let htmlMode: PublishHtmlMode = 'iframe_embed'
-  if (integration && payload.templateHtml?.trim() && project.contentType !== 'blog_post') {
+  if (integration && htmlForStrategy.trim() && project.contentType !== 'blog_post') {
     const access = await checkCustomCodeAccess(integration.webflowApiKey, integration.webflowSiteId)
-    const strategy = resolveRenderingStrategy(payload.templateHtml ?? '', access.ok)
+    const strategy = resolveHtmlModeWithOverride(
+      htmlForStrategy,
+      access.ok,
+      publishHtmlMode,
+      threshold,
+    )
     htmlMode = strategy.htmlMode
   }
 
@@ -107,6 +142,9 @@ export async function getProjectPublishPreview(projectId: string) {
     hasTemplateHtml: Boolean(payload.templateHtml?.trim()),
     usesEmbed: plan.usesEmbed,
     htmlMode: plan.htmlMode,
+    publishHtmlMode,
+    htmlLineThreshold: threshold,
+    htmlLineCount: htmlForStrategy ? htmlForStrategy.split('\n').length : 0,
     embedFieldSlug: plan.embedFieldSlug,
     embedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
     collectionEmbedSnippet:
@@ -227,16 +265,18 @@ export async function publishContentProject(
   })
   if (!integration) throw new Error('Webflow integration not found')
 
-  const payload = await buildProjectPayload(project)
+  const { payload, htmlForStrategy } = await prepareProjectHtml(project)
   if (!payload.templateHtml && !payload.bodyHtml) {
     throw new Error('Add content or pick a template before publishing')
   }
 
   const collectionFields = await getCollectionFields(integration, project.cmsCollectionId)
 
-  const businessContext = parseStoredBusinessContext(
-    (project.parameters as Record<string, unknown>) ?? {},
-  )
+  const projectParams = (project.parameters as Record<string, unknown>) ?? {}
+  const publishHtmlMode = parsePublishHtmlMode(projectParams)
+  const threshold = await getHtmlLineThreshold()
+
+  const businessContext = parseStoredBusinessContext(projectParams)
   const sectionContent = buildSectionCmsContent(
     payload.templateHtml ?? payload.bodyHtml ?? '',
     (project.parameters as Record<string, string>) ?? {},
@@ -245,14 +285,19 @@ export async function publishContentProject(
   const sectionCmsFields = bindSectionContentToCmsFields(sectionContent, collectionFields)
   payload.custom = { ...(payload.custom ?? {}), ...sectionCmsFields }
 
-  const isHtmlPage = project.contentType !== 'blog_post' && Boolean(payload.templateHtml?.trim())
+  const isHtmlPage = project.contentType !== 'blog_post' && Boolean(htmlForStrategy.trim())
   let htmlMode: PublishHtmlMode = 'iframe_embed'
   if (isHtmlPage) {
     const customCode = await checkCustomCodeAccess(
       integration.webflowApiKey,
       integration.webflowSiteId,
     )
-    const strategy = resolveRenderingStrategy(payload.templateHtml ?? '', customCode.ok)
+    const strategy = resolveHtmlModeWithOverride(
+      htmlForStrategy,
+      customCode.ok,
+      publishHtmlMode,
+      threshold,
+    )
     htmlMode = strategy.htmlMode
   }
 
@@ -289,7 +334,7 @@ export async function publishContentProject(
 
   const shouldPublishSite = options?.publishSite ?? project.publishSite ?? true
 
-  const html = payload.templateHtml ?? payload.bodyHtml ?? ''
+  const html = htmlForStrategy || payload.bodyHtml || ''
 
   await prisma.contentProject.update({
     where: { id: projectId },

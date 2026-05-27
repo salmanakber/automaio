@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const orgId = searchParams.get('orgId')
+    const refresh = searchParams.get('refresh') === '1'
 
     if (!orgId) {
       return NextResponse.json({ error: 'orgId required' }, { status: 400 })
@@ -39,9 +40,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const integrations = await prisma.webflowIntegration.findMany({
+    let integrations = await prisma.webflowIntegration.findMany({
       where: { organizationId: orgId },
     })
+
+    if (refresh && integrations.length > 0) {
+      for (const integration of integrations) {
+        try {
+          await syncWebflowIntegrationV2(orgId, integration.id)
+        } catch (err) {
+          console.error('[Automaio] Webflow refresh failed:', integration.id, err)
+        }
+      }
+      integrations = await prisma.webflowIntegration.findMany({
+        where: { organizationId: orgId },
+      })
+    }
 
     return NextResponse.json({ integrations })
   } catch (error) {

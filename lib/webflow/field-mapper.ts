@@ -9,6 +9,7 @@ import {
   isFullHtmlDocument,
 } from '@/lib/webflow/embed-setup'
 import { buildProjectIframeUrl } from '@/lib/webflow/embed-page'
+import { buildProjectEmbedSnippet } from '@/lib/webflow/embed-setup'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { htmlToPlainSummary } from '@/lib/content/render-project-html'
 
@@ -38,7 +39,7 @@ export type AutomaioContentPayload = {
 }
 
 /** How full HTML templates are delivered on the Webflow site. */
-export type PublishHtmlMode = 'iframe_embed' | 'rich_text_html'
+export type PublishHtmlMode = 'iframe_embed' | 'rich_text_html' | 'custom_code'
 
 export type BuildFieldPlanOptions = {
   /** When custom_code is unavailable, store HTML in CMS Rich Text instead of iframe embed. */
@@ -224,6 +225,8 @@ export function buildWebflowFieldPlan(
   const htmlMode: PublishHtmlMode =
     options?.htmlMode ?? (isFullTemplate ? 'iframe_embed' : 'rich_text_html')
   const useRichTextHtml = isFullTemplate && htmlMode === 'rich_text_html'
+  const useCustomCode = isFullTemplate && htmlMode === 'custom_code'
+  const useIframeEmbed = isFullTemplate && htmlMode === 'iframe_embed'
 
   assign('name', payload.name)
   assign('slug', payload.slug)
@@ -250,6 +253,40 @@ export function buildWebflowFieldPlan(
       result[richTextFieldSlug] = htmlBody
     } else {
       assign('body-html', htmlBody)
+      richTextFieldSlug = resolveFieldSlug('body-html', collectionFields, overrides)
+    }
+    embedFieldSlug = null
+  } else if (isFullTemplate && useCustomCode) {
+    // Small HTML → full document in Plain Text / custom code field; summary in Rich Text.
+    const codeSlug =
+      resolveFieldSlug('template-html', collectionFields, overrides) ??
+      findPlainTextField(collectionFields, ['template-html', 'html', 'custom-code', 'embed', 'code-embed'])
+
+    if (codeSlug) {
+      result[codeSlug] = htmlContent
+      embedFieldSlug = codeSlug
+    } else {
+      assign('template-html', htmlContent)
+      embedFieldSlug = resolveFieldSlug('template-html', collectionFields, overrides)
+    }
+
+    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
+    const summary = textContent || htmlToPlainSummary(htmlContent)
+    if (richTextFieldSlug && summary) {
+      result[richTextFieldSlug] = summary
+    }
+  } else if (isFullTemplate && useIframeEmbed) {
+    // Large HTML → iframe embed snippet in Rich Text; HTML hosted by Automaio.
+    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
+    const appUrl = getAppBaseUrl()
+    const embedContent = payload.automaioId
+      ? buildProjectEmbedSnippet(appUrl, payload.automaioId)
+      : `<iframe src="${buildProjectIframeUrl(appUrl, payload.automaioId ?? '')}" style="width:100%;border:0;min-height:80vh" title="${payload.name}"></iframe>`
+
+    if (richTextFieldSlug && embedContent) {
+      result[richTextFieldSlug] = embedContent
+    } else {
+      assign('body-html', embedContent)
       richTextFieldSlug = resolveFieldSlug('body-html', collectionFields, overrides)
     }
     embedFieldSlug = null
@@ -316,8 +353,14 @@ export function buildWebflowFieldPlan(
     fieldData: result,
     embedFieldSlug,
     richTextFieldSlug,
-    usesEmbed: Boolean(isFullTemplate && !useRichTextHtml && payload.automaioId && !isBlogPost),
-    htmlMode: useRichTextHtml ? 'rich_text_html' : isFullTemplate ? 'iframe_embed' : 'rich_text_html',
+    usesEmbed: Boolean(isFullTemplate && useIframeEmbed && payload.automaioId && !isBlogPost),
+    htmlMode: useCustomCode
+      ? 'custom_code'
+      : useRichTextHtml
+        ? 'rich_text_html'
+        : isFullTemplate
+          ? 'iframe_embed'
+          : 'rich_text_html',
   }
 }
 

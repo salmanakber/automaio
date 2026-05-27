@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Dialog,
@@ -13,6 +13,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   ExternalLink,
   Globe,
@@ -23,13 +32,18 @@ import {
   Copy,
   Plug,
   RefreshCw,
+  CalendarClock,
 } from 'lucide-react'
 import {
   SectionCmsMappingPreview,
   type SectionCmsMappingRow,
 } from '@/components/projects/SectionCmsMappingPreview'
 import { CreateLandingCollectionCard } from '@/components/webflow/CreateLandingCollectionCard'
+import { PublishLayoutControls } from '@/components/projects/PublishLayoutControls'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
+import { parseLayoutControls } from '@/lib/webflow/layout-controls'
+import type { LayoutControls } from '@/lib/ai/business-context-types'
+import type { PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
 
 type PublishDialogProps = {
   open: boolean
@@ -53,9 +67,18 @@ type PublishPreview = {
   sectionCmsMappedCount?: number
   canPublish?: boolean
   htmlMode?: string
+  publishHtmlMode?: string
+  htmlLineCount?: number
+  htmlLineThreshold?: number
   usesEmbed?: boolean
   resolvedFields?: string[]
   error?: string
+}
+
+function defaultScheduleInput() {
+  const d = new Date()
+  d.setHours(d.getHours() + 1, 0, 0, 0)
+  return d.toISOString().slice(0, 16)
 }
 
 export function PublishDialog({
@@ -72,6 +95,12 @@ export function PublishDialog({
   const [previewError, setPreviewError] = useState('')
   const [showOnWebsite, setShowOnWebsite] = useState(Boolean(project?.showOnWebsite))
   const [publishSite, setPublishSite] = useState(project?.publishSite !== false)
+  const [publishMode, setPublishMode] = useState<'now' | 'later'>('now')
+  const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput)
+  const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>('auto')
+  const [layoutControls, setLayoutControls] = useState<LayoutControls>(() =>
+    parseLayoutControls((project?.parameters as Record<string, unknown>) ?? {}),
+  )
   const [result, setResult] = useState<PublishResult | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -79,6 +108,24 @@ export function PublishDialog({
   const integrationId = project?.webflowIntegrationId as string | undefined
   const missingSectionFields =
     preview?.sectionCmsMapping?.some((r) => r.status === 'missing_field') ?? false
+
+  const minScheduleInput = useMemo(() => new Date().toISOString().slice(0, 16), [open])
+
+  const savePublishSettings = async () => {
+    const params = { ...((project?.parameters as Record<string, unknown>) ?? {}) }
+    params.layoutControls = JSON.stringify(layoutControls)
+    params.publishHtmlMode = publishHtmlMode
+
+    await fetch(`/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        showOnWebsite,
+        publishSite,
+        parameters: params,
+      }),
+    })
+  }
 
   const loadPreview = async () => {
     if (!project?.cmsCollectionId) {
@@ -89,8 +136,9 @@ export function PublishDialog({
     setPreviewLoading(true)
     setPreviewError('')
     try {
+      await savePublishSettings()
       const res = await fetch(`/api/projects/${projectId}/publish-preview`, {
-        
+        credentials: 'same-origin',
       })
       const data = await parseJsonResponse<PublishPreview & { error?: string }>(res)
       if (!res.ok) throw new Error(data.error ?? 'Preview failed')
@@ -108,9 +156,19 @@ export function PublishDialog({
     setShowOnWebsite(Boolean(project?.showOnWebsite))
     setPublishSite(project?.publishSite !== false)
     setResult(null)
-    if (isLandingPage) loadPreview()
+    setPublishMode('now')
+    setScheduledAt(defaultScheduleInput())
+    const params = (project?.parameters as Record<string, unknown>) ?? {}
+    setLayoutControls(parseLayoutControls(params))
+    const mode = params.publishHtmlMode
+    setPublishHtmlMode(
+      mode === 'iframe_embed' || mode === 'rich_text_html' || mode === 'custom_code' || mode === 'auto'
+        ? mode
+        : 'auto',
+    )
+    if (project?.cmsCollectionId) loadPreview()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, projectId, project?.cmsCollectionId, isLandingPage])
+  }, [open, projectId, project?.cmsCollectionId])
 
   const copySnippet = async (snippet: string) => {
     await navigator.clipboard.writeText(snippet)
@@ -118,15 +176,35 @@ export function PublishDialog({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const publish = async () => {
+  const handleSubmit = async () => {
     setPublishing(true)
     setResult(null)
     try {
-      await fetch(`/api/projects/${projectId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ showOnWebsite, publishSite }),
-      })
+      await savePublishSettings()
+
+      if (publishMode === 'later') {
+        const scheduledFor = new Date(scheduledAt)
+        if (Number.isNaN(scheduledFor.getTime())) {
+          throw new Error('Pick a valid date and time')
+        }
+        const res = await fetch(`/api/projects/${projectId}?action=schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scheduledFor: scheduledFor.toISOString(),
+            frequency: 'once',
+            publishSite,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? 'Schedule failed')
+        setResult({
+          type: 'success',
+          message: `Scheduled for ${scheduledFor.toLocaleString()}${publishSite ? ' (includes live site publish)' : ''}.`,
+        })
+        onPublished?.()
+        return
+      }
 
       const res = await fetch(`/api/projects/${projectId}?action=publish`, {
         method: 'POST',
@@ -141,7 +219,7 @@ export function PublishDialog({
           type: 'warning',
           message:
             data.embedMessage ??
-            'CMS updated, but automatic iframe embed could not be applied. Reconnect Webflow via OAuth or paste the manual embed below.',
+            'CMS item created/updated, but automatic iframe embed could not be applied.',
           liveUrl: data.liveUrl,
           collectionEmbedSnippet: data.collectionEmbedSnippet,
           embedNeedsReconnect: true,
@@ -149,7 +227,7 @@ export function PublishDialog({
       } else {
         setResult({
           type: 'success',
-          message: data.embedMessage ?? 'Published to Webflow successfully.',
+          message: data.embedMessage ?? 'Published to Webflow CMS successfully.',
           liveUrl: data.liveUrl,
         })
       }
@@ -168,14 +246,14 @@ export function PublishDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#09090b] border-zinc-800 text-white sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-[#09090b] border-zinc-800 text-white sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-blue-500" />
-            Publish to Webflow
+            Publish to Webflow CMS
           </DialogTitle>
           <DialogDescription className="text-zinc-500 text-xs mt-2">
-            Syncs content, SEO fields, section CMS data, and iframe embed for HTML pages.
+            Creates or updates a CMS item, maps fields, and optionally publishes your Webflow site.
           </DialogDescription>
         </DialogHeader>
 
@@ -197,71 +275,144 @@ export function PublishDialog({
             </Badge>
           </div>
 
-          {isLandingPage && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">
-                  Publish preview
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-[10px] text-zinc-500 gap-1"
-                  onClick={loadPreview}
-                  disabled={previewLoading}
-                >
-                  <RefreshCw className={`h-3 w-3 ${previewLoading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-              </div>
-
-              {previewLoading && (
-                <div className="flex items-center gap-2 text-xs text-zinc-500 py-4 justify-center">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading field mapping…
-                </div>
-              )}
-
-              {previewError && !previewLoading && (
-                <p className="text-xs text-amber-400/90 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-                  {previewError}
-                </p>
-              )}
-
-              {preview?.sectionCmsMapping && !previewLoading && (
-                <SectionCmsMappingPreview
-                  rows={preview.sectionCmsMapping}
-                  mappedCount={preview.sectionCmsMappedCount}
-                />
-              )}
-
-              {missingSectionFields && integrationId && !previewLoading && (
-                <CreateLandingCollectionCard
-                  orgId={orgId}
-                  integrationId={integrationId}
-                  onCreated={() => loadPreview()}
-                  compact
-                />
-              )}
-
-              {preview?.htmlMode && !previewLoading && (
-                <p className="text-[10px] text-zinc-600">
-                  Rendering: {preview.htmlMode.replace('_', ' ')}
-                  {preview.usesEmbed ? ' · iframe embed' : ''}
-                  {preview.resolvedFields?.length
-                    ? ` · ${preview.resolvedFields.length} CMS fields`
-                    : ''}
-                </p>
-              )}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">
+                CMS field mapping
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[10px] text-zinc-500 gap-1"
+                onClick={loadPreview}
+                disabled={previewLoading}
+              >
+                <RefreshCw className={`h-3 w-3 ${previewLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
             </div>
+
+            {previewLoading && (
+              <div className="flex items-center gap-2 text-xs text-zinc-500 py-4 justify-center">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading field mapping…
+              </div>
+            )}
+
+            {previewError && !previewLoading && (
+              <p className="text-xs text-amber-400/90 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+                {previewError}
+              </p>
+            )}
+
+            {isLandingPage && preview?.sectionCmsMapping && !previewLoading && (
+              <SectionCmsMappingPreview
+                rows={preview.sectionCmsMapping}
+                mappedCount={preview.sectionCmsMappedCount}
+              />
+            )}
+
+            {missingSectionFields && integrationId && !previewLoading && (
+              <CreateLandingCollectionCard
+                orgId={orgId}
+                integrationId={integrationId}
+                onCreated={() => loadPreview()}
+                compact
+              />
+            )}
+
+            {isLandingPage && !previewLoading && (
+              <div className="space-y-2">
+                <Label className="text-[11px] uppercase tracking-wide text-zinc-400">
+                  HTML delivery mode
+                </Label>
+                <Select
+                  value={publishHtmlMode}
+                  onValueChange={(v) => {
+                    setPublishHtmlMode(v as PublishHtmlModeOverride)
+                  }}
+                >
+                  <SelectTrigger className="bg-zinc-950 border-zinc-800 h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">
+                      Auto ({preview?.htmlLineCount ?? '—'} lines · threshold{' '}
+                      {preview?.htmlLineThreshold ?? 4000})
+                    </SelectItem>
+                    <SelectItem value="custom_code">Custom code — HTML in Plain Text field</SelectItem>
+                    <SelectItem value="iframe_embed">Iframe embed — snippet in Rich Text</SelectItem>
+                    <SelectItem value="rich_text_html">Rich Text — full HTML in body field</SelectItem>
+                  </SelectContent>
+                </Select>
+                {preview?.htmlMode && (
+                  <p className="text-[10px] text-zinc-600">
+                    Resolved: {preview.htmlMode.replace(/_/g, ' ')}
+                    {preview.usesEmbed ? ' · collection embed.js' : ''}
+                    {preview.resolvedFields?.length
+                      ? ` · ${preview.resolvedFields.length} CMS fields`
+                      : ''}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {isLandingPage && (
+            <PublishLayoutControls
+              parameters={{ layoutControls: JSON.stringify(layoutControls) }}
+              onChange={setLayoutControls}
+              compact
+            />
           )}
+
+          <div className="space-y-3">
+            <Label className="text-[11px] uppercase tracking-wide text-zinc-400">When to publish</Label>
+            <RadioGroup
+              value={publishMode}
+              onValueChange={(v) => setPublishMode(v as 'now' | 'later')}
+              className="flex flex-col gap-2 sm:flex-row sm:gap-6"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="now" id="publish-now" />
+                <Label htmlFor="publish-now" className="font-normal cursor-pointer text-sm text-zinc-300">
+                  Publish now
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="later" id="publish-later" />
+                <Label htmlFor="publish-later" className="font-normal cursor-pointer text-sm text-zinc-300">
+                  Schedule for later
+                </Label>
+              </div>
+            </RadioGroup>
+
+            {publishMode === 'later' && (
+              <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+                <Label htmlFor="schedule-at" className="text-xs text-zinc-400">
+                  Date & time
+                </Label>
+                <input
+                  id="schedule-at"
+                  type="datetime-local"
+                  min={minScheduleInput}
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
+                />
+                <p className="text-[10px] text-zinc-500">
+                  Requires Redis and the background worker (<code>pnpm run worker</code>).
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-4">
             <div className="flex items-center justify-between px-1">
               <div className="space-y-0.5">
                 <p className="text-xs font-bold text-zinc-300 uppercase tracking-wide">Show on website</p>
-                <p className="text-[11px] text-zinc-500 leading-snug">Publish as live CMS item (not draft).</p>
+                <p className="text-[11px] text-zinc-500 leading-snug">Live CMS item (not draft).</p>
               </div>
               <Switch checked={showOnWebsite} onCheckedChange={setShowOnWebsite} />
             </div>
@@ -294,8 +445,7 @@ export function PublishDialog({
                   <p>{result.message}</p>
                   {result.embedNeedsReconnect && (
                     <p className="text-[11px] opacity-90 leading-relaxed">
-                      Automatic embed requires OAuth with <code className="text-amber-200">custom_code</code>{' '}
-                      scopes. Site API tokens cannot install the embed script — reconnect once below.
+                      Reconnect Webflow via OAuth with <code className="text-amber-200">custom_code</code> scopes.
                     </p>
                   )}
                   {result.liveUrl && (
@@ -322,13 +472,6 @@ export function PublishDialog({
 
                   {result.collectionEmbedSnippet && (
                     <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">
-                        Manual embed (one-time)
-                      </p>
-                      <p className="text-[11px] text-zinc-500 leading-relaxed">
-                        In Webflow Designer, open your CMS Collection Template → add an Embed element → paste this
-                        before the closing body tag. Publish the site once.
-                      </p>
                       <pre className="text-[10px] font-mono text-zinc-300 bg-black/40 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
                         {result.collectionEmbedSnippet}
                       </pre>
@@ -361,11 +504,17 @@ export function PublishDialog({
           </Button>
           <Button
             className="flex-1 bg-blue-600 hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] gap-2"
-            onClick={publish}
+            onClick={handleSubmit}
             disabled={publishing || (preview !== null && preview.canPublish === false)}
           >
-            {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-            Go Live
+            {publishing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : publishMode === 'later' ? (
+              <CalendarClock className="h-4 w-4" />
+            ) : (
+              <ExternalLink className="h-4 w-4" />
+            )}
+            {publishMode === 'later' ? 'Schedule' : 'Publish now'}
           </Button>
         </DialogFooter>
       </DialogContent>
