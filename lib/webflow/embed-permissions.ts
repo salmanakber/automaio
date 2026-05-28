@@ -24,7 +24,7 @@ export function isEmbedRecoverableError(message: string) {
   )
 }
 
-/** Site API tokens cannot use custom_code — only OAuth Data Client apps can. */
+/** Site API tokens cannot use custom_code — only OAuth Data Client apps can (required for Webflow App Store). */
 export async function checkCustomCodeAccess(
   apiKey: string,
   siteId: string,

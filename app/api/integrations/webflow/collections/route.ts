@@ -4,7 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { requireOrgAccess } from '@/lib/api/org-access'
 import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { syncWebflowIntegrationV2 } from '@/lib/integrations/webflow-cms'
-import { getDefaultLandingCollectionFields } from '@/lib/webflow/section-cms-bindings'
+import {
+  DELIVERY_FIELD_DEFINITIONS,
+  getDefaultLandingCollectionFields,
+  type DeliveryMode,
+} from '@/lib/webflow/cms-collection-schema'
 import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 import {
   formatWebflowCollectionCreateError,
@@ -59,6 +63,8 @@ export async function POST(req: NextRequest) {
       fields?: Array<{ type: string; displayName: string; isRequired?: boolean }>
       includeSectionFields?: boolean
       setAsPagesCollection?: boolean
+      /** remote_runtime | split_plain_text | iframe_embed — fields created for this delivery mode */
+      deliveryMode?: DeliveryMode
     }
 
     const {
@@ -66,6 +72,7 @@ export async function POST(req: NextRequest) {
       fields,
       includeSectionFields = false,
       setAsPagesCollection = true,
+      deliveryMode,
     } = parsed
 
     integrationId = parsed.integrationId
@@ -91,10 +98,17 @@ export async function POST(req: NextRequest) {
     const slug = slugify(displayName)
     const singularName = displayName.replace(/s$/i, '') || displayName
 
-    const collectionFields =
-      fields?.length
-        ? fields
-        : getDefaultLandingCollectionFields()
+    const deliveryModes: DeliveryMode[] = ['remote_runtime', 'split_plain_text', 'iframe_embed']
+    const mode =
+      deliveryMode && deliveryModes.includes(deliveryMode) ? deliveryMode : 'remote_runtime'
+
+    const collectionFields = fields?.length
+      ? fields
+      : DELIVERY_FIELD_DEFINITIONS[mode].map(({ type, displayName, isRequired }) => ({
+          type,
+          displayName,
+          isRequired,
+        }))
 
     const collection = await client.createCollection(integration.webflowSiteId, {
       displayName,
@@ -117,14 +131,16 @@ export async function POST(req: NextRequest) {
     }
 
     let runtimeAutoConfigured = false
-    try {
-      const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
-        collectionId: collection.id,
-        publishSite: false,
-      })
-      runtimeAutoConfigured = runtimeResult.success === true
-    } catch {
-      // Runtime auto-setup can be retried on first publish
+    if (mode === 'remote_runtime') {
+      try {
+        const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
+          collectionId: collection.id,
+          publishSite: false,
+        })
+        runtimeAutoConfigured = runtimeResult.success === true
+      } catch {
+        // Runtime auto-setup can be retried on first publish
+      }
     }
 
     return NextResponse.json(
@@ -134,6 +150,7 @@ export async function POST(req: NextRequest) {
         includesSectionFields: includeSectionFields,
         setAsPagesCollection,
         runtimeAutoConfigured,
+        deliveryMode: mode,
       },
       { status: 201 },
     )

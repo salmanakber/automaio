@@ -26,6 +26,7 @@ import {
 } from '@/lib/webflow/cms-collection-schema'
 import { buildRuntimeConfigJson } from '@/lib/runtime/build-page-schema'
 import type { LandingPageSchema } from '@/lib/runtime/types'
+import { DEFAULT_PUBLISH_DELIVERY_MODE } from '@/lib/webflow/marketplace-policy'
 
 export { formatWebflowValidationError } from '@/lib/webflow/webflow-errors'
 
@@ -250,7 +251,7 @@ export function previewFieldMapping(
       webflowSlug: 'html + css + js',
       value: 'Collection template runner injects CMS Plain Text fields',
       included: true,
-      note: 'SEO-friendly — markup in html/css/js fields, not iframe',
+      note: 'Legacy — HTML/CSS only in CMS; JS is not executed (Webflow App Store policy)',
     })
   }
 
@@ -313,15 +314,7 @@ export function buildWebflowFieldPlan(
   const isFullTemplate =
     !isBlogPost &&
     Boolean(htmlContent && (hasLandingHtml || isFullHtmlDocument(htmlContent)))
-  const resolvedMode: PublishHtmlMode =
-    options?.htmlMode ??
-    (hasRuntimeFields
-      ? 'remote_runtime'
-      : hasSplitFields
-        ? 'split_plain_text'
-        : hasIframeFields
-          ? 'iframe_embed'
-          : 'remote_runtime')
+  const resolvedMode: PublishHtmlMode = options?.htmlMode ?? DEFAULT_PUBLISH_DELIVERY_MODE
   const useRemoteRuntime =
     resolvedMode === 'remote_runtime' &&
     Boolean(payload.automaioId || options?.pageSchema)

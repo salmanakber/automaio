@@ -4,9 +4,6 @@ import {
   resolveRuntimeFieldSlug,
   resolveSplitFieldSlug,
   resolveIframeFieldSlug,
-  RUNTIME_FIELD_SLUGS,
-  SPLIT_FIELD_SLUGS,
-  IFRAME_FIELD_SLUGS,
 } from '@/lib/webflow/cms-collection-schema'
 
 const CLEARED = ' '
@@ -26,6 +23,7 @@ function richTextBodySlugs(fields: CollectionField[]): string[] {
 /**
  * When switching HTML delivery mode, clear CMS fields from other modes
  * so Webflow does not keep serving stale runtime IDs, split HTML, or iframe URLs.
+ * Only touches slugs that exist on the collection schema.
  */
 export function applyHtmlModeFieldCleanup(
   fieldData: Record<string, unknown>,
@@ -33,33 +31,33 @@ export function applyHtmlModeFieldCleanup(
   collectionFields: CollectionField[],
 ): Record<string, unknown> {
   const result = { ...fieldData }
+  const collectionSlugs = new Set(collectionFields.map((f) => f.slug))
   const slugsToClear = new Set<string>()
 
+  const addIfPresent = (slug: string | null) => {
+    if (slug && collectionSlugs.has(slug)) slugsToClear.add(slug)
+  }
+
   const addRuntimeSlugs = () => {
-    for (const key of Object.keys(RUNTIME_FIELD_SLUGS) as Array<keyof typeof RUNTIME_FIELD_SLUGS>) {
-      const slug = resolveRuntimeFieldSlug(key, collectionFields)
-      if (slug) slugsToClear.add(slug)
+    for (const key of ['pageId', 'runtimeConfig', 'templateId', 'status'] as const) {
+      addIfPresent(resolveRuntimeFieldSlug(key, collectionFields))
     }
   }
 
   const addSplitSlugs = () => {
     for (const key of ['html', 'css', 'js'] as const) {
-      const slug = resolveSplitFieldSlug(key, collectionFields)
-      if (slug) slugsToClear.add(slug)
+      addIfPresent(resolveSplitFieldSlug(key, collectionFields))
     }
-    for (const candidate of SPLIT_FIELD_SLUGS.html) slugsToClear.add(candidate)
-    for (const candidate of SPLIT_FIELD_SLUGS.css) slugsToClear.add(candidate)
-    for (const candidate of SPLIT_FIELD_SLUGS.js) slugsToClear.add(candidate)
   }
 
   const addIframeSlugs = () => {
-    const slug = resolveIframeFieldSlug('iframeUrl', collectionFields)
-    if (slug) slugsToClear.add(slug)
-    for (const candidate of IFRAME_FIELD_SLUGS.iframeUrl) slugsToClear.add(candidate)
+    addIfPresent(resolveIframeFieldSlug('iframeUrl', collectionFields))
   }
 
   const addRichTextSlugs = () => {
-    for (const slug of richTextBodySlugs(collectionFields)) slugsToClear.add(slug)
+    for (const slug of richTextBodySlugs(collectionFields)) {
+      if (collectionSlugs.has(slug)) slugsToClear.add(slug)
+    }
   }
 
   if (htmlMode === 'remote_runtime') {

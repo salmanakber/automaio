@@ -39,7 +39,7 @@ export function formatWebflowValidationError(error: unknown): string {
     if (unknownFields.length) {
       return (
         `Your Webflow collection is missing these fields: ${unknownFields.join(', ')}. ` +
-        'Open Settings → Webflow and sync your collection, or add the missing fields in Webflow.'
+        'Publish again — Automaio will create them automatically — or open Settings → Webflow and sync your collection.'
       )
     }
 

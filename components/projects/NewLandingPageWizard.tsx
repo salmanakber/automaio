@@ -395,6 +395,7 @@ export function NewLandingPageWizard({
                   <CreateLandingCollectionCard
                     orgId={orgId}
                     integrationId={integrationId}
+                    deliveryMode="remote_runtime"
                     onCreated={async (collection) => {
                       setCollectionId(collection.id)
                       await refreshIntegrations()

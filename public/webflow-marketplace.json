@@ -1,25 +1,45 @@
 {
   "name": "Automaio",
-  "description": "AI-powered marketing campaigns for Webflow. Choose templates, generate content, and publish to Webflow CMS.",
+  "description": "AI landing pages for Webflow. Pages are stored as structured JSON on Automaio, rendered server-side, and synced to Webflow CMS as Page ID + SEO metadata. Uses Webflow OAuth and registered inline scripts on collection templates only.",
   "category": "Marketing",
-  "scopes": ["cms:read", "cms:write", "sites:read", "sites:write", "custom_code:read", "custom_code:write"],
-  "features": [
-    "Prebuilt HTML campaign templates",
-    "AI content generation",
-    "One-click publish to Webflow CMS",
-    "Collection field mapping",
-    "Live preview before publish"
+  "scopes": [
+    "cms:read",
+    "cms:write",
+    "sites:read",
+    "sites:write",
+    "pages:read",
+    "custom_code:read",
+    "custom_code:write",
+    "authorized_user:read"
   ],
-  "cmsCollection": {
-    "name": "Automaio Campaigns",
-    "requiredFields": [
-      "name",
-      "slug",
-      "template-html",
-      "headline",
-      "automaio-campaign-id"
-    ]
+  "features": [
+    "JSON page schema (structured sections, not raw HTML in CMS)",
+    "Server-side HTML rendering from Automaio API",
+    "Webflow CMS: Page ID, SEO title, description, slug, status",
+    "OAuth connection (required for custom code / template scripts)",
+    "Registered inline script on collection template (footer, single bootstrap)",
+    "AutomaioRuntime for optional animations and interactions after load",
+    "AI content generation and visual studio",
+    "One-click publish to Webflow CMS"
+  ],
+  "compliance": {
+    "noEvalFromCms": true,
+    "noSiteWideArbitraryScripts": true,
+    "customCodeScopeUsage": "Registers and applies one reviewed inline script per collection template page via Webflow custom_code API",
+    "cmsContentModel": "Metadata and Page ID only; full page body is not stored as executable CMS JavaScript"
   },
-  "embedScript": "/webflow/embed.js",
+  "cmsCollection": {
+    "name": "Automaio Landing Pages",
+    "requiredFields": [
+      "title",
+      "slug",
+      "page-id",
+      "seo-title",
+      "seo-description",
+      "status"
+    ],
+    "optionalLegacyFields": ["html", "css", "iframe-url"]
+  },
+  "runtimeScript": "/webflow/runtime.js",
   "documentation": "https://github.com/automaio/docs"
 }

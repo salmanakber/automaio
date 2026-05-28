@@ -5,6 +5,7 @@ import {
   buildWebflowFieldPlan,
   formatWebflowValidationError,
   previewFieldMapping,
+  sanitizeFieldDataForCollection,
   type AutomaioContentPayload,
 } from '@/lib/webflow/field-mapper'
 import {
@@ -35,8 +36,11 @@ import {
 } from '@/lib/webflow/cms-collection-schema'
 import {
   ensureCollectionDeliverySetup,
+  ensureCollectionFieldsForMode,
   getCollectionTemplateSnippet,
 } from '@/lib/webflow/collection-delivery-setup'
+import type { DeliveryMode } from '@/lib/webflow/cms-collection-schema'
+import { DEFAULT_PUBLISH_DELIVERY_MODE } from '@/lib/webflow/marketplace-policy'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
 import { applyHtmlModeFieldCleanup } from '@/lib/webflow/html-mode-field-cleanup'
 import {
@@ -60,7 +64,8 @@ export type PublishProjectOptions = {
 }
 
 function parsePublishHtmlMode(params: Record<string, unknown>): PublishHtmlModeOverride {
-  return normalizePublishHtmlMode(params.publishHtmlMode)
+  const normalized = normalizePublishHtmlMode(params.publishHtmlMode)
+  return normalized === 'auto' ? DEFAULT_PUBLISH_DELIVERY_MODE : normalized
 }
 
 async function prepareProjectHtml(
@@ -94,7 +99,7 @@ export async function getProjectPublishPreview(projectId: string) {
     : null
 
   const { payload, htmlForStrategy } = await prepareProjectHtml(project)
-  const collectionFields = await getCollectionFields(
+  let collectionFields = await getCollectionFields(
     integration,
     project.cmsCollectionId,
   )
@@ -121,6 +126,17 @@ export async function getProjectPublishPreview(projectId: string) {
       },
     )
     htmlMode = strategy.htmlMode
+
+    const ensured = await ensureCollectionFieldsForMode(
+      integration.id,
+      project.cmsCollectionId,
+      htmlMode as DeliveryMode,
+    )
+    collectionFields = ensured.map((f) => ({
+      slug: f.slug,
+      name: f.name ?? f.slug,
+      type: f.type,
+    }))
   }
 
   let pageSchema
@@ -368,6 +384,17 @@ export async function publishContentProject(
       },
     )
     htmlMode = strategy.htmlMode
+
+    const ensured = await ensureCollectionFieldsForMode(
+      integration.id,
+      project.cmsCollectionId,
+      htmlMode as DeliveryMode,
+    )
+    collectionFields = ensured.map((f) => ({
+      slug: f.slug,
+      name: f.name ?? f.slug,
+      type: f.type,
+    }))
   }
 
   let pageSchema
@@ -389,9 +416,8 @@ export async function publishContentProject(
     project.cmsCollectionId,
     { htmlMode: isHtmlPage ? htmlMode : undefined, assembledLanding, pageSchema },
   )
-  let fieldData = applyHtmlModeFieldCleanup(
-    plan.fieldData,
-    plan.htmlMode,
+  let fieldData = sanitizeFieldDataForCollection(
+    applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields),
     collectionFields,
   )
 
@@ -426,7 +452,37 @@ export async function publishContentProject(
   try {
     await upsertCms(fieldData)
   } catch (err) {
-    throw new Error(formatWebflowValidationError(err))
+    const message = formatWebflowValidationError(err)
+    if (
+      isHtmlPage &&
+      /missing these fields/i.test(message) &&
+      project.cmsCollectionId
+    ) {
+      const refreshed = await ensureCollectionFieldsForMode(
+        integration.id,
+        project.cmsCollectionId,
+        plan.htmlMode as DeliveryMode,
+      )
+      collectionFields = refreshed.map((f) => ({
+        slug: f.slug,
+        name: f.name ?? f.slug,
+        type: f.type,
+      }))
+      plan = buildWebflowFieldPlan(
+        payload,
+        collectionFields,
+        integration.cmsFieldMapping,
+        project.cmsCollectionId,
+        { htmlMode: plan.htmlMode, assembledLanding, pageSchema },
+      )
+      fieldData = sanitizeFieldDataForCollection(
+        applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields),
+        collectionFields,
+      )
+      await upsertCms(fieldData)
+    } else {
+      throw new Error(message)
+    }
   }
 
   const shouldPublishSite = options?.publishSite ?? project.publishSite ?? true

@@ -148,12 +148,13 @@ export async function ensureDeliveryCmsFields(
     const expectedSlug = def.slug
     if (expectedSlug && existingSlugs.has(expectedSlug)) continue
     try {
-      await client.createCollectionField(collectionId, {
+      const created = await client.createCollectionField(collectionId, {
         type: def.type,
         displayName: def.displayName,
         isRequired: def.isRequired,
       })
-      if (expectedSlug) existingSlugs.add(expectedSlug)
+      if (created?.slug) existingSlugs.add(created.slug)
+      else if (expectedSlug) existingSlugs.add(expectedSlug)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (!message.toLowerCase().includes('already') && !message.includes('409')) {
@@ -163,11 +164,35 @@ export async function ensureDeliveryCmsFields(
   }
 
   const refreshed = await client.getCollection(collectionId)
-  return refreshed.fields.map((f) => ({
+  const fields = refreshed.fields.map((f) => ({
     slug: f.slug,
     name: f.displayName,
     type: f.type,
   }))
+
+  return fields
+}
+
+/** Ensure CMS fields exist for a delivery mode before publish (creates missing fields in Webflow). */
+export async function ensureCollectionFieldsForMode(
+  integrationId: string,
+  collectionId: string,
+  mode: DeliveryMode,
+): Promise<CollectionField[]> {
+  const integration = await prisma.webflowIntegration.findUnique({
+    where: { id: integrationId },
+  })
+  if (!integration) throw new Error('Integration not found')
+
+  const client = new WebflowClient(integration.webflowApiKey)
+  let fields = await ensureDeliveryCmsFields(client, collectionId, mode)
+
+  if (!collectionHasDeliveryFields(fields, mode)) {
+    fields = await ensureDeliveryCmsFields(client, collectionId, mode)
+  }
+
+  await syncCollectionFieldsCache(integrationId, collectionId, fields)
+  return fields
 }
 
 export type EnsureDeliverySetupResult = {

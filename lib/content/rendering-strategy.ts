@@ -1,4 +1,9 @@
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
+import {
+  DEFAULT_PUBLISH_DELIVERY_MODE,
+  isLegacyDeliveryMode,
+  RECOMMENDED_DELIVERY_BLURB,
+} from '@/lib/webflow/marketplace-policy'
 
 export type RenderingStrategy = {
   lineCount: number
@@ -9,13 +14,19 @@ export type RenderingStrategy = {
 
 export type PublishHtmlModeOverride = PublishHtmlMode | 'auto'
 
-const DELIVERY_MODES: PublishHtmlMode[] = ['remote_runtime', 'split_plain_text', 'iframe_embed']
+const DELIVERY_MODES: PublishHtmlMode[] = [
+  'remote_runtime',
+  'split_plain_text',
+  'iframe_embed',
+]
 
 export function normalizePublishHtmlMode(raw: unknown): PublishHtmlModeOverride {
   if (raw === 'auto') return 'auto'
   if (DELIVERY_MODES.includes(raw as PublishHtmlMode)) return raw as PublishHtmlMode
-  // Legacy modes map to closest delivery option
-  if (raw === 'rich_text_html' || raw === 'custom_code') return 'split_plain_text'
+  // Deprecated stored modes → recommended remote runtime (JSON schema path)
+  if (raw === 'rich_text_html' || raw === 'custom_code') {
+    return DEFAULT_PUBLISH_DELIVERY_MODE
+  }
   return 'auto'
 }
 
@@ -31,48 +42,22 @@ export type RenderingStrategyOptions = {
 }
 
 /**
- * Resolve delivery mode (only remote runtime, split HTML, or iframe embed).
+ * Auto mode always resolves to remote runtime (JSON schema + CMS metadata).
+ * Legacy split/iframe are opt-in only via explicit publishHtmlMode override.
  */
 export function resolveRenderingStrategy(
   _html: string,
   _hasCustomCodeAccess: boolean,
   _threshold?: number,
-  options?: RenderingStrategyOptions,
+  _options?: RenderingStrategyOptions,
 ): RenderingStrategy {
   const lineCount = countHtmlLines(_html)
 
-  if (options?.hasRemoteRuntimeFields) {
-    return {
-      lineCount,
-      strategy: 'remote_runtime',
-      htmlMode: 'remote_runtime',
-      reason: 'Remote runtime — Webflow stores Page ID; content loads from Automaio API',
-    }
-  }
-
-  if (options?.hasSplitPlainTextFields) {
-    return {
-      lineCount,
-      strategy: 'split_plain_text',
-      htmlMode: 'split_plain_text',
-      reason: 'Split HTML/CSS/JS — content in Plain Text CMS fields (html, css, js)',
-    }
-  }
-
-  if (options?.hasIframeEmbedFields) {
-    return {
-      lineCount,
-      strategy: 'iframe_embed',
-      htmlMode: 'iframe_embed',
-      reason: 'Iframe embed — iframe-url Plain Text field loads hosted page',
-    }
-  }
-
   return {
     lineCount,
-    strategy: 'remote_runtime',
-    htmlMode: 'remote_runtime',
-    reason: 'Default — use remote runtime (add Page ID field or create collection via Automaio)',
+    strategy: DEFAULT_PUBLISH_DELIVERY_MODE,
+    htmlMode: DEFAULT_PUBLISH_DELIVERY_MODE,
+    reason: `Recommended — ${RECOMMENDED_DELIVERY_BLURB}`,
   }
 }
 
@@ -88,9 +73,11 @@ export function resolveHtmlModeWithOverride(
   if (normalized !== 'auto' && DELIVERY_MODES.includes(normalized)) {
     const lineCount = countHtmlLines(html)
     const reasons: Record<PublishHtmlMode, string> = {
-      remote_runtime: 'Manual: remote runtime (Page ID + runtime.js on collection template)',
-      split_plain_text: 'Manual: split HTML/CSS/JS in Plain Text fields (html, css, js)',
-      iframe_embed: 'Manual: iframe embed via iframe-url Plain Text field',
+      remote_runtime: `Recommended — ${RECOMMENDED_DELIVERY_BLURB}`,
+      split_plain_text:
+        'Legacy — HTML/CSS in CMS Plain Text fields. CMS JavaScript is not executed (Webflow App Store policy).',
+      iframe_embed:
+        'Legacy — iframe-url field embeds hosted preview. Use remote runtime for production SEO.',
     }
     return {
       lineCount,
@@ -102,3 +89,5 @@ export function resolveHtmlModeWithOverride(
 
   return resolveRenderingStrategy(html, hasCustomCodeAccess, threshold, options)
 }
+
+export { isLegacyDeliveryMode }

@@ -30,17 +30,21 @@ import {
   RefreshCw,
   CalendarClock,
   Zap,
-  Search,
   ArrowRight,
-  Lock,
 } from 'lucide-react'
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { ScheduleNotifyPanel, type ScheduleNotifySettings } from '@/components/projects/ScheduleNotifyPanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import {
+  isLegacyDeliveryMode,
   normalizePublishHtmlMode,
   type PublishHtmlModeOverride,
 } from '@/lib/content/rendering-strategy'
+import {
+  DEFAULT_PUBLISH_DELIVERY_MODE,
+  LEGACY_DELIVERY_WARNINGS,
+  RECOMMENDED_DELIVERY_BLURB,
+} from '@/lib/webflow/marketplace-policy'
 
 type PublishDialogProps = {
   open: boolean
@@ -86,10 +90,15 @@ function defaultScheduleInput() {
   return d.toISOString().slice(0, 16)
 }
 
-const SEO_RISK_MODES = ['remote_runtime', 'iframe_embed']
+function isLegacyMode(mode: string) {
+  return isLegacyDeliveryMode(mode)
+}
 
-function isSeoBadMode(mode: string, preview?: PublishPreview | null) {
-  return SEO_RISK_MODES.includes(mode) || (mode === 'auto' && preview?.usesRemoteRuntime)
+function resolvedPreviewMode(mode: string, preview?: PublishPreview | null) {
+  if (mode === 'auto') {
+    return preview?.htmlMode ?? DEFAULT_PUBLISH_DELIVERY_MODE
+  }
+  return mode
 }
 
 export function PublishDialog({
@@ -109,7 +118,10 @@ export function PublishDialog({
   const [publishSite, setPublishSite] = useState(project?.publishSite !== false)
   const [publishMode, setPublishMode] = useState<'now' | 'later'>('now')
   const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput)
-  const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>('auto')
+  const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>(
+    DEFAULT_PUBLISH_DELIVERY_MODE,
+  )
+  const [legacyDeliveryAck, setLegacyDeliveryAck] = useState(false)
   const [result, setResult] = useState<PublishResult | null>(null)
   const [copied, setCopied] = useState(false)
   const [notifySettings, setNotifySettings] = useState<ScheduleNotifySettings>({
@@ -120,13 +132,27 @@ export function PublishDialog({
 
   const isLandingPage = project?.contentType === 'landing_page'
   const minScheduleInput = useMemo(() => new Date().toISOString().slice(0, 16), [open])
-  const showSeoAlert = isLandingPage && isSeoBadMode(publishHtmlMode, preview)
+  const effectiveMode = resolvedPreviewMode(publishHtmlMode, preview)
+  const showLegacyWarning = isLandingPage && isLegacyMode(publishHtmlMode)
+  const legacyWarningText =
+    publishHtmlMode === 'split_plain_text'
+      ? LEGACY_DELIVERY_WARNINGS.split_plain_text
+      : publishHtmlMode === 'iframe_embed'
+        ? LEGACY_DELIVERY_WARNINGS.iframe_embed
+        : ''
 
   // --- Readiness checks ---
   const hasCmsCollection = Boolean(project?.cmsCollectionId)
   const fieldsReady = preview?.canPublish !== false
   const scheduleValid = publishMode === 'now' || (publishMode === 'later' && scheduledAt.length > 0)
-  const canPublish = !publishing && hasCmsCollection && fieldsReady && scheduleValid && !previewLoading
+  const needsLegacyAck = showLegacyWarning && !legacyDeliveryAck
+  const canPublish =
+    !publishing &&
+    hasCmsCollection &&
+    fieldsReady &&
+    scheduleValid &&
+    !previewLoading &&
+    !needsLegacyAck
 
   const blockReason = !hasCmsCollection
     ? 'Connect a CMS collection first'
@@ -136,7 +162,9 @@ export function PublishDialog({
         ? 'Resolve field mapping errors'
         : publishMode === 'later' && !scheduledAt
           ? 'Specify a release date'
-          : null
+          : needsLegacyAck
+            ? 'Acknowledge legacy delivery risks to continue'
+            : null
 
   const savePublishSettings = async () => {
     const params = { ...((project?.parameters as Record<string, unknown>) ?? {}) }
@@ -180,7 +208,9 @@ export function PublishDialog({
     setPublishMode('now')
     setScheduledAt(defaultScheduleInput())
     const params = (project?.parameters as Record<string, unknown>) ?? {}
-    setPublishHtmlMode(normalizePublishHtmlMode(params.publishHtmlMode))
+    const normalized = normalizePublishHtmlMode(params.publishHtmlMode)
+    setPublishHtmlMode(normalized === 'auto' ? DEFAULT_PUBLISH_DELIVERY_MODE : normalized)
+    setLegacyDeliveryAck(false)
     if (project?.cmsCollectionId) loadPreview()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, projectId, project?.cmsCollectionId])
@@ -390,68 +420,78 @@ export function PublishDialog({
                 </div>
               )}
 
-              {/* Delivery Strategy Dropdown */}
+              {/* Delivery mode — remote runtime recommended (Webflow Marketplace) */}
               {isLandingPage && !previewLoading && (
-                <div className="space-y-2 pt-1">
+                <div className="space-y-3 pt-1">
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                    Delivery Mode
+                    Delivery mode
                   </Label>
-                  <Select
-                    value={publishHtmlMode}
-                    onValueChange={(v) => setPublishHtmlMode(v as PublishHtmlModeOverride)}
-                  >
-                    <SelectTrigger
-                      className="h-9.5 text-xs rounded-lg px-3 text-zinc-200 border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/50 hover:border-zinc-700 focus:ring-1 focus:ring-blue-500/40 transition-all"
-                    >
-                      <SelectValue className="text-zinc-200" />
-                    </SelectTrigger>
-                    <SelectContent
-                      className="rounded-lg border border-zinc-800 bg-zinc-950 p-1 shadow-2xl"
-                    >
-                      {[
-                        {
-                          value: 'auto',
-                          label: `Auto Mode — resolved by schema${preview?.htmlLineCount ? ` (${preview.htmlLineCount} lines)` : ''}`,
-                        },
-                        { value: 'remote_runtime', label: 'Remote runtime — Page ID + runtime.js on collection template' },
-                        { value: 'split_plain_text', label: 'Split HTML — html, css, js Plain Text fields' },
-                        { value: 'iframe_embed', label: 'Iframe embed — iframe-url Plain Text field' },
-                      ].map((opt) => (
-                        <SelectItem
-                          key={opt.value}
-                          value={opt.value}
-                          className="text-xs rounded-md px-3 py-2 cursor-pointer text-zinc-300 focus:bg-zinc-900 focus:text-white data-[highlighted]:bg-zinc-900 data-[highlighted]:text-white"
-                        >
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
 
-                  {/* SEO Considerations Indicator */}
-                  {showSeoAlert && (
-                    <div className="relative overflow-hidden rounded-xl border border-amber-500/10 bg-amber-500/[0.01] p-4 pl-5">
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-500/40" />
-                      <div className="flex gap-2.5">
-                        <Search className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <h5 className="text-xs font-semibold text-amber-400">SEO Considerations</h5>
-                          <p className="text-[11px] text-zinc-400 leading-relaxed">
-                            Client-side JavaScript rendering is active. Standard web crawlers may be unable to parse or index layout structures effectively.
-                          </p>
-                          <p className="text-[11px] text-zinc-500 leading-relaxed">
-                            For organic discovery, use <strong className="text-zinc-400 font-medium">Split HTML/CSS/JS</strong> so markup is stored in Plain Text fields and rendered in the collection template.
-                          </p>
-                        </div>
-                      </div>
+                  <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[0.03] p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <p className="text-xs font-semibold text-emerald-300">Remote runtime (recommended)</p>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">{RECOMMENDED_DELIVERY_BLURB}</p>
+                    <Select
+                      value={
+                        publishHtmlMode === 'remote_runtime' || publishHtmlMode === 'auto'
+                          ? 'remote_runtime'
+                          : publishHtmlMode
+                      }
+                      onValueChange={(v) => {
+                        setPublishHtmlMode(v as PublishHtmlModeOverride)
+                        setLegacyDeliveryAck(false)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs rounded-lg border-zinc-800 bg-zinc-950/80">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+                        <SelectItem value="remote_runtime" className="text-xs">
+                          Remote runtime — Page ID + registered template script
+                        </SelectItem>
+                        <SelectItem value="split_plain_text" className="text-xs text-amber-200/90">
+                          Legacy: Split HTML/CSS (no CMS JS execution)
+                        </SelectItem>
+                        <SelectItem value="iframe_embed" className="text-xs text-amber-200/90">
+                          Legacy: Iframe embed
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {(effectiveMode === 'remote_runtime' || preview?.usesRemoteRuntime) && !showLegacyWarning && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-emerald-400/90 bg-emerald-500/[0.02] border border-emerald-500/10">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <span>JSON schema publish path — Webflow CMS stores metadata only.</span>
                     </div>
                   )}
 
-                  {/* Runtime Status */}
-                  {preview?.usesRemoteRuntime && !showSeoAlert && (
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-emerald-400/90 bg-emerald-500/[0.02] border border-emerald-500/10">
-                      <Zap className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                      <span>Remote runtime is connected. Dispatch changes immediately.</span>
+                  {showLegacyWarning && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4 space-y-3">
+                      <div className="flex gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-amber-400">Legacy delivery mode</p>
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">{legacyWarningText}</p>
+                          <p className="text-[11px] text-zinc-500 leading-relaxed">
+                            Webflow App Store policy: Automaio does not execute JavaScript from CMS fields.
+                            Use remote runtime for production sites.
+                          </p>
+                        </div>
+                      </div>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={legacyDeliveryAck}
+                          onChange={(e) => setLegacyDeliveryAck(e.target.checked)}
+                          className="mt-0.5 rounded border-zinc-600"
+                        />
+                        <span className="text-[11px] text-zinc-400">
+                          I understand legacy mode limitations and will use remote runtime for production.
+                        </span>
+                      </label>
                     </div>
                   )}
                 </div>

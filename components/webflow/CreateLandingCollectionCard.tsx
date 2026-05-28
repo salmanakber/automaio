@@ -7,10 +7,14 @@ import { Label } from '@/components/ui/label'
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
 import { Copy, Check, Loader2, Plus, Layers } from 'lucide-react'
 
+import type { DeliveryMode } from '@/lib/webflow/cms-collection-schema'
+
 type CreateLandingCollectionCardProps = {
   orgId: string
   integrationId: string
   defaultName?: string
+  /** CMS fields created for this delivery mode (default: remote_runtime). */
+  deliveryMode?: DeliveryMode
   onCreated?: (collection: { id: string; displayName?: string; slug?: string }) => void
   compact?: boolean
 }
@@ -19,6 +23,7 @@ export function CreateLandingCollectionCard({
   orgId,
   integrationId,
   defaultName = 'Landing Pages',
+  deliveryMode = 'remote_runtime',
   onCreated,
   compact = false,
 }: CreateLandingCollectionCardProps) {
@@ -44,6 +49,7 @@ export function CreateLandingCollectionCard({
           displayName: name.trim(),
           includeSectionFields: false,
           setAsPagesCollection: true,
+          deliveryMode,
         }),
       })
       const data = await res.json()
@@ -80,7 +86,7 @@ export function CreateLandingCollectionCard({
         <div>
           <p className="text-xs font-bold text-zinc-200">Create landing page collection</p>
           <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
-            Creates Title, Slug, Page ID, SEO, and status fields. Runtime bootstrap auto-installs on your collection template — no manual embed paste.
+            Marketplace-ready schema: Title, Slug, Page ID, SEO, status. Content stays as JSON on Automaio; Webflow stores metadata only.
           </p>
         </div>
       </div>
