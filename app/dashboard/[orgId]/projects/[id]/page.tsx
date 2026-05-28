@@ -77,7 +77,6 @@ export default function ProjectStudioPage() {
   const [saved, setSaved] = useState(false)
   const [showPublish, setShowPublish] = useState(false)
   const [zoom, setZoom] = useState(1)
-  const [focusZoom, setFocusZoom] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiProgress, setAiProgress] = useState(false)
@@ -212,16 +211,11 @@ export default function ProjectStudioPage() {
   }
 
   const handleFocusRect = useCallback(() => {
-    setFocusZoom(true)
-    setZoom((z) => Math.max(z, 1.15))
+    /* scroll only — no auto zoom */
   }, [])
 
   const handleSelectElement = useCallback((el: SelectedElement | null) => {
     setSelectedElement(el)
-    if (el) {
-      setFocusZoom(true)
-      setZoom((z) => Math.max(z, 1.15))
-    }
   }, [])
 
   const handleSectionSelect = useCallback((section: SectionSelection | null) => {
@@ -443,17 +437,12 @@ export default function ProjectStudioPage() {
             </aside>
           )}
 
-          <main className={`flex-1 bg-[#121214] relative overflow-hidden flex items-center justify-center p-6 ${isBlogPost ? 'overflow-y-auto' : ''}`}>
+          <main className={`flex-1 bg-[#121214] relative overflow-auto flex items-start justify-center p-6 ${isBlogPost ? '' : ''}`}>
             {!isBlogPost && (
             <div className="absolute top-4 left-4 z-10 flex gap-2">
               <Badge variant="outline" className="bg-zinc-900 border-zinc-800 text-zinc-400 font-mono text-[10px]">
                 {viewport === 'desktop' ? '1440px' : viewport === 'tablet' ? '768px' : '375px'}
               </Badge>
-              {focusZoom && (
-                <Badge variant="outline" className="bg-blue-950/50 border-blue-800 text-blue-400 font-mono text-[10px]">
-                  Focus mode
-                </Badge>
-              )}
               {viewport !== 'desktop' && (
                 <Badge variant="outline" className="bg-pink-950/50 border-pink-800 text-pink-400 font-mono text-[10px] capitalize">
                   Editing {viewport} styles
@@ -474,7 +463,11 @@ export default function ProjectStudioPage() {
                 width: viewport === 'desktop' ? '100%' : viewport === 'tablet' ? '768px' : '375px',
                 height: '100%',
               }}
-              className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative h-full"
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: 'top center',
+              }}
+              className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative h-full shrink-0"
             >
               <div className="h-full min-h-0 relative">
                 {!renderedHtml.trim() && isLandingPage && (
@@ -510,7 +503,6 @@ export default function ProjectStudioPage() {
                   html={renderedHtml}
                   projectId={projectId}
                   variant="studio"
-                  zoom={zoom}
                   editViewport={viewport}
                   onSelectElement={handleSelectElement}
                   onFocusRect={handleFocusRect}

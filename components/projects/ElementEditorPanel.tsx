@@ -113,7 +113,7 @@ export function ElementEditorPanel({
       </div>
 
       <div className="p-4 space-y-4 max-h-[40vh] overflow-y-auto">
-        {(element.kind === 'text' || element.kind === 'link' || !element.kind) && (
+        {(element.kind === 'text' || element.kind === 'link' || element.tag === 'button' || element.tag === 'a' || !element.kind) && (
           <div className="space-y-2">
             <Label className="text-[10px] text-zinc-500 uppercase font-bold">Text</Label>
             <Textarea
@@ -168,11 +168,11 @@ export function ElementEditorPanel({
           </div>
         )}
 
-        {(element.kind === 'text' || element.kind === 'link' || !element.kind) && (
-          <div className="p-3 rounded-lg bg-blue-600/10 border border-blue-500/20 space-y-2">
+        {(element.kind === 'text' || element.kind === 'link' || element.tag === 'button' || element.tag === 'a' || !element.kind) && (
+          <div className="p-3 rounded-lg bg-violet-950/30 border border-violet-500/25 space-y-2">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-              <span className="text-[10px] font-bold uppercase text-blue-300">AI enhance</span>
+              <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+              <span className="text-[10px] font-bold uppercase text-violet-300">AI enhance</span>
             </div>
             <Input
               value={aiPrompt}
@@ -182,7 +182,7 @@ export function ElementEditorPanel({
             />
             <Button
               size="sm"
-              className="w-full h-7 text-[10px] bg-blue-600"
+              className="w-full h-8 text-[10px] bg-violet-600 hover:bg-violet-500 text-white"
               onClick={runAi}
               disabled={aiLoading || !aiPrompt.trim()}
             >
@@ -205,7 +205,7 @@ export function ElementEditorPanel({
           Close
         </Button>
         <Button
-          className="flex-1 h-8 text-[10px] uppercase bg-blue-600"
+          className="flex-1 h-8 text-[10px] uppercase bg-violet-600 hover:bg-violet-500 text-white"
           onClick={() => {
             if (element.kind === 'image') applyImage()
             else if (element.kind === 'link') applyLink()

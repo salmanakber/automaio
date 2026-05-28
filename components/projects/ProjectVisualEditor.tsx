@@ -19,41 +19,41 @@ import { VISUAL_EDITOR_SCRIPT } from '@/lib/editor/visual-editor-script'
 import { buildWidgetHtml, type EditorWidgetType } from '@/lib/editor/editor-widgets'
 import type { EditViewport, ElementStyles, StyleTarget } from '@/lib/editor/responsive-styles'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
+import { playEditorSound, type EditorSound } from '@/lib/editor/editor-sounds'
 
-/* ─── Elementor-style editor chrome injected into the iframe ─── */
+/* ─── Selection chrome — outline only so applied colors stay visible ─── */
 const EDITOR_CSS = `
-[data-am-id] { transition: outline 0.12s ease, box-shadow 0.12s ease, background 0.12s ease; cursor: pointer !important; }
-[data-am-id]:hover { outline: 1px dashed #a78bfa !important; outline-offset: 2px; }
-[data-am-id].am-active { outline: 2px solid #7c3aed !important; outline-offset: 2px; background: rgba(124,58,237,0.04) !important; }
+[data-am-id] { transition: outline 0.12s ease, box-shadow 0.12s ease; cursor: pointer !important; }
+[data-am-id]:hover { outline: 2px dashed #a78bfa !important; outline-offset: 2px; }
+[data-am-id].am-active { outline: 2px solid #7c3aed !important; outline-offset: 2px; box-shadow: 0 0 0 3px rgba(124,58,237,0.2) !important; }
 [data-am-block] { position: relative; }
 [data-am-block]:hover, [data-am-block].am-block-hover {
-  outline: 2px solid #c026d3 !important; outline-offset: -1px;
-  box-shadow: inset 0 0 0 1px rgba(192,38,211,0.25);
+  outline: 2px dashed #d946ef !important; outline-offset: -1px;
 }
 [data-am-block].am-block-active {
-  outline: 2px solid #a21caf !important; outline-offset: -1px;
-  box-shadow: 0 0 0 4px rgba(162,28,175,0.15), inset 0 0 0 1px rgba(162,28,175,0.35);
+  outline: 2px solid #c026d3 !important; outline-offset: -1px;
+  box-shadow: 0 0 0 3px rgba(192,38,211,0.18) !important;
 }
-[data-am-block].am-dragging { opacity: 0.45 !important; outline: 2px dashed #7c3aed !important; }
+[data-am-block].am-dragging { opacity: 0.5 !important; outline: 2px dashed #7c3aed !important; }
 [data-am-drop-zone].am-drop-active {
   outline: 2px dashed #22c55e !important; outline-offset: 4px;
-  background: rgba(34,197,94,0.06) !important; min-height: 48px;
+  min-height: 48px;
 }
 [data-am-kind="container"]:not([data-am-block]):hover { outline: 1px dashed #8b5cf6 !important; }
 #am-tb { position: fixed; z-index: 999999; display: none; pointer-events: auto; }
-#am-tb-inner { background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 4px; display: flex; align-items: center; gap: 2px; box-shadow: 0 12px 40px rgba(0,0,0,0.45); white-space: nowrap; }
-#am-tb button { color: #fafafa; border: none; padding: 7px 11px; border-radius: 6px; cursor: pointer; font: 600 11px/1 system-ui,sans-serif; display: flex; align-items: center; gap: 4px; background: transparent; }
-#am-tb button:hover { background: #27272a; }
-#am-tb .am-drag { cursor: grab; color: #a78bfa; padding: 7px 8px; }
-#am-tb .am-drag:active { cursor: grabbing; }
-#am-tb .am-ai { background: linear-gradient(135deg,#7c3aed,#a855f7); }
-#am-tb .am-ai:hover { background: linear-gradient(135deg,#6d28d9,#9333ea); }
-#am-tb .am-done { background: #059669; }
-#am-tb .am-done:hover { background: #047857; }
-#am-tb .am-del { background: #dc2626; }
-#am-tb .am-del:hover { background: #b91c1c; }
-html[data-am-edit-viewport="mobile"] body { outline: 3px solid rgba(236,72,153,0.25); outline-offset: -3px; }
-html[data-am-edit-viewport="tablet"] body { outline: 3px solid rgba(59,130,246,0.2); outline-offset: -3px; }
+#am-tb-inner { background: #1e1e2e; border: 1px solid #52525b; border-radius: 10px; padding: 4px; display: flex; align-items: center; gap: 3px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); white-space: nowrap; }
+#am-tb button { color: #fafafa; border: none; padding: 8px 12px; border-radius: 7px; cursor: pointer; font: 600 11px/1 system-ui,sans-serif; display: flex; align-items: center; gap: 4px; background: #27272a; }
+#am-tb button:hover { background: #3f3f46; color: #fff; }
+#am-tb .am-drag { cursor: grab; background: #312e81; color: #c4b5fd; }
+#am-tb .am-drag:hover { background: #3730a3; }
+#am-tb .am-ai { background: linear-gradient(135deg,#6d28d9,#7c3aed); color: #fff; }
+#am-tb .am-ai:hover { background: linear-gradient(135deg,#5b21b6,#6d28d9); }
+#am-tb .am-done { background: #047857; color: #fff; }
+#am-tb .am-done:hover { background: #065f46; }
+#am-tb .am-del { background: #b91c1c; color: #fff; }
+#am-tb .am-del:hover { background: #991b1b; }
+html[data-am-edit-viewport="mobile"] body { box-shadow: inset 0 0 0 3px rgba(236,72,153,0.2); }
+html[data-am-edit-viewport="tablet"] body { box-shadow: inset 0 0 0 3px rgba(59,130,246,0.15); }
 `
 
 /* Editor script lives in lib/editor/visual-editor-script.ts */
@@ -413,6 +413,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
           setHasChanges(true)
           setSelected(null)
           onSelectElement?.(null)
+          playEditorSound('delete')
           scheduleAutoSave()
           break
         case 'am-updated':
@@ -525,6 +526,11 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
           }
           setHasChanges(true)
           scheduleAutoSave()
+          break
+        case 'am-sound':
+          if (d.sound && ['select', 'insert', 'delete', 'change'].includes(d.sound)) {
+            playEditorSound(d.sound as EditorSound)
+          }
           break
       }
     }
@@ -840,14 +846,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       </>
       )}
 
-      {isStudio && (
-        <div
-          className="h-full w-full overflow-auto flex items-start justify-center"
-          style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
-        >
-          <div className="h-full w-full min-h-full">{iframeBlock}</div>
-        </div>
-      )}
+      {isStudio && iframeBlock}
 
       {/* Selected element info bar */}
       {!isStudio && selected && (
