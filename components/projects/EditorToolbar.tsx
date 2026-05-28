@@ -32,6 +32,7 @@ import {
 type EditorToolbarProps = {
   canUndo?: boolean
   canRedo?: boolean
+  layout?: 'bottom' | 'sidebar'
   onUndo: () => void
   onRedo: () => void
   onDuplicate: () => void
@@ -50,11 +51,13 @@ function WidgetButton({
   label,
   category,
   onInsert,
+  compact,
 }: {
   type: EditorWidgetType
   label: string
   category: string
   onInsert: (type: EditorWidgetType) => void
+  compact?: boolean
 }) {
   const html = buildWidgetHtml(type)
 
@@ -69,7 +72,11 @@ function WidgetButton({
         e.dataTransfer.effectAllowed = 'copy'
       }}
       onClick={() => onInsert(type)}
-      className="group relative flex flex-col items-center justify-center gap-1 h-16 w-[calc(50%-4px)] rounded-lg border border-zinc-700/80 bg-zinc-900/80 hover:border-violet-500/60 hover:bg-violet-950/30 transition-all cursor-grab active:cursor-grabbing"
+      className={
+        compact
+          ? 'group relative flex flex-col items-center justify-center gap-0.5 h-14 rounded-lg border border-zinc-700/80 bg-zinc-900/80 hover:border-violet-500/60 hover:bg-violet-950/30 transition-all cursor-grab active:cursor-grabbing'
+          : 'group relative flex flex-col items-center justify-center gap-1 h-16 w-[calc(50%-4px)] rounded-lg border border-zinc-700/80 bg-zinc-900/80 hover:border-violet-500/60 hover:bg-violet-950/30 transition-all cursor-grab active:cursor-grabbing'
+      }
       title={`Drag onto canvas or click to insert · ${label}`}
     >
       <GripVertical className="absolute top-1 right-1 h-2.5 w-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -94,6 +101,7 @@ function WidgetButton({
 export function EditorToolbar({
   canUndo,
   canRedo,
+  layout = 'bottom',
   onUndo,
   onRedo,
   onDuplicate,
@@ -110,12 +118,26 @@ export function EditorToolbar({
 
   const categories = Object.keys(EDITOR_CATEGORY_LABELS) as Array<keyof typeof EDITOR_CATEGORY_LABELS>
 
+  const isSidebar = layout === 'sidebar'
+
   return (
-    <div className="border-t border-zinc-800 bg-[#09090b] shrink-0 max-h-[42vh] flex flex-col">
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-zinc-800/80 shrink-0">
-        <MousePointer2 className="h-3.5 w-3.5 text-violet-400 mr-1" />
-        <span className="text-[10px] text-zinc-500">
-          Drag blocks onto canvas · reorder by dragging
+    <div
+      className={
+        isSidebar
+          ? 'flex flex-col h-full bg-[#09090b]'
+          : 'border-t border-zinc-800 bg-[#09090b] shrink-0 max-h-[42vh] flex flex-col'
+      }
+    >
+      <div
+        className={
+          isSidebar
+            ? 'flex items-center gap-1 px-3 py-2.5 border-b border-zinc-800 shrink-0'
+            : 'flex items-center gap-1 px-3 py-2 border-b border-zinc-800/80 shrink-0'
+        }
+      >
+        <MousePointer2 className="h-3.5 w-3.5 text-violet-400 mr-1 shrink-0" />
+        <span className="text-[10px] text-zinc-500 leading-tight">
+          {isSidebar ? 'Drag or click to add blocks' : 'Drag blocks onto canvas · reorder by dragging'}
         </span>
         <div className="flex-1" />
         <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!canUndo} onClick={onUndo} title="Undo (Ctrl+Z)">
@@ -124,12 +146,28 @@ export function EditorToolbar({
         <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!canRedo} onClick={onRedo} title="Redo">
           <Redo2 className="h-3.5 w-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px] gap-1" onClick={onDuplicate} title="Duplicate selected">
-          <Copy className="h-3 w-3" /> Dup
-        </Button>
+        {!isSidebar && (
+          <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px] gap-1" onClick={onDuplicate} title="Duplicate selected">
+            <Copy className="h-3 w-3" /> Dup
+          </Button>
+        )}
       </div>
 
-      <div className="overflow-y-auto custom-scrollbar flex-1">
+      {isSidebar && (
+        <div className="px-3 py-2 border-b border-zinc-800/80 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full h-8 text-[10px] gap-1.5 border-zinc-700"
+            onClick={onDuplicate}
+          >
+            <Copy className="h-3 w-3" /> Duplicate selected
+          </Button>
+        </div>
+      )}
+
+      <div className="overflow-y-auto custom-scrollbar flex-1 min-h-0">
         <Accordion type="multiple" defaultValue={['structure', 'blocks']} className="px-2 pb-2">
           {categories.map((cat) => {
             const Icon = CATEGORY_ICONS[cat] ?? Plus
@@ -143,7 +181,7 @@ export function EditorToolbar({
                   <span className="text-zinc-600 font-normal normal-case">({items.length})</span>
                 </AccordionTrigger>
                 <AccordionContent>
-                  <div className="flex flex-wrap gap-2 pb-2">
+                  <div className={isSidebar ? 'grid grid-cols-2 gap-1.5 pb-2' : 'flex flex-wrap gap-2 pb-2'}>
                     {items.map((w) => (
                       <WidgetButton
                         key={w.type}
@@ -151,6 +189,7 @@ export function EditorToolbar({
                         label={w.label}
                         category={cat}
                         onInsert={onInsertWidget}
+                        compact={isSidebar}
                       />
                     ))}
                   </div>

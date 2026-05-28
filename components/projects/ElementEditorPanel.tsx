@@ -20,6 +20,7 @@ export type SelectedElement = {
 type ElementEditorPanelProps = {
   element: SelectedElement | null
   projectId: string
+  embedded?: boolean
   onClose: () => void
   onUpdate: (msg: Record<string, unknown>) => void
   onDelete: (id: string) => void
@@ -28,6 +29,7 @@ type ElementEditorPanelProps = {
 export function ElementEditorPanel({
   element,
   projectId,
+  embedded = false,
   onClose,
   onUpdate,
   onDelete,
@@ -90,18 +92,24 @@ export function ElementEditorPanel({
   const Icon =
     element.kind === 'image' ? ImageIcon : element.kind === 'link' ? LinkIcon : element.kind === 'code' ? Code : Type
 
+  const shellClass = embedded
+    ? 'w-full'
+    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[min(520px,calc(100%-2rem))] rounded-xl border border-zinc-700 bg-[#0c0c0e]/95 backdrop-blur-md shadow-2xl'
+
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[min(520px,calc(100%-2rem))] rounded-xl border border-zinc-700 bg-[#0c0c0e]/95 backdrop-blur-md shadow-2xl">
+    <div className={shellClass}>
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-blue-400" />
           <span className="text-[10px] font-black uppercase tracking-widest text-zinc-300">
-            Edit &lt;{element.tag}&gt;
+            Content · &lt;{element.tag}&gt;
           </span>
         </div>
-        <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none">
-          &times;
-        </button>
+        {!embedded && (
+          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none">
+            &times;
+          </button>
+        )}
       </div>
 
       <div className="p-4 space-y-4 max-h-[40vh] overflow-y-auto">

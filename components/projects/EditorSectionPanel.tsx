@@ -28,6 +28,7 @@ export type SectionSelection = {
 type EditorSectionPanelProps = {
   section: SectionSelection | null
   editViewport?: 'desktop' | 'tablet' | 'mobile'
+  embedded?: boolean
   onSetLayout: (layout: '1col' | '2col' | '3col') => void
   onSetPadding: (padding: SectionPadding) => void
   onSetColumnWidths: (widths: number[]) => void
@@ -64,6 +65,7 @@ function PadSlider({
 export function EditorSectionPanel({
   section,
   editViewport = 'desktop',
+  embedded = false,
   onSetLayout,
   onSetPadding,
   onSetColumnWidths,
@@ -140,18 +142,30 @@ export function EditorSectionPanel({
     }
   }
 
+  const shellClass = embedded
+    ? 'w-full'
+    : 'absolute top-4 right-4 z-20 w-72 rounded-xl border border-violet-500/30 bg-[#0c0c0e]/95 backdrop-blur-md shadow-2xl max-h-[calc(100%-2rem)] overflow-y-auto custom-scrollbar'
+
   return (
-    <div className="absolute top-4 right-4 z-20 w-72 rounded-xl border border-violet-500/30 bg-[#0c0c0e]/95 backdrop-blur-md shadow-2xl max-h-[calc(100%-2rem)] overflow-y-auto custom-scrollbar">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 sticky top-0 bg-[#0c0c0e]/95 backdrop-blur-sm z-10">
+    <div className={shellClass}>
+      <div
+        className={
+          embedded
+            ? 'flex items-center gap-2 px-4 py-3 border-b border-zinc-800'
+            : 'flex items-center justify-between px-3 py-2 border-b border-zinc-800 sticky top-0 bg-[#0c0c0e]/95 backdrop-blur-sm z-10'
+        }
+      >
         <div className="flex items-center gap-2">
           <LayoutGrid className="h-3.5 w-3.5 text-violet-400" />
           <span className="text-[10px] font-black uppercase tracking-widest text-zinc-300">
             {label}
           </span>
         </div>
-        <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none">
-          &times;
-        </button>
+        {!embedded && (
+          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none">
+            &times;
+          </button>
+        )}
       </div>
 
       <div className="p-3 space-y-4">

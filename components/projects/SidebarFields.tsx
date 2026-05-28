@@ -19,6 +19,7 @@ type SidebarFieldsProps = {
   onImportHtml: (html: string) => void
   onGenerateSeo: () => Promise<void>
   seoGenerating?: boolean
+  compact?: boolean
 }
 
 export function SidebarFields({
@@ -27,6 +28,7 @@ export function SidebarFields({
   onImportHtml,
   onGenerateSeo,
   seoGenerating,
+  compact = false,
 }: SidebarFieldsProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [importText, setImportText] = useState('')
@@ -58,10 +60,10 @@ export function SidebarFields({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#09090b]">
+    <div className={compact ? 'flex flex-col' : 'flex flex-col h-full bg-[#09090b]'}>
       <Accordion type="multiple" defaultValue={['messaging', 'brand', 'seo']} className="w-full">
-        <AccordionItem value="messaging" className="border-zinc-800 px-4">
-          <AccordionTrigger className="hover:no-underline py-4">
+        <AccordionItem value="messaging" className={compact ? 'border-zinc-800 border-x-0' : 'border-zinc-800 px-4'}>
+          <AccordionTrigger className={compact ? 'hover:no-underline py-3 px-0' : 'hover:no-underline py-4'}>
             <div className="flex items-center gap-2">
               <Megaphone className="h-4 w-4 text-blue-500" />
               <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Messaging</span>
@@ -95,8 +97,8 @@ export function SidebarFields({
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="brand" className="border-zinc-800 px-4">
-          <AccordionTrigger className="hover:no-underline py-4">
+        <AccordionItem value="brand" className={compact ? 'border-zinc-800 border-x-0' : 'border-zinc-800 px-4'}>
+          <AccordionTrigger className={compact ? 'hover:no-underline py-3 px-0' : 'hover:no-underline py-4'}>
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-emerald-500" />
               <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Context</span>
@@ -123,8 +125,8 @@ export function SidebarFields({
         </AccordionItem>
 
         {showSeo && (
-          <AccordionItem value="seo" className="border-zinc-800 px-4">
-            <AccordionTrigger className="hover:no-underline py-4">
+          <AccordionItem value="seo" className={compact ? 'border-zinc-800 border-x-0' : 'border-zinc-800 px-4'}>
+            <AccordionTrigger className={compact ? 'hover:no-underline py-3 px-0' : 'hover:no-underline py-4'}>
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-violet-500" />
                 <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">SEO</span>
@@ -186,8 +188,8 @@ export function SidebarFields({
         )}
 
         {!isBlog && (
-          <AccordionItem value="import" className="border-zinc-800 px-4">
-            <AccordionTrigger className="hover:no-underline py-4">
+          <AccordionItem value="import" className={compact ? 'border-zinc-800 border-x-0' : 'border-zinc-800 px-4'}>
+            <AccordionTrigger className={compact ? 'hover:no-underline py-3 px-0' : 'hover:no-underline py-4'}>
               <div className="flex items-center gap-2">
                 <FileUp className="h-4 w-4 text-amber-500" />
                 <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Import Template</span>
@@ -227,12 +229,14 @@ export function SidebarFields({
         )}
       </Accordion>
 
+      {!compact && (
       <div className="mt-auto p-4 bg-zinc-900/30 border-t border-zinc-800">
         <div className="flex items-start gap-2 text-[10px] text-zinc-500 leading-relaxed">
           <Info className="h-3 w-3 mt-0.5 shrink-0 text-blue-500" />
           <p>Click any element on the canvas to edit. SEO syncs to Webflow on publish.</p>
         </div>
       </div>
+      )}
     </div>
   )
 }

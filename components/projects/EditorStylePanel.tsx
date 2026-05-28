@@ -18,6 +18,7 @@ type EditorStylePanelProps = {
   editViewport: EditViewport
   onApplyStyles: (id: string, styles: ElementStyles) => void
   onClose: () => void
+  embedded?: boolean
 }
 
 const VIEWPORT_META: Record<
@@ -77,6 +78,7 @@ export function EditorStylePanel({
   editViewport,
   onApplyStyles,
   onClose,
+  embedded = false,
 }: EditorStylePanelProps) {
   const [styles, setStyles] = useState<ElementStyles>({})
   const [radius, setRadius] = useState(0)
@@ -98,18 +100,30 @@ export function EditorStylePanel({
     onApplyStyles(target.id, next)
   }
 
+  const shellClass = embedded
+    ? 'w-full'
+    : 'absolute top-4 left-4 z-20 w-64 rounded-xl border border-violet-500/30 bg-[#0c0c0e]/95 backdrop-blur-md shadow-2xl max-h-[calc(100%-2rem)] overflow-y-auto custom-scrollbar'
+
   return (
-    <div className="absolute top-4 left-4 z-20 w-64 rounded-xl border border-violet-500/30 bg-[#0c0c0e]/95 backdrop-blur-md shadow-2xl max-h-[calc(100%-2rem)] overflow-y-auto custom-scrollbar">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 sticky top-0 bg-[#0c0c0e]/95 backdrop-blur-sm z-10">
+    <div className={shellClass}>
+      <div
+        className={
+          embedded
+            ? 'flex items-center gap-2 px-4 py-3 border-b border-zinc-800 bg-violet-950/10'
+            : 'flex items-center justify-between px-3 py-2 border-b border-zinc-800 sticky top-0 bg-[#0c0c0e]/95 backdrop-blur-sm z-10'
+        }
+      >
         <div className="flex items-center gap-2 min-w-0">
           <Paintbrush className="h-3.5 w-3.5 text-violet-400 shrink-0" />
           <span className="text-[10px] font-black uppercase tracking-widest text-zinc-300 truncate">
             Style
           </span>
         </div>
-        <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none shrink-0">
-          &times;
-        </button>
+        {!embedded && (
+          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none shrink-0">
+            &times;
+          </button>
+        )}
       </div>
 
       <div className="px-3 py-2 border-b border-zinc-800/80 bg-violet-950/20">

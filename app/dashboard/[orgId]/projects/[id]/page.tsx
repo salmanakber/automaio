@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   ChevronLeft,
   Monitor,
@@ -19,8 +19,6 @@ import {
   RefreshCw,
   Trash2,
   LayoutGrid,
-  Settings2,
-  Eye,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -42,17 +40,15 @@ import {
   type ProjectVisualEditorHandle,
 } from '@/components/projects/ProjectVisualEditor'
 import { SidebarFields } from '@/components/projects/SidebarFields'
-import { ElementEditorPanel, type SelectedElement } from '@/components/projects/ElementEditorPanel'
+import { StudioLeftSidebar } from '@/components/projects/StudioLeftSidebar'
+import { StudioRightSidebar } from '@/components/projects/StudioRightSidebar'
+import type { SelectedElement } from '@/components/projects/ElementEditorPanel'
 import { PublishDialog } from '@/components/projects/PublishDialog'
 import { AiProgressOverlay } from '@/components/projects/AiProgressOverlay'
 import { RepersonalizePanel } from '@/components/projects/RepersonalizePanel'
 import { BlogStudioPanel } from '@/components/projects/BlogStudioPanel'
-import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
-import { EditorToolbar } from '@/components/projects/EditorToolbar'
-import { EditorThemePanel } from '@/components/projects/EditorThemePanel'
-import { EditorSectionPanel, type SectionSelection } from '@/components/projects/EditorSectionPanel'
-import { EditorStylePanel } from '@/components/projects/EditorStylePanel'
 import type { StyleTarget } from '@/lib/editor/responsive-styles'
+import type { SectionSelection } from '@/components/projects/EditorSectionPanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 import {
@@ -296,223 +292,369 @@ export default function ProjectStudioPage() {
 
   return (
     <TooltipProvider>
-      <div className="h-screen w-full flex flex-col bg-[#09090b] text-zinc-200 overflow-hidden font-sans">
-        
-        {/* --- REFINED HEADER --- */}
-        <header className="h-14 border-b border-zinc-800/60 flex items-center justify-between px-4 bg-[#09090b]/80 backdrop-blur-md z-[60] shrink-0">
-          <div className="flex items-center gap-3 w-1/3">
+      <div className="h-screen w-full flex flex-col bg-[#09090b] text-zinc-200 overflow-hidden">
+        <header className="h-14 border-b border-zinc-800 flex items-center justify-between px-4 bg-[#09090b] z-50 shrink-0">
+          <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 text-zinc-400 hover:text-white hover:bg-zinc-800/50"
+              className="text-zinc-400 hover:text-white"
               onClick={() => router.push(`/dashboard/${orgId}/projects`)}
             >
               <ChevronLeft className="h-5 w-5" />
             </Button>
-            <div className="flex flex-col min-w-0">
-              <h1 className="text-sm font-semibold truncate text-zinc-100">
-                {project?.name as string || 'Untitled Project'}
-              </h1>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="h-4 px-1.5 text-[9px] uppercase tracking-tighter bg-blue-500/10 text-blue-400 border-blue-500/20">
-                  {String(project?.contentType ?? '').replace('_', ' ')}
-                </Badge>
-              </div>
+            <Separator orientation="vertical" className="h-6 bg-zinc-800" />
+            <div>
+              <h1 className="text-sm font-semibold truncate max-w-[200px]">{project?.name as string}</h1>
+              <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">
+                {String(project?.contentType ?? '').replace('_', ' ')}
+              </p>
             </div>
           </div>
 
-          {/* CENTRAL VIEWPORT CONTROLS - Now more integrated */}
-          <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 p-1 rounded-lg shadow-inner">
-            <ViewportButton icon={Monitor} active={viewport === 'desktop'} onClick={() => setViewport('desktop')} label="Desktop" />
-            <ViewportButton icon={Tablet} active={viewport === 'tablet'} onClick={() => setViewport('tablet')} label="Tablet" />
-            <ViewportButton icon={Smartphone} active={viewport === 'mobile'} onClick={() => setViewport('mobile')} label="Mobile" />
-            <Separator orientation="vertical" className="h-4 mx-1 bg-zinc-800" />
-            <div className="flex items-center gap-0.5">
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+            {!isBlogPost && (
+            <>
+            <div className="flex items-center bg-zinc-900 rounded-full border border-zinc-800 p-1 shadow-2xl">
+              <ViewportButton icon={Monitor} active={viewport === 'desktop'} onClick={() => setViewport('desktop')} label="Desktop" />
+              <ViewportButton icon={Tablet} active={viewport === 'tablet'} onClick={() => setViewport('tablet')} label="Tablet" />
+              <ViewportButton icon={Smartphone} active={viewport === 'mobile'} onClick={() => setViewport('mobile')} label="Mobile" />
+            </div>
+            <div className="flex items-center bg-zinc-900 rounded-full border border-zinc-800 p-0.5 ml-2">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
                 <ZoomOut className="h-3.5 w-3.5" />
               </Button>
-              <span className="text-[10px] font-mono w-9 text-center text-zinc-400 selection:bg-none">
-                {Math.round(zoom * 100)}%
-              </span>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500" onClick={() => setZoom((z) => Math.min(2, z + 0.1))}>
+              <span className="text-[10px] font-mono w-10 text-center text-zinc-400">{Math.round(zoom * 100)}%</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(2, z + 0.1))}>
                 <ZoomIn className="h-3.5 w-3.5" />
               </Button>
             </div>
+            </>
+            )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 w-1/3">
-            <AnimatePresence> {/* ─── FRAMER MOTION ─── */}
-              {saved && (
-                <motion.span 
-                  initial={{ opacity: 0, x: 10 }} 
-                  animate={{ opacity: 1, x: 0 }} 
-                  exit={{ opacity: 0 }}
-                  className="text-xs text-emerald-500 flex items-center gap-1.5 mr-2 font-medium"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Saved
-                </motion.span>
-              )}
-            </AnimatePresence>
-
+          <div className="flex items-center gap-3">
+            {saveError && (
+              <span className="text-xs text-red-400 max-w-[200px] truncate" title={saveError}>
+                {saveError}
+              </span>
+            )}
+            {saved && (
+              <span className="text-xs text-emerald-500 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" /> Saved
+              </span>
+            )}
+            {!isBlogPost && (
             <Button
               variant="outline"
               size="sm"
-              className="h-9 border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800"
+              className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1.5"
+              onClick={() => setAiOpen(true)}
+            >
+              <Wand2 className="h-3.5 w-3.5" /> AI Generate
+            </Button>
+            )}
+            {isLandingPage && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1.5"
+                onClick={() => setRepersonalizeOpen(true)}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                {hasBusinessContext ? 'Re-personalize' : 'Personalize'}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300"
               onClick={() => setShowPublish(true)}
             >
-              <Upload className="h-3.5 w-3.5 mr-2" /> Publish
+              <Upload className="h-4 w-4 mr-2" /> Publish
             </Button>
-            
             <Button
               size="sm"
-              className="h-9 bg-blue-600 hover:bg-blue-500 text-white px-4 font-medium transition-all shadow-[0_0_20px_rgba(37,99,235,0.2)]"
+              className="h-8 bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]"
               onClick={handleSaveAll}
               disabled={isSaving}
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Save Changes
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-zinc-500 hover:text-red-400"
+              onClick={handleDeleteProject}
+              disabled={deleting}
+              title="Delete project"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </Button>
           </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* --- SIDEBAR --- */}
-          <aside className="w-[320px] border-r border-zinc-800 bg-[#0c0c0e] flex flex-col shrink-0 z-20">
-            <div className="h-12 flex items-center px-4 border-b border-zinc-800/50 bg-[#09090b]">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Project Configuration</span>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <SidebarFields
-                project={project!}
-                onUpdate={saveParameters}
-                onImportHtml={handleImportHtml}
-                onGenerateSeo={handleGenerateSeo}
-                seoGenerating={seoGenerating}
-              />
-              
-              {isLandingPage && (
-                <div className="p-4 border-t border-zinc-800/50 space-y-6">
-                  <EditorThemePanel theme={editorTheme} onChange={setEditorTheme} onApply={() => {/* logic */}} />
-                  <ProjectUrlsCard projectId={projectId} liveUrl={publishedLiveUrl} />
-                </div>
-              )}
-            </div>
-          </aside>
-
-          {/* --- THE STAGE (MAIN EDITOR AREA) --- */}
-          <main className="flex-1 bg-[#18181b] relative overflow-hidden flex flex-col">
-            
-            {/* Contextual Toolbar for AI & Customization */}
-            {!isBlogPost && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 p-1.5 bg-zinc-900/80 backdrop-blur border border-zinc-700/50 rounded-full shadow-2xl">
-                <Button variant="ghost" size="sm" className="h-8 rounded-full text-xs gap-2 text-zinc-300 hover:text-white" onClick={() => setAiOpen(true)}>
-                  <Wand2 className="h-3.5 w-3.5 text-blue-400" /> AI Update
-                </Button>
-                <Separator orientation="vertical" className="h-4 bg-zinc-700" />
-                {isLandingPage && (
-                  <Button variant="ghost" size="sm" className="h-8 rounded-full text-xs gap-2 text-zinc-300 hover:text-white" onClick={() => setRepersonalizeOpen(true)}>
-                    <RefreshCw className="h-3.5 w-3.5 text-emerald-400" /> Personalize
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* THE CANVAS CONTAINER */}
-            <div className={`flex-1 relative transition-all duration-500 ease-in-out p-8 flex items-start justify-center overflow-auto custom-scrollbar bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px]`}>
-              
-              {isBlogPost ? (
-                <div className="w-full max-w-4xl h-full">
-                   <BlogStudioPanel project={project!} projectId={projectId} onUpdate={saveParameters} />
-                </div>
-              ) : (
-                <motion.div
-                  layout
-                  initial={false}
-                  animate={{
-                    width: viewport === 'desktop' ? '100%' : viewport === 'tablet' ? '768px' : '375px',
-                  }}
-                  className="relative min-h-[100%] bg-white shadow-[0_30px_100px_rgba(0,0,0,0.6)] rounded-sm overflow-hidden border border-zinc-800 transition-shadow duration-700"
+          {justOnboarded && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 max-w-lg w-full px-4">
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/90 backdrop-blur px-4 py-3 text-sm text-emerald-300 flex items-center justify-between gap-3 shadow-lg">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  Landing page personalized! Refine in the studio, then publish.
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-emerald-700 text-emerald-300 shrink-0"
+                  onClick={() => setShowPublish(true)}
                 >
-                  {/* Internal Editor Logic */}
-                  {!renderedHtml.trim() && isLandingPage ? (
-                    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-zinc-900 p-12 text-center">
-                       <LayoutGrid className="h-12 w-12 text-blue-500 mb-6 opacity-50" />
-                       <h3 className="text-xl font-medium text-white mb-3">Your canvas is empty</h3>
-                       <p className="text-zinc-400 mb-8 max-w-xs text-sm">Start with a professionally designed starter layout.</p>
-                       <div className="flex flex-col gap-3 w-full max-w-xs">
-                         <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => bootstrapBlankPage('full')}>
-                           Full Starter Pack
-                         </Button>
-                         <Button variant="outline" className="border-zinc-700" onClick={() => bootstrapBlankPage('minimal')}>
-                           Minimal Section
-                         </Button>
-                       </div>
-                    </div>
-                  ) : (
-                    <ProjectVisualEditor
-                      key={editorKey}
-                      ref={editorRef}
-                      html={renderedHtml}
-                      projectId={projectId}
-                      variant="studio"
-                      zoom={zoom}
-                      editViewport={viewport}
-                      onSelectElement={handleSelectElement}
-                      onFocusRect={handleFocusRect}
-                      onSectionSelect={handleSectionSelect}
-                      onStyleTargetChange={setStyleTarget}
-                      onHistoryChange={({ canUndo, canRedo }) => {
-                        setEditorCanUndo(canUndo)
-                        setEditorCanRedo(canRedo)
-                      }}
-                      onSave={(html) => setProject((p) => (p ? { ...p, renderedHtml: html } : p))}
-                    />
-                  )}
-                </motion.div>
+                  Publish
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!isBlogPost && isLandingPage && (
+            <StudioLeftSidebar
+              canUndo={editorCanUndo}
+              canRedo={editorCanRedo}
+              onUndo={() => editorRef.current?.undo()}
+              onRedo={() => editorRef.current?.redo()}
+              onDuplicate={() => editorRef.current?.duplicate()}
+              onInsertWidget={(type) => editorRef.current?.insertWidget(type)}
+            />
+          )}
+
+          {!isBlogPost && !isLandingPage && (
+            <aside className="w-72 border-r border-zinc-800 bg-[#09090b] flex flex-col shrink-0">
+              <div className="py-3 px-4 border-b border-zinc-800">
+                <span className="text-xs font-bold uppercase tracking-widest text-blue-500">Content</span>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+                <SidebarFields
+                  project={project!}
+                  onUpdate={saveParameters}
+                  onImportHtml={handleImportHtml}
+                  onGenerateSeo={handleGenerateSeo}
+                  seoGenerating={seoGenerating}
+                />
+              </div>
+            </aside>
+          )}
+
+          <main className={`flex-1 bg-[#121214] relative overflow-hidden flex items-center justify-center p-6 ${isBlogPost ? 'overflow-y-auto' : ''}`}>
+            {!isBlogPost && (
+            <div className="absolute top-4 left-4 z-10 flex gap-2">
+              <Badge variant="outline" className="bg-zinc-900 border-zinc-800 text-zinc-400 font-mono text-[10px]">
+                {viewport === 'desktop' ? '1440px' : viewport === 'tablet' ? '768px' : '375px'}
+              </Badge>
+              {focusZoom && (
+                <Badge variant="outline" className="bg-blue-950/50 border-blue-800 text-blue-400 font-mono text-[10px]">
+                  Focus mode
+                </Badge>
+              )}
+              {viewport !== 'desktop' && (
+                <Badge variant="outline" className="bg-pink-950/50 border-pink-800 text-pink-400 font-mono text-[10px] capitalize">
+                  Editing {viewport} styles
+                </Badge>
               )}
             </div>
-
-            {/* Floating Editor Controls */}
-            {!isBlogPost && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40">
-                 <EditorToolbar
-                    canUndo={editorCanUndo}
-                    canRedo={editorCanRedo}
-                    onUndo={() => editorRef.current?.undo()}
-                    onRedo={() => editorRef.current?.redo()}
-                    onDuplicate={() => editorRef.current?.duplicate()}
-                    onInsertWidget={(type) => editorRef.current?.insertWidget(type)}
-                  />
-              </div>
             )}
-            
-            {/* Side Floating Panels */}
-            <ElementEditorPanel
-              element={selectedElement}
+
+            {isBlogPost ? (
+              <BlogStudioPanel
+                project={project!}
+                projectId={projectId}
+                onUpdate={saveParameters}
+              />
+            ) : (
+            <motion.div
+              animate={{
+                width: viewport === 'desktop' ? '100%' : viewport === 'tablet' ? '768px' : '375px',
+                height: '100%',
+              }}
+              className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative h-full"
+            >
+              <div className="h-full min-h-0 relative">
+                {!renderedHtml.trim() && isLandingPage && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#121214]/95 backdrop-blur-sm p-8 text-center">
+                    <LayoutGrid className="h-10 w-10 text-violet-400 mb-4" />
+                    <h3 className="text-lg font-semibold text-white mb-2">Start building your page</h3>
+                    <p className="text-sm text-zinc-400 mb-6 max-w-sm">
+                      Choose a starter layout with header &amp; footer blocks, then drag more blocks from the Global panel on the left.
+                    </p>
+                    <div className="flex flex-wrap gap-3 justify-center">
+                      <Button
+                        className="bg-violet-600 hover:bg-violet-700 gap-2"
+                        disabled={bootstrappingBlank}
+                        onClick={() => bootstrapBlankPage('full')}
+                      >
+                        {bootstrappingBlank ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Full starter (Header + Hero + Footer)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="border-zinc-600 gap-2"
+                        disabled={bootstrappingBlank}
+                        onClick={() => bootstrapBlankPage('minimal')}
+                      >
+                        Minimal (Header + Section + Footer)
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <ProjectVisualEditor
+                  key={editorKey}
+                  ref={editorRef}
+                  html={renderedHtml}
+                  projectId={projectId}
+                  variant="studio"
+                  zoom={zoom}
+                  editViewport={viewport}
+                  onSelectElement={handleSelectElement}
+                  onFocusRect={handleFocusRect}
+                  onSectionSelect={handleSectionSelect}
+                  onStyleTargetChange={setStyleTarget}
+                  onHistoryChange={({ canUndo, canRedo }) => {
+                    setEditorCanUndo(canUndo)
+                    setEditorCanRedo(canRedo)
+                  }}
+                  onSave={(html) => setProject((p) => (p ? { ...p, renderedHtml: html } : p))}
+                />
+              </div>
+            </motion.div>
+            )}
+          </main>
+
+          {!isBlogPost && isLandingPage && (
+            <StudioRightSidebar
+              project={project!}
               projectId={projectId}
-              onClose={() => setSelectedElement(null)}
-              onUpdate={(msg) => editorRef.current?.postMessage(msg)}
-              onDelete={(id) => {
+              isLandingPage={isLandingPage}
+              editViewport={viewport}
+              editorTheme={editorTheme}
+              publishedLiveUrl={publishedLiveUrl}
+              selectedElement={selectedElement}
+              sectionSelection={sectionSelection}
+              styleTarget={styleTarget}
+              seoGenerating={seoGenerating}
+              onUpdateProject={saveParameters}
+              onImportHtml={handleImportHtml}
+              onGenerateSeo={handleGenerateSeo}
+              onThemeChange={setEditorTheme}
+              onApplyTheme={() => {
+                editorRef.current?.applyThemeCss(buildThemeCss(editorTheme))
+                const params = (project?.parameters as Record<string, unknown>) ?? {}
+                saveParameters({
+                  ...project!,
+                  parameters: {
+                    ...params,
+                    editorTheme: JSON.stringify(editorTheme),
+                  },
+                })
+              }}
+              onElementUpdate={(msg) => editorRef.current?.postMessage(msg)}
+              onElementDelete={(id) => {
                 editorRef.current?.postMessage({ type: 'am-delete-external', id })
                 setSelectedElement(null)
               }}
-            />
-
-            <EditorStylePanel
-              target={styleTarget}
-              editViewport={viewport}
-              onClose={() => setStyleTarget(null)}
               onApplyStyles={(id, styles) => editorRef.current?.setElementStyles(id, styles)}
+              onSetLayout={(layout) => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.setSectionLayout(sectionSelection.id, layout)
+                }
+              }}
+              onSetPadding={(padding) => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.setSectionPadding(sectionSelection.id, padding)
+                }
+              }}
+              onSetColumnWidths={(widths) => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.setColumnWidths(sectionSelection.id, widths)
+                }
+              }}
+              onSetGap={(gap) => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.setColumnGap(sectionSelection.id, gap)
+                }
+              }}
+              onStackMobile={() => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.stackColumnsOnMobile(sectionSelection.id)
+                }
+              }}
+              onInsertInside={(type) => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.insertWidget(type, {
+                    targetId: sectionSelection.id,
+                    position: 'inside',
+                  })
+                }
+              }}
             />
-
-            <EditorSectionPanel
-              section={sectionSelection}
-              // ... props
-            />
-          </main>
+          )}
         </div>
 
-        {/* ... (Dialogs and Overlays stay the same) */}
+        <PublishDialog
+          open={showPublish}
+          onOpenChange={setShowPublish}
+          project={project}
+          projectId={projectId}
+          orgId={orgId}
+          onPublished={(result) => {
+            if (result?.liveUrl) setPublishedLiveUrl(result.liveUrl)
+            load()
+          }}
+        />
+
+        <AiProgressOverlay
+          open={aiProgress || repersonalizing}
+          step={aiStep}
+          label={repersonalizing ? 'Re-personalizing your landing page' : 'AI is updating your template'}
+        />
+
+        {isLandingPage && (
+          <RepersonalizePanel
+            open={repersonalizeOpen}
+            onOpenChange={setRepersonalizeOpen}
+            orgId={orgId}
+            projectId={projectId}
+            projectParameters={(project?.parameters as Record<string, unknown>) ?? {}}
+            onComplete={handleRepersonalized}
+            onRunningChange={setRepersonalizing}
+          />
+        )}
+
+        <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+          <DialogContent className="bg-[#0c0c0e] border-zinc-800 text-white sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-400" />
+                AI Generate All Text
+              </DialogTitle>
+              <DialogDescription className="text-zinc-500">
+                Describe your product or campaign. AI updates text blocks only — layout and images stay intact.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              rows={6}
+              placeholder="Describe your business, audience, tone, and key messages…"
+              className="bg-zinc-950 border-zinc-800 text-sm"
+            />
+            <DialogFooter>
+              <Button variant="outline" className="border-zinc-700" onClick={() => setAiOpen(false)}>
+                Cancel
+              </Button>
+              <Button className="bg-blue-600 gap-2" onClick={runBulkAi} disabled={!aiPrompt.trim()}>
+                <Sparkles className="h-4 w-4" /> Generate
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   )
@@ -531,22 +673,18 @@ function ViewportButton({
 }) {
   return (
     <Tooltip>
-    <TooltipTrigger asChild>
-      <button
-        type="button"
-        onClick={onClick}
-        className={`h-8 w-10 flex items-center justify-center rounded-md transition-all ${
-          active 
-            ? 'bg-zinc-800 text-blue-400 shadow-sm border border-zinc-700' 
-            : 'text-zinc-500 hover:text-zinc-300'
-        }`}
-      >
-        <Icon className="h-4 w-4" />
-      </button>
-    </TooltipTrigger>
-    <TooltipContent side="bottom" className="text-[10px] font-bold">
-      {label}
-    </TooltipContent>
-  </Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          className={`p-2 rounded-full transition-all ${active ? 'bg-zinc-800 text-blue-500 shadow-inner' : 'text-zinc-500 hover:text-zinc-300'}`}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-xs uppercase font-bold tracking-tighter">
+        {label}
+      </TooltipContent>
+    </Tooltip>
   )
 }
