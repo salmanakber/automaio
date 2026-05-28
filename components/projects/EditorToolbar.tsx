@@ -27,6 +27,7 @@ import {
   List,
   Play,
   PlayCircle,
+  FileInput,
 } from 'lucide-react'
 import {
   EDITOR_WIDGETS,
@@ -78,6 +79,7 @@ const WIDGET_SPECIFIC_ICONS: Record<string, any> = {
   quote: Quote,
   hero: Sparkles,
   divider: Minus,
+  leadForm: FileInput,
 }
 
 function WidgetButton({

@@ -10,15 +10,64 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, Upload, ImageIcon, Check } from 'lucide-react'
+import { Loader2, Upload, ImageIcon, Check, X, AlertCircle } from 'lucide-react'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import type { MediaLibraryItem } from '@/lib/integrations/cloudinary'
+import { cn } from '@/lib/utils'
 
 type MediaManagerDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   projectId: string
   onSelect: (url: string) => void
+}
+
+type UploadJob = {
+  id: string
+  file: File
+  progress: number
+  status: 'pending' | 'uploading' | 'done' | 'error'
+  error?: string
+  previewUrl?: string
+}
+
+function uploadFileWithProgress(
+  projectId: string,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<{ item?: MediaLibraryItem; items?: MediaLibraryItem[]; error?: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const form = new FormData()
+    form.append('file', file)
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+    })
+
+    xhr.addEventListener('load', () => {
+      try {
+        const data = JSON.parse(xhr.responseText) as {
+          item?: MediaLibraryItem
+          items?: MediaLibraryItem[]
+          error?: string
+          errors?: { name: string; error: string }[]
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data)
+        } else {
+          reject(new Error(data.error ?? data.errors?.[0]?.error ?? 'Upload failed'))
+        }
+      } catch {
+        reject(new Error('Invalid server response'))
+      }
+    })
+
+    xhr.addEventListener('error', () => reject(new Error('Network error')))
+    xhr.open('POST', `/api/projects/${projectId}/media`)
+    xhr.withCredentials = true
+    xhr.send(form)
+  })
 }
 
 export function MediaManagerDialog({
@@ -30,11 +79,13 @@ export function MediaManagerDialog({
   const fileRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<MediaLibraryItem[]>([])
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [cloudinaryConfigured, setCloudinaryConfigured] = useState(true)
   const [selectedUrl, setSelectedUrl] = useState('')
   const [manualUrl, setManualUrl] = useState('')
+  const [jobs, setJobs] = useState<UploadJob[]>([])
+
+  const anyUploading = jobs.some((j) => j.status === 'uploading' || j.status === 'pending')
 
   const loadMedia = useCallback(async () => {
     setLoading(true)
@@ -60,31 +111,52 @@ export function MediaManagerDialog({
     if (open) {
       setSelectedUrl('')
       setManualUrl('')
+      setJobs([])
       void loadMedia()
     }
   }, [open, loadMedia])
 
-  const uploadFile = async (file: File) => {
-    setUploading(true)
+  const uploadFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => f.type.startsWith('image/'))
+    if (!list.length) {
+      setError('Please choose image files only')
+      return
+    }
+
     setError('')
-    try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch(`/api/projects/${projectId}/media`, {
-        method: 'POST',
-        body: form,
-        credentials: 'same-origin',
-      })
-      const data = await parseJsonResponse<{ item?: MediaLibraryItem; items?: MediaLibraryItem[]; error?: string }>(
-        res,
+    const newJobs: UploadJob[] = list.map((file) => ({
+      id: `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+      file,
+      progress: 0,
+      status: 'pending' as const,
+      previewUrl: URL.createObjectURL(file),
+    }))
+    setJobs((prev) => [...newJobs, ...prev])
+
+    for (const job of newJobs) {
+      setJobs((prev) =>
+        prev.map((j) => (j.id === job.id ? { ...j, status: 'uploading' as const, progress: 0 } : j)),
       )
-      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
-      setItems(data.items ?? [])
-      if (data.item?.url) setSelectedUrl(data.item.url)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed')
-    } finally {
-      setUploading(false)
+      try {
+        const data = await uploadFileWithProgress(projectId, job.file, (pct) => {
+          setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, progress: pct } : j)))
+        })
+        if (data.items) setItems(data.items)
+        if (data.item?.url) setSelectedUrl(data.item.url)
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === job.id ? { ...j, status: 'done' as const, progress: 100 } : j,
+          ),
+        )
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed'
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === job.id ? { ...j, status: 'error' as const, error: message } : j,
+          ),
+        )
+        setError(message)
+      }
     }
   }
 
@@ -104,19 +176,20 @@ export function MediaManagerDialog({
             Media library
           </DialogTitle>
           <DialogDescription className="text-zinc-500">
-            Upload images to Cloudinary or pick from your project library.
+            Upload one or many images to Cloudinary, or pick from your project library.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) void uploadFile(file)
+              const files = e.target.files
+              if (files?.length) void uploadFiles(files)
               e.target.value = ''
             }}
           />
@@ -124,18 +197,58 @@ export function MediaManagerDialog({
             type="button"
             size="sm"
             className="gap-2 bg-violet-600 hover:bg-violet-500"
-            disabled={uploading || !cloudinaryConfigured}
+            disabled={anyUploading || !cloudinaryConfigured}
             onClick={() => fileRef.current?.click()}
           >
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Upload to Cloudinary
+            {anyUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Upload images
           </Button>
           {!cloudinaryConfigured && (
-            <span className="text-[10px] text-amber-400">Add Cloudinary env vars to enable uploads</span>
+            <span className="text-[10px] text-amber-400">
+              Set CLOUDINARY_CLOUD_NAME + upload preset or API secret in .env
+            </span>
           )}
         </div>
 
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && (
+          <p className="text-xs text-red-400 flex items-start gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            {error}
+          </p>
+        )}
+
+        {jobs.length > 0 && (
+          <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar rounded-lg border border-zinc-800 p-2 bg-zinc-950/50">
+            {jobs.map((job) => (
+              <div key={job.id} className="flex items-center gap-2 text-xs">
+                {job.previewUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={job.previewUrl} alt="" className="h-8 w-8 rounded object-cover shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="truncate text-zinc-300">{job.file.name}</p>
+                  <div className="h-1.5 mt-1 rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className={cn(
+                        'h-full transition-all duration-200',
+                        job.status === 'error' ? 'bg-red-500' : 'bg-violet-500',
+                      )}
+                      style={{ width: `${job.progress}%` }}
+                    />
+                  </div>
+                  {job.status === 'error' && job.error && (
+                    <p className="text-[10px] text-red-400 mt-0.5 truncate">{job.error}</p>
+                  )}
+                </div>
+                {job.status === 'uploading' && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400 shrink-0" />
+                )}
+                {job.status === 'done' && <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
+                {job.status === 'error' && <X className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg p-2 bg-zinc-950/50">
           {loading ? (

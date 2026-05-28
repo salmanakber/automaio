@@ -10,14 +10,46 @@ export type CloudinaryUploadResult = {
   bytes: number
 }
 
-export function isCloudinaryConfigured(): boolean {
-  return Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY)
-}
-
 function getCloudName() {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME
   if (!cloudName) throw new Error('CLOUDINARY_CLOUD_NAME is not configured')
   return cloudName
+}
+
+function getApiSecret() {
+  const secret = process.env.CLOUDINARY_API_SECRET?.trim()
+  return secret || undefined
+}
+
+export function isCloudinaryConfigured(): boolean {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME
+  const preset = process.env.CLOUDINARY_UPLOAD_PRESET?.trim()
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim()
+  const apiSecret = getApiSecret()
+  return Boolean(cloudName && (preset || (apiKey && apiSecret)))
+}
+
+function formatCloudinaryError(data: Record<string, unknown>): string {
+  const err = data.error
+  if (typeof err === 'string') return err
+  if (err && typeof err === 'object' && 'message' in err) {
+    return String((err as { message: unknown }).message)
+  }
+  return 'Cloudinary upload failed'
+}
+
+function guessMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    avif: 'image/avif',
+  }
+  return (ext && map[ext]) || 'image/jpeg'
 }
 
 export async function uploadImageBuffer(
@@ -25,29 +57,40 @@ export async function uploadImageBuffer(
   options: { folder: string; filename?: string },
 ): Promise<CloudinaryUploadResult> {
   const cloudName = getCloudName()
-  const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET
-  const apiKey = process.env.CLOUDINARY_API_KEY
-  const apiSecret = process.env.CLOUDINARY_API_SECRET
+  const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET?.trim()
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim()
+  const apiSecret = getApiSecret()
+  const filename = options.filename ?? 'upload.jpg'
+  const mime = guessMimeType(filename)
 
   const form = new FormData()
-  form.append('file', new Blob([buffer]), options.filename ?? 'upload.jpg')
-  form.append('folder', options.folder)
+  const bytes = new Uint8Array(buffer)
+  form.append('file', new File([bytes], filename, { type: mime }))
 
   if (uploadPreset) {
     form.append('upload_preset', uploadPreset)
+    // Unsigned presets often lock folder in dashboard — only send folder when signed upload is used
+    if (apiSecret && apiKey) {
+      form.append('folder', options.folder)
+    }
   } else if (apiKey && apiSecret) {
     const timestamp = Math.round(Date.now() / 1000)
-    const paramsToSign = `folder=${options.folder}&timestamp=${timestamp}`
-    const signature = crypto
-      .createHash('sha1')
-      .update(paramsToSign + apiSecret)
-      .digest('hex')
+    const params: Record<string, string> = {
+      folder: options.folder,
+      timestamp: String(timestamp),
+    }
+    const paramsToSign = Object.keys(params)
+      .sort()
+      .map((k) => `${k}=${params[k]}`)
+      .join('&')
+    const signature = crypto.createHash('sha1').update(paramsToSign + apiSecret).digest('hex')
+    form.append('folder', options.folder)
     form.append('api_key', apiKey)
     form.append('timestamp', String(timestamp))
     form.append('signature', signature)
   } else {
     throw new Error(
-      'Cloudinary not configured — set CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET',
+      'Cloudinary not configured — set CLOUDINARY_UPLOAD_PRESET (unsigned) or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET',
     )
   }
 
@@ -58,7 +101,13 @@ export async function uploadImageBuffer(
 
   const data = (await res.json()) as Record<string, unknown>
   if (!res.ok) {
-    throw new Error(String(data.error ?? 'Cloudinary upload failed'))
+    const message = formatCloudinaryError(data)
+    if (message.toLowerCase().includes('preset not found')) {
+      throw new Error(
+        `${message}. Create an unsigned upload preset named "${uploadPreset}" in your Cloudinary dashboard, or set CLOUDINARY_API_SECRET for signed uploads.`,
+      )
+    }
+    throw new Error(message)
   }
 
   return {

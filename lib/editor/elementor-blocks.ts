@@ -1,12 +1,40 @@
+import {
+  buildCollectionBody,
+  buildCollectionItemHtml,
+  type CollectionWidgetType,
+} from '@/lib/editor/block-collections'
+
 /** Elementor-style block HTML — class prefix `am-elt-block` for polished defaults. */
 const S = {
-  section: 'padding:80px 24px; max-width:1200px; margin:0 auto; font-family: sans-serif;',
+  section:
+    'padding:80px 24px; max-width:1200px; margin:0 auto; font-family: system-ui, -apple-system, sans-serif;',
   h1: 'font-size:clamp(2.5rem, 6vw, 4rem); font-weight:850; line-height:1.05; margin:0 0 20px; letter-spacing:-0.04em; color:#0f172a;',
   h2: 'font-size:clamp(1.75rem, 4vw, 2.5rem); font-weight:800; line-height:1.2; margin:0 0 16px; letter-spacing:-0.02em; color:#0f172a;',
   lead: 'font-size:1.25rem; line-height:1.6; color:#475569; margin:0 0 32px; max-width:60ch;',
-  btn: 'display:inline-flex; align-items:center; justify-content:center; padding:14px 32px; background:#6366f1; color:#ffffff; text-decoration:none; border-radius:12px; font-weight:600; font-size:16px; transition: all 0.2s;',
-  btnOutline: 'display:inline-flex; padding:14px 32px; background:#ffffff; color:#0f172a; text-decoration:none; border-radius:12px; font-weight:600; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.05);',
-  card: 'padding:32px; border:1px solid #f1f5f9; border-radius:24px; background:#ffffff; box-shadow:0 10px 15px -3px rgba(0,0,0,0.02);',
+  btn: 'display:inline-flex; align-items:center; justify-content:center; padding:14px 32px; background:#6366f1; color:#ffffff; text-decoration:none; border-radius:12px; font-weight:600; font-size:16px; box-shadow:0 4px 14px rgba(99,102,241,0.35); transition: all 0.2s;',
+  btnOutline:
+    'display:inline-flex; padding:14px 32px; background:#ffffff; color:#0f172a; text-decoration:none; border-radius:12px; font-weight:600; border:1px solid rgba(15,23,42,0.1); box-shadow:0 1px 2px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04);',
+  card: 'padding:32px; border:1px solid rgba(15,23,42,0.06); border-radius:22px; background:#ffffff; box-shadow:0 1px 2px rgba(15,23,42,0.04), 0 10px 28px rgba(15,23,42,0.07);',
+  panel:
+    'border-radius:20px; background:#ffffff; border:1px solid rgba(15,23,42,0.06); box-shadow:0 2px 4px rgba(15,23,42,0.03), 0 12px 32px rgba(15,23,42,0.08);',
+}
+
+function collectionBlock(
+  type: CollectionWidgetType,
+  title: string,
+  subtitle?: string,
+  itemCount = 2,
+  columns?: number,
+): string {
+  const b = `data-am-block="true" data-am-widget="${type}" data-am-collection="${type}" class="am-elt-block"`
+  const sub = subtitle
+    ? `<p style="text-align:center;color:#64748b;margin:-24px auto 40px;max-width:52ch;font-size:15px;line-height:1.6;">${subtitle}</p>`
+    : ''
+  return `<section ${b} style="${S.section}">
+  <h2 style="${S.h2}text-align:center;margin-bottom:12px;">${title}</h2>
+  ${sub}
+  ${buildCollectionBody(type, itemCount, columns)}
+</section>`
 }
 
 export type ElementorBlockType =
@@ -53,6 +81,7 @@ export type ElementorBlockType =
   | 'map'
   | 'dividerWave'
   | 'steps'
+  | 'leadForm'
 
 export function buildElementorBlock(type: ElementorBlockType): string {
   const b = 'data-am-block="true" data-am-widget="' + type + '" class="am-elt-block"'
@@ -84,17 +113,13 @@ export function buildElementorBlock(type: ElementorBlockType): string {
   <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;"><a href="#" style="${S.btn}">Start free</a><a href="#" style="${S.btnOutline}">Demo</a></div>
 </section>`
     case 'features':
-      return `<section ${b} style="${S.section}"><h2 style="${S.h2}text-align:center;margin-bottom:48px;">Features</h2>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;">
-    <div style="${S.card}"><h3 style="margin:0 0 8px;">Fast setup</h3><p style="margin:0;color:#64748b;font-size:14px;">Go live in minutes.</p></div>
-    <div style="${S.card}"><h3 style="margin:0 0 8px;">AI copy</h3><p style="margin:0;color:#64748b;font-size:14px;">Personalize automatically.</p></div>
-    <div style="${S.card}"><h3 style="margin:0 0 8px;">Webflow sync</h3><p style="margin:0;color:#64748b;font-size:14px;">Publish to CMS.</p></div>
-  </div></section>`
-    case 'stats':
-      return `<section ${b} style="${S.section}background:#f8fafc;"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:32px;text-align:center;">
-    <div><p style="font-size:2.5rem;font-weight:800;margin:0;color:#4f46e5;">10k+</p><p style="margin:8px 0 0;color:#64748b;font-size:14px;">Users</p></div>
-    <div><p style="font-size:2.5rem;font-weight:800;margin:0;color:#4f46e5;">99%</p><p style="margin:8px 0 0;color:#64748b;font-size:14px;">Uptime</p></div>
-  </div></section>`
+      return collectionBlock('features', 'Features', 'Everything you need to launch faster.', 3, 3)
+    case 'stats': {
+      const inner = buildCollectionBody('stats', 3, 3)
+      return `<section ${b} data-am-collection="stats" style="${S.section}background:linear-gradient(180deg,#f8fafc 0%,#fff 100%);">
+  ${inner}
+</section>`
+    }
     case 'columns2':
     case 'columns':
       return `<div ${b} data-am-layout="2col" style="display:grid;grid-template-columns:1fr 1fr;gap:32px;${S.section}">
@@ -108,11 +133,7 @@ export function buildElementorBlock(type: ElementorBlockType): string {
   <div data-am-column="3" data-am-drop-zone="true"><p style="color:#64748b;">Column 3</p></div>
 </div>`
     case 'team':
-      return `<section ${b} style="${S.section}"><h2 style="${S.h2}text-align:center;margin-bottom:40px;">Team</h2>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:24px;text-align:center;">
-    <div><div style="width:72px;height:72px;border-radius:50%;background:#e2e8f0;margin:0 auto 12px;"></div><h3 style="margin:0;font-size:1rem;">Alex</h3></div>
-    <div><div style="width:72px;height:72px;border-radius:50%;background:#e2e8f0;margin:0 auto 12px;"></div><h3 style="margin:0;font-size:1rem;">Jordan</h3></div>
-  </div></section>`
+      return collectionBlock('team', 'Our team', 'Meet the people behind the product.', 3, 3)
     case 'newsletter':
       return `<section ${b} style="${S.section}text-align:center;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border-radius:16px;">
   <h2 style="margin:0 0 12px;font-size:1.75rem;">Newsletter</h2>
@@ -123,14 +144,12 @@ export function buildElementorBlock(type: ElementorBlockType): string {
       return `<section ${b} style="${S.section}"><h2 style="${S.h2}text-align:center;">Contact</h2>
   <div style="max-width:400px;margin:0 auto;"><input placeholder="Email" style="width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px;" readonly /><button style="${S.btn}width:100%;">Send</button></div></section>`
     case 'gallery':
-      return `<section ${b} style="${S.section}"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-  <img src="https://placehold.co/400x300/e2e8f0/64748b?text=1" style="width:100%;border-radius:12px;" alt="" />
-  <img src="https://placehold.co/400x300/e2e8f0/64748b?text=2" style="width:100%;border-radius:12px;" alt="" />
-  <img src="https://placehold.co/400x300/e2e8f0/64748b?text=3" style="width:100%;border-radius:12px;" alt="" />
-</div></section>`
+      return collectionBlock('gallery', 'Gallery', undefined, 3, 3)
     case 'logos':
-      return `<section ${b} style="padding:48px 24px;text-align:center;"><p style="font-size:12px;color:#94a3b8;margin:0 0 20px;">TRUSTED BY</p>
-  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:32px;font-weight:700;color:#94a3b8;">Acme · Globo · Stripe</div></section>`
+      return `<section ${b} data-am-collection="logos" style="padding:56px 24px;text-align:center;${S.panel}margin:0 auto;max-width:1200px;">
+  <p style="font-size:12px;color:#94a3b8;margin:0 0 24px;letter-spacing:0.08em;font-weight:600;">TRUSTED BY</p>
+  ${buildCollectionBody('logos', 4, 1)}
+</section>`
     case 'banner':
       return `<div ${b} style="padding:12px 24px;background:#fef3c7;color:#92400e;text-align:center;font-size:14px;">Limited offer — <a href="#" style="font-weight:700;color:inherit;">Learn more</a></div>`
     case 'heroSplit':
@@ -138,11 +157,7 @@ export function buildElementorBlock(type: ElementorBlockType): string {
   <div><span style="display:inline-block;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;background:#eef2ff;color:#4338ca;margin-bottom:16px;">New</span><h1 style="${S.h1}">Split hero headline</h1><p style="${S.lead}">Compelling subheadline beside a visual.</p><a href="#" style="${S.btn}margin-top:8px;">Get started</a></div>
   <img src="https://placehold.co/600x480/e2e8f0/64748b?text=Hero" alt="" style="width:100%;border-radius:20px;" /></div></section>`
     case 'iconBoxes':
-      return `<section ${b} style="${S.section}"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;">
-  <div style="text-align:center;padding:20px;"><span style="font-size:2rem;">⚡</span><h3 style="margin:12px 0 6px;font-size:1rem;">Fast</h3><p style="margin:0;color:#64748b;font-size:13px;">Lightning quick setup</p></div>
-  <div style="text-align:center;padding:20px;"><span style="font-size:2rem;">🎯</span><h3 style="margin:12px 0 6px;font-size:1rem;">Focused</h3><p style="margin:0;color:#64748b;font-size:13px;">Built for conversion</p></div>
-  <div style="text-align:center;padding:20px;"><span style="font-size:2rem;">🔒</span><h3 style="margin:12px 0 6px;font-size:1rem;">Secure</h3><p style="margin:0;color:#64748b;font-size:13px;">Enterprise-grade</p></div>
-</div></section>`
+      return collectionBlock('iconBoxes', 'Why choose us', undefined, 3, 3)
     case 'socialProof':
       return `<section ${b} style="${S.section}background:#fafafa;border-radius:20px;"><div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:32px;">
   <div style="text-align:center;"><p style="font-size:2rem;font-weight:800;margin:0;color:#4f46e5;">4.9★</p><p style="margin:4px 0 0;font-size:12px;color:#64748b;">2,400+ reviews</p></div>
@@ -161,45 +176,36 @@ export function buildElementorBlock(type: ElementorBlockType): string {
   <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,23,42,0.4),rgba(15,23,42,0.85));"></div>
   <div style="position:relative;z-index:1;padding:48px 24px;max-width:640px;"><h1 style="font-size:2.5rem;font-weight:800;margin:0 0 16px;">Video hero</h1><p style="opacity:0.85;margin:0 0 24px;">Background video placeholder — replace with embed.</p><a href="#" style="${S.btn}">Watch demo</a></div></section>`
     case 'counters':
-      return `<section ${b} style="${S.section}"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center;">
-  <div><p style="font-size:2.25rem;font-weight:800;margin:0;color:#7c3aed;">128</p><p style="margin:6px 0 0;font-size:12px;color:#64748b;">Projects</p></div>
-  <div><p style="font-size:2.25rem;font-weight:800;margin:0;color:#7c3aed;">24</p><p style="margin:6px 0 0;font-size:12px;color:#64748b;">Team members</p></div>
-  <div><p style="font-size:2.25rem;font-weight:800;margin:0;color:#7c3aed;">98%</p><p style="margin:6px 0 0;font-size:12px;color:#64748b;">Satisfaction</p></div>
-  <div><p style="font-size:2.25rem;font-weight:800;margin:0;color:#7c3aed;">12</p><p style="margin:6px 0 0;font-size:12px;color:#64748b;">Countries</p></div>
-</div></section>`
+      return collectionBlock('counters', 'By the numbers', undefined, 4, 4)
     case 'tabs':
-      return `<section ${b} style="${S.section}"><div style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid #e2e8f0;padding-bottom:12px;">
-  <span style="padding:8px 16px;border-radius:8px;background:#4f46e5;color:#fff;font-size:13px;font-weight:600;">Tab 1</span>
-  <span style="padding:8px 16px;border-radius:8px;color:#64748b;font-size:13px;">Tab 2</span>
-  <span style="padding:8px 16px;border-radius:8px;color:#64748b;font-size:13px;">Tab 3</span></div>
-  <p style="color:#475569;margin:0;">Tab content area — edit text for each tab section.</p></section>`
+      return `<section ${b} data-am-collection="tabs" style="${S.section}">
+  ${buildCollectionBody('tabs', 3, 1)}
+  <p data-am-tab-content style="color:#475569;margin:0;padding:20px;border-radius:14px;background:#f8fafc;${S.panel}">Tab content — edit this text for the active panel.</p>
+</section>`
     case 'map':
       return `<section ${b} style="${S.section}"><h2 style="${S.h2}text-align:center;margin-bottom:24px;">Find us</h2>
   <div style="aspect-ratio:16/7;background:#e2e8f0;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:14px;">Map embed placeholder</div></section>`
     case 'dividerWave':
       return `<div ${b} style="line-height:0;margin:0;"><svg viewBox="0 0 1200 80" preserveAspectRatio="none" style="width:100%;height:48px;display:block;"><path d="M0,40 Q300,80 600,40 T1200,40 L1200,80 L0,80 Z" fill="#f8fafc"/></svg></div>`
     case 'steps':
-      return `<section ${b} style="${S.section}"><h2 style="${S.h2}text-align:center;margin-bottom:40px;">Simple steps</h2>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;text-align:center;">
-  <div><div style="width:40px;height:40px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;margin:0 auto 12px;">1</div><h3 style="margin:0 0 6px;font-size:1rem;">Sign up</h3><p style="margin:0;color:#64748b;font-size:13px;">Create your account</p></div>
-  <div><div style="width:40px;height:40px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;margin:0 auto 12px;">2</div><h3 style="margin:0 0 6px;font-size:1rem;">Customize</h3><p style="margin:0;color:#64748b;font-size:13px;">Edit your page</p></div>
-  <div><div style="width:40px;height:40px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;margin:0 auto 12px;">3</div><h3 style="margin:0 0 6px;font-size:1rem;">Publish</h3><p style="margin:0;color:#64748b;font-size:13px;">Go live on Webflow</p></div>
-</div></section>`
+      return collectionBlock('steps', 'Simple steps', 'Get started in three easy steps.', 3, 3)
     case 'timeline':
       return `<section ${b} style="${S.section}"><h2 style="${S.h2}">How it works</h2>
   <p style="color:#64748b;">1. Choose template → 2. Edit → 3. Publish</p></section>`
     case 'testimonials':
-      return `<section ${b} style="${S.section}"><h2 style="${S.h2}text-align:center;margin-bottom:32px;">Testimonials</h2>
-  <blockquote style="${S.card}"><p>&ldquo;Amazing product.&rdquo;</p><footer style="color:#64748b;font-size:13px;">— Customer</footer></blockquote></section>`
+      return collectionBlock('testimonials', 'Testimonials', 'What our customers say.', 2, 2)
     case 'pricing':
-      return `<section ${b} style="${S.section}"><h2 style="${S.h2}text-align:center;">Pricing</h2>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:640px;margin:0 auto;">
-    <div style="${S.card}text-align:center;"><h3>Starter</h3><p style="font-size:2rem;font-weight:800;">$29</p></div>
-    <div style="${S.card}text-align:center;border-color:#4f46e5;"><h3>Pro</h3><p style="font-size:2rem;font-weight:800;">$79</p></div>
-  </div></section>`
+      return collectionBlock('pricing', 'Pricing', 'Choose the plan that fits your team.', 2, 2)
     case 'faq':
-      return `<section ${b} style="${S.section}"><h2 style="${S.h2}">FAQ</h2>
-  <details style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;"><summary style="font-weight:600;">Question?</summary><p style="color:#64748b;font-size:14px;">Answer here.</p></details></section>`
+      return collectionBlock('faq', 'Frequently asked questions', undefined, 2, 1)
+    case 'leadForm':
+      return `<section ${b} style="${S.section}text-align:center;">
+  <h2 style="${S.h2}">Get in touch</h2>
+  <p style="color:#64748b;margin:0 0 28px;font-size:15px;">Select a lead form in the inspector to preview it live.</p>
+  <div data-am-lead-form-root="true" data-form-token="" data-form-input-width="100" data-form-input-padding="12" data-form-radius="10" data-form-primary="#6366f1" style="max-width:520px;margin:0 auto;text-align:left;${S.panel}padding:28px;">
+    <div data-am-lead-form-placeholder style="padding:24px;border:2px dashed #e2e8f0;border-radius:12px;text-align:center;color:#94a3b8;font-size:14px;">Lead form preview appears here</div>
+  </div>
+</section>`
     case 'cta':
       return `<section ${b} style="${S.section}text-align:center;background:#f8fafc;border-radius:20px;"><h2 style="${S.h2}">Ready?</h2><a href="#" style="${S.btn}">Get started</a></section>`
     case 'heading':
@@ -321,5 +327,8 @@ export const BLOCK_CATEGORIES: Record<string, { type: string; label: string }[]>
     { type: 'tabs', label: 'Tabs' },
     { type: 'map', label: 'Map' },
     { type: 'dividerWave', label: 'Wave Divider' },
+    { type: 'leadForm', label: 'Lead form' },
   ],
 }
+
+export { buildCollectionItemHtml, buildCollectionBody }

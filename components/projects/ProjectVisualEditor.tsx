@@ -18,6 +18,7 @@ import { Sparkles, Save, Loader2, CheckCircle2, MousePointerClick, Wand2, AlertT
 import { VISUAL_EDITOR_SCRIPT } from '@/lib/editor/visual-editor-script'
 import { buildWidgetHtml, type EditorWidgetType } from '@/lib/editor/editor-widgets'
 import type { EditViewport, ElementStyles, StyleTarget } from '@/lib/editor/responsive-styles'
+import type { SectionSelection } from '@/components/projects/EditorSectionPanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { playEditorSound, type EditorSound } from '@/lib/editor/editor-sounds'
 
@@ -71,16 +72,7 @@ type SelectedElement = {
   inlineTags?: string
 }
 
-export type SectionSelection = {
-  id: string
-  tag: string
-  widget?: string
-  layout?: string
-  isDropZone?: boolean
-  padding?: { top: number; right: number; bottom: number; left: number }
-  columnWidths?: number[]
-  gap?: number
-}
+export type { SectionSelection }
 
 export type ProjectVisualEditorHandle = {
   save: () => Promise<void>
@@ -95,6 +87,19 @@ export type ProjectVisualEditorHandle = {
   setColumnGap: (targetId: string, gap: number) => void
   setElementStyles: (targetId: string, styles: ElementStyles) => void
   stackColumnsOnMobile: (targetId: string) => void
+  addCollectionItem: (targetId: string) => void
+  removeCollectionItem: (targetId: string) => void
+  setCollectionColumns: (targetId: string, columns: number) => void
+  updateLeadForm: (
+    targetId: string,
+    config: {
+      formToken?: string
+      formInputWidth?: number
+      formInputPadding?: number
+      formRadius?: number
+      formPrimary?: string
+    },
+  ) => void
   undo: () => void
   redo: () => void
   duplicate: () => void
@@ -163,6 +168,7 @@ function buildEditorHtml(raw: string): string {
 </head>
 <body>
   ${bodyContent}
+  <script data-am-editor="true">window.__AUTOMAIO_API_BASE__=${JSON.stringify(typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL || '')};<\/script>
   <script data-am-editor="true">${EDITOR_JS}<\/script>
 </body>
 </html>`
@@ -189,9 +195,14 @@ function buildEditorHtml(raw: string): string {
   const editorStyle = `${prefix ? prefix + '\n' : ''}<style data-am-editor="true">${EDITOR_CSS}</style>`
   html = html.replace(/<\/head>/i, `${editorStyle}\n</head>`)
 
-  // Inject editor JS before </body>
+  // Inject API base + editor JS before </body>
+  const apiBase =
+    typeof window !== 'undefined'
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL || ''
+  const apiScript = `<script data-am-editor="true">window.__AUTOMAIO_API_BASE__=${JSON.stringify(apiBase)};<\/script>`
   const editorScript = `<script data-am-editor="true">${EDITOR_JS}<\/script>`
-  html = html.replace(/<\/body>/i, `${editorScript}\n</body>`)
+  html = html.replace(/<\/body>/i, `${apiScript}\n${editorScript}\n</body>`)
 
   return html
 }
@@ -554,6 +565,14 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
               padding: d.padding,
               columnWidths: d.columnWidths,
               gap: d.gap,
+              collection: d.collection,
+              collectionItemCount: d.collectionItemCount,
+              collectionColumns: d.collectionColumns,
+              formToken: d.formToken,
+              formInputWidth: d.formInputWidth,
+              formInputPadding: d.formInputPadding,
+              formRadius: d.formRadius,
+              formPrimary: d.formPrimary,
             })
             if (d.styles) {
               onStyleTargetChange?.(
@@ -816,6 +835,12 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     setColumnGap,
     setElementStyles,
     stackColumnsOnMobile,
+    addCollectionItem: (targetId: string) => postToIframe({ type: 'am-collection-add', targetId }),
+    removeCollectionItem: (targetId: string) => postToIframe({ type: 'am-collection-remove', targetId }),
+    setCollectionColumns: (targetId: string, columns: number) =>
+      postToIframe({ type: 'am-collection-set-columns', targetId, columns }),
+    updateLeadForm: (targetId, config) =>
+      postToIframe({ type: 'am-lead-form-update', targetId, ...config }),
     undo: handleUndo,
     redo: handleRedo,
     duplicate: handleDuplicate,

@@ -24,6 +24,8 @@ import {
   ElementEditorPanel,
   type SelectedElement,
 } from '@/components/projects/ElementEditorPanel'
+import { EditorCollectionPanel } from '@/components/projects/EditorCollectionPanel'
+import { EditorLeadFormPanel } from '@/components/projects/EditorLeadFormPanel'
 import type { StyleTarget, EditViewport, ElementStyles } from '@/lib/editor/responsive-styles'
 import type { TemplateTheme } from '@/lib/templates/theme'
 import type { EditorWidgetType } from '@/lib/editor/editor-widgets'
@@ -36,7 +38,10 @@ export function StudioRightSidebar(props: any) {
     seoGenerating, onUpdateProject, onImportHtml, onGenerateSeo,
     onThemeChange, onApplyTheme, onElementUpdate, onElementDelete,
     onApplyStyles, onSetLayout, onSetPadding, onSetColumnWidths,
-    onSetGap, onStackMobile, onInsertInside,
+    onSetGap,     onStackMobile, onInsertInside,
+    orgId,
+    onCollectionAdd, onCollectionRemove, onCollectionSetColumns,
+    onLeadFormUpdate,
   } = props
 
   const hasElementFocus = Boolean(selectedElement || sectionSelection || styleTarget)
@@ -141,6 +146,29 @@ export function StudioRightSidebar(props: any) {
                       editViewport={editViewport}
                       onApplyStyles={onApplyStyles}
                       onClose={() => {}}
+                    />
+                  </InspectorPanel>
+                )}
+
+                {sectionSelection?.collection && onCollectionAdd && (
+                  <InspectorPanel title="Items & rows">
+                    <EditorCollectionPanel
+                      embedded
+                      section={sectionSelection}
+                      onAddItem={onCollectionAdd}
+                      onRemoveItem={onCollectionRemove!}
+                      onSetColumns={onCollectionSetColumns!}
+                    />
+                  </InspectorPanel>
+                )}
+
+                {sectionSelection?.widget === 'leadForm' && onLeadFormUpdate && orgId && (
+                  <InspectorPanel title="Lead form">
+                    <EditorLeadFormPanel
+                      embedded
+                      section={sectionSelection}
+                      orgId={orgId}
+                      onUpdate={onLeadFormUpdate}
                     />
                   </InspectorPanel>
                 )}

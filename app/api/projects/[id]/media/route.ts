@@ -11,6 +11,22 @@ import {
 
 type RouteParams = { params: Promise<{ id: string }> }
 
+const MAX_FILES_PER_REQUEST = 20
+const MAX_FILE_BYTES = 10 * 1024 * 1024
+
+function collectFiles(form: FormData): File[] {
+  const fromFiles = form.getAll('files').filter((f): f is File => f instanceof File)
+  const fromFile = form.getAll('file').filter((f): f is File => f instanceof File)
+  const merged = [...fromFiles, ...fromFile]
+  const seen = new Set<string>()
+  return merged.filter((f) => {
+    const key = `${f.name}-${f.size}-${f.lastModified}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   try {
     const token = _req.cookies.get('auth_token')?.value
@@ -46,53 +62,91 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     if (!isCloudinaryConfigured()) {
       return NextResponse.json(
-        { error: 'Cloudinary is not configured. Add CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET to .env' },
+        {
+          error:
+            'Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME and either CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET in .env',
+        },
         { status: 503 },
       )
     }
 
     const form = await req.formData()
-    const file = form.get('file')
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'file is required' }, { status: 400 })
+    const files = collectFiles(form)
+    if (!files.length) {
+      return NextResponse.json({ error: 'At least one image file is required' }, { status: 400 })
+    }
+    if (files.length > MAX_FILES_PER_REQUEST) {
+      return NextResponse.json({ error: `Maximum ${MAX_FILES_PER_REQUEST} files per upload` }, { status: 400 })
     }
 
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image uploads are supported' }, { status: 400 })
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer())
     const folder = `automaio/projects/${id}`
-    const uploaded = await uploadImageBuffer(buffer, {
-      folder,
-      filename: file.name || 'image.jpg',
-    })
+    const uploadedItems: MediaLibraryItem[] = []
+    const errors: { name: string; error: string }[] = []
 
-    const item: MediaLibraryItem = {
-      id: uploaded.publicId || `media-${Date.now()}`,
-      url: uploaded.secureUrl || uploaded.url,
-      publicId: uploaded.publicId,
-      width: uploaded.width,
-      height: uploaded.height,
-      createdAt: new Date().toISOString(),
-      name: file.name,
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        errors.push({ name: file.name, error: 'Only image uploads are supported' })
+        continue
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        errors.push({ name: file.name, error: 'File exceeds 10MB limit' })
+        continue
+      }
+
+      try {
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const uploaded = await uploadImageBuffer(buffer, {
+          folder,
+          filename: file.name || 'image.jpg',
+        })
+
+        uploadedItems.push({
+          id: uploaded.publicId || `media-${Date.now()}-${uploadedItems.length}`,
+          url: uploaded.secureUrl || uploaded.url,
+          publicId: uploaded.publicId,
+          width: uploaded.width,
+          height: uploaded.height,
+          createdAt: new Date().toISOString(),
+          name: file.name,
+        })
+      } catch (err) {
+        errors.push({
+          name: file.name,
+          error: err instanceof Error ? err.message : 'Upload failed',
+        })
+      }
+    }
+
+    if (!uploadedItems.length) {
+      return NextResponse.json(
+        { error: errors[0]?.error ?? 'All uploads failed', errors },
+        { status: 500 },
+      )
     }
 
     const existingParams = (project.parameters as Record<string, unknown>) ?? {}
     const library = readMediaLibrary(existingParams)
-    const nextLibrary = [item, ...library.filter((m) => m.url !== item.url)].slice(0, 200)
+    const merged = [...uploadedItems, ...library.filter((m) => !uploadedItems.some((u) => u.url === m.url))].slice(
+      0,
+      200,
+    )
 
     await prisma.contentProject.update({
       where: { id },
       data: {
         parameters: {
           ...existingParams,
-          mediaLibrary: nextLibrary,
+          mediaLibrary: merged,
         } as object,
       },
     })
 
-    return NextResponse.json({ item, items: nextLibrary })
+    return NextResponse.json({
+      items: merged,
+      uploaded: uploadedItems,
+      item: uploadedItems[0],
+      errors: errors.length ? errors : undefined,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json({ error: message }, { status: 500 })

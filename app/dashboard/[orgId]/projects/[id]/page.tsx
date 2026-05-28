@@ -526,6 +526,7 @@ export default function ProjectStudioPage() {
             <StudioRightSidebar
               project={project!}
               projectId={projectId}
+              orgId={orgId}
               isLandingPage={isLandingPage}
               editViewport={viewport}
               editorTheme={editorTheme}
@@ -587,6 +588,18 @@ export default function ProjectStudioPage() {
                     position: 'inside',
                   })
                 }
+              }}
+              onCollectionAdd={() => {
+                if (sectionSelection?.id) editorRef.current?.addCollectionItem(sectionSelection.id)
+              }}
+              onCollectionRemove={() => {
+                if (sectionSelection?.id) editorRef.current?.removeCollectionItem(sectionSelection.id)
+              }}
+              onCollectionSetColumns={(columns) => {
+                if (sectionSelection?.id) editorRef.current?.setCollectionColumns(sectionSelection.id, columns)
+              }}
+              onLeadFormUpdate={(config) => {
+                if (sectionSelection?.id) editorRef.current?.updateLeadForm(sectionSelection.id, config)
               }}
             />
           )}

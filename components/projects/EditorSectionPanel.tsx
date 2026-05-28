@@ -23,6 +23,14 @@ export type SectionSelection = {
   padding?: SectionPadding
   columnWidths?: number[]
   gap?: number
+  collection?: string
+  collectionItemCount?: number
+  collectionColumns?: number
+  formToken?: string
+  formInputWidth?: string
+  formInputPadding?: string
+  formRadius?: string
+  formPrimary?: string
 }
 
 type EditorSectionPanelProps = {
