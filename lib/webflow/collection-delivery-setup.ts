@@ -10,9 +10,8 @@ import {
   collectionHasDeliveryFields,
   syncCollectionFieldsCache,
 } from '@/lib/webflow/cms-collection-schema'
+import { buildIframeInlineBootstrap, buildSplitInlineBootstrap } from '@/lib/webflow/delivery-bootstrap'
 import {
-  buildIframeInlineBootstrap,
-  buildSplitInlineBootstrap,
   buildWebflowIframeCollectionEmbed,
   buildWebflowSplitCollectionEmbed,
 } from '@/lib/webflow/template-embeds'
@@ -23,7 +22,7 @@ const RUNTIME_SCRIPT_NAME = 'Automaio Runtime Bootstrap'
 const SPLIT_SCRIPT_NAME = 'Automaio Split HTML Renderer'
 const IFRAME_SCRIPT_NAME = 'Automaio Iframe Embed Renderer'
 
-const SCRIPT_VERSION = '1.0.0'
+const SCRIPT_VERSION = '1.1.0'
 
 type CollectionsJson = {
   collections?: Array<{ id: string; fields?: Array<{ slug: string; name: string; type: string }> }>
@@ -378,7 +377,9 @@ export async function ensureCollectionDeliverySetup(
 
   const scriptName = mode === 'split_plain_text' ? SPLIT_SCRIPT_NAME : IFRAME_SCRIPT_NAME
   const sourceCode =
-    mode === 'split_plain_text' ? buildSplitInlineBootstrap() : buildIframeInlineBootstrap()
+    mode === 'split_plain_text'
+      ? buildSplitInlineBootstrap(appUrl, integration.webflowSiteId)
+      : buildIframeInlineBootstrap(appUrl, integration.webflowSiteId)
 
   try {
     const { scriptId, version } = await registerDeliveryScript(

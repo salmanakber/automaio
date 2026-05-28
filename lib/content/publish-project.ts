@@ -562,7 +562,7 @@ export async function publishContentProject(
   const usedRemoteRuntime = plan.htmlMode === 'remote_runtime'
   const usedIframeEmbed = plan.htmlMode === 'iframe_embed'
   const collectionTemplateSnippet = getCollectionTemplateSnippet(plan.htmlMode, appUrl)
-  let embedAutoConfigured = isHtmlPage
+  let embedAutoConfigured = isHtmlPage && !deliverySetupWarning
   let embedNeedsReconnect = false
   let runtimeAutoConfigured = usedRemoteRuntime && isHtmlPage
   let runtimeNeedsReconnect = false
@@ -574,10 +574,10 @@ export async function publishContentProject(
         'Published with remote runtime. CMS fields and collection template custom code configured automatically.'
     } else if (usedSplitPlainText) {
       embedMessage =
-        'Published with split HTML/CSS/JS. Fields (html, css, js) and template script added automatically.'
+        'Published with split HTML/CSS/JS. CMS fields (html, css, js) filled and split template script installed. Live page loads content from CMS or Automaio API by slug.'
     } else if (usedIframeEmbed) {
       embedMessage =
-        'Published with iframe embed. iframe-url field and template script configured automatically.'
+        'Published with iframe embed. iframe-url field set and iframe template script installed. Live page loads the hosted Automaio page.'
     }
     if (deliverySetupWarning) {
       embedMessage = `${embedMessage} ${deliverySetupWarning}`.trim()

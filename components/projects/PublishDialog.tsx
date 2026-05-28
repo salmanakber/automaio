@@ -74,7 +74,10 @@ type PublishPreview = {
   htmlLineThreshold?: number
   usesEmbed?: boolean
   usesRemoteRuntime?: boolean
+  usesSplitPlainText?: boolean
+  usesIframeEmbed?: boolean
   runtimeConfigured?: boolean
+  collectionTemplateSnippet?: string
   runtimeUrl?: string
   resolvedFields?: string[]
   error?: string
@@ -283,7 +286,9 @@ export function PublishDialog({
           previewUrl: data.previewUrl,
           embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
           collectionTemplateSnippet:
-            data.runtimeAutoConfigured || data.embedAutoConfigured ? undefined : data.collectionTemplateSnippet,
+            data.usedRemoteRuntime && (data.runtimeAutoConfigured || data.embedAutoConfigured)
+              ? undefined
+              : data.collectionTemplateSnippet,
           runtimeAutoConfigured: Boolean(data.runtimeAutoConfigured ?? data.embedAutoConfigured),
           usedRemoteRuntime: Boolean(data.usedRemoteRuntime),
         })
@@ -442,7 +447,17 @@ export function PublishDialog({
                   </Label>
                   <Select
                     value={publishHtmlMode === 'auto' ? DEFAULT_PUBLISH_DELIVERY_MODE : publishHtmlMode}
-                    onValueChange={(v) => setPublishHtmlMode(v as PublishHtmlModeOverride)}
+                    onValueChange={async (v) => {
+                      setPublishHtmlMode(v as PublishHtmlModeOverride)
+                      const params = { ...((project?.parameters as Record<string, unknown>) ?? {}) }
+                      params.publishHtmlMode = v
+                      await fetch(`/api/projects/${projectId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ parameters: params }),
+                      })
+                      loadPreview()
+                    }}
                   >
                     <SelectTrigger className="h-9 text-xs rounded-lg border-zinc-800 bg-zinc-950/80">
                       <SelectValue />
@@ -468,6 +483,18 @@ export function PublishDialog({
                     <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-emerald-400/90 bg-emerald-500/[0.02] border border-emerald-500/10">
                       <Zap className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                       <span>Template script + Page ID fields will be configured if not present.</span>
+                    </div>
+                  )}
+                  {(publishHtmlMode === 'split_plain_text' || preview?.usesSplitPlainText) && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-blue-400/90 bg-blue-500/[0.02] border border-blue-500/10">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <span>Will publish html, css, js to CMS and install the split template script.</span>
+                    </div>
+                  )}
+                  {(publishHtmlMode === 'iframe_embed' || preview?.usesIframeEmbed) && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-violet-400/90 bg-violet-500/[0.02] border border-violet-500/10">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                      <span>Will set iframe-url and install the iframe template script.</span>
                     </div>
                   )}
                 </div>

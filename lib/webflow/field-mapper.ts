@@ -322,13 +322,15 @@ export function buildWebflowFieldPlan(
     resolvedMode === 'split_plain_text' && Boolean(options?.assembledLanding)
   const useIframeCms =
     resolvedMode === 'iframe_embed' && Boolean(payload.automaioId)
-  const htmlMode: PublishHtmlMode = useRemoteRuntime
-    ? 'remote_runtime'
-    : useSplitPlainText
-      ? 'split_plain_text'
-      : useIframeCms
-        ? 'iframe_embed'
-        : resolvedMode
+  let htmlMode: PublishHtmlMode = resolvedMode
+  if (useRemoteRuntime) htmlMode = 'remote_runtime'
+  else if (useSplitPlainText) htmlMode = 'split_plain_text'
+  else if (useIframeCms) htmlMode = 'iframe_embed'
+  else if (resolvedMode === 'split_plain_text' && options?.assembledLanding) {
+    htmlMode = 'split_plain_text'
+  } else if (resolvedMode === 'iframe_embed' && payload.automaioId) {
+    htmlMode = 'iframe_embed'
+  }
 
   assign('name', payload.name)
   assign('slug', payload.slug)
