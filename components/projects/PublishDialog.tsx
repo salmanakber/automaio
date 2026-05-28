@@ -5,7 +5,6 @@ import Link from 'next/link'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
@@ -294,13 +293,13 @@ export function PublishDialog({
 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="publish-dialog-scroll relative border border-zinc-800/80 bg-zinc-950 text-zinc-100 sm:max-w-[580px] max-h-[85vh] overflow-y-auto p-0 gap-0 shadow-2xl rounded-xl"
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border border-zinc-800/80 bg-zinc-950 text-zinc-100 sm:max-w-[580px] w-full h-[85vh] max-h-[720px] flex flex-col p-0 gap-0 shadow-2xl rounded-xl overflow-hidden"
         >
-          {/* Subtle Ambient Background Light */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-blue-500/[0.04] rounded-full blur-[80px] pointer-events-none" />
+          {/* Subtle Background Glow under layout panels */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-blue-500/[0.04] rounded-full blur-[80px] pointer-events-none z-0" />
 
-          {/* ══ HEADER ══ */}
-          <div className="px-6 py-5 border-b border-zinc-900 bg-zinc-950/40">
+          {/* ══ STICKY HEADER ══ */}
+          <div className="relative sticky top-0 z-30 px-6 py-5 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md shrink-0">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 bg-zinc-900 border border-zinc-800">
                 <Globe className="h-4.5 w-4.5 text-zinc-400" />
@@ -316,8 +315,8 @@ export function PublishDialog({
             </div>
           </div>
 
-          {/* ══ SCROLLABLE CONTENT ══ */}
-          <div className="px-6 py-6 space-y-6">
+          {/* ══ SCROLLABLE CONTENT BODY ══ */}
+          <div className="flex-1 overflow-y-auto publish-dialog-scroll px-6 py-6 space-y-6 relative z-10">
 
             {/* Platform Integration Destination Card */}
             <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/50">
@@ -643,8 +642,8 @@ export function PublishDialog({
             )}
           </div>
 
-          {/* ══ FOOTER ══ */}
-          <div className="px-6 py-4 border-t border-zinc-900 bg-zinc-950/40 flex items-center justify-between gap-4">
+          {/* ══ STICKY FOOTER ══ */}
+          <div className="relative sticky bottom-0 z-30 px-6 py-4 border-t border-zinc-900 bg-zinc-950/80 backdrop-blur-md shrink-0 flex items-center justify-between gap-4">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
