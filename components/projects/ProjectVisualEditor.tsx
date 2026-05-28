@@ -218,6 +218,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const pendingTextRef = useRef<((els: Record<string, { text: string; tag: string }>) => void) | null>(null)
   const pendingHtmlRef = useRef<((h: string) => void) | null>(null)
+  const pendingHtmlRejectRef = useRef<((err: Error) => void) | null>(null)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveChainRef = useRef<Promise<string | null>>(Promise.resolve(null))
   const skipIframeReloadRef = useRef(false)
@@ -336,10 +337,12 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
         return
       }
       pendingHtmlRef.current = resolve
+      pendingHtmlRejectRef.current = reject
       postToIframe({ type: 'am-get-html' })
       setTimeout(() => {
         if (pendingHtmlRef.current) {
           pendingHtmlRef.current = null
+          pendingHtmlRejectRef.current = null
           reject(new Error('Timed out waiting for editor HTML'))
         }
       }, 8000)
@@ -527,8 +530,14 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
           pendingTextRef.current = null
           break
         case 'am-clean-html':
+          pendingHtmlRejectRef.current = null
           pendingHtmlRef.current?.(d.html)
           pendingHtmlRef.current = null
+          break
+        case 'am-clean-html-error':
+          pendingHtmlRef.current = null
+          pendingHtmlRejectRef.current?.(new Error(String(d.error ?? 'Failed to export HTML')))
+          pendingHtmlRejectRef.current = null
           break
         case 'am-bulk-done':
           setHasChanges(true)

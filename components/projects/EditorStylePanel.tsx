@@ -1,19 +1,30 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Paintbrush, Smartphone, Tablet, Monitor, RotateCcw, Hash, Box, Move3d, Sparkles } from 'lucide-react'
+import { Paintbrush, Smartphone, Tablet, Monitor, RotateCcw, Hash, Box, Move3d, Sparkles, Type } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   STYLE_PRESETS,
   SHADOW_PRESETS,
   ANIMATION_PRESETS,
+  FONT_FAMILY_PRESETS,
+  FONT_WEIGHT_OPTIONS,
   buildBoxShadow,
   buildTransform,
   parseBoxShadow,
   parseTransform,
+  parseFontSize,
+  parseFontFamily,
   type EditViewport,
   type ElementStyles,
   type StyleTarget,
@@ -142,6 +153,7 @@ export function EditorStylePanel({
 }: EditorStylePanelProps) {
   const [styles, setStyles] = useState<ElementStyles>({})
   const [radius, setRadius] = useState(0)
+  const [fontSize, setFontSize] = useState(16)
   const [shadow, setShadow] = useState<ShadowValues>({ x: 0, y: 4, blur: 12, spread: 0, color: 'rgba(0,0,0,0.12)' })
   const [transform, setTransform] = useState<TransformValues>({
     rotate: 0,
@@ -155,6 +167,7 @@ export function EditorStylePanel({
     setStyles(target.styles)
     const r = parseInt(String(target.styles.borderRadius ?? '0').replace('px', ''), 10)
     setRadius(Number.isFinite(r) ? r : 0)
+    setFontSize(parseFontSize(target.styles.fontSize))
     setShadow(parseBoxShadow(target.styles.boxShadow))
     setTransform(parseTransform(target.styles.transform))
   }, [target?.id, target?.styles, editViewport])
@@ -256,6 +269,64 @@ export function EditorStylePanel({
             commit({ ...styles, borderRadius: v ? `${v}px` : '' })
           }}
         />
+
+        {/* Typography */}
+        <div className="space-y-3 pt-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 flex items-center gap-2">
+            <Type className="h-3 w-3" /> Typography
+          </p>
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Font family</Label>
+            <Select
+              value={parseFontFamily(styles.fontFamily) || 'inherit'}
+              onValueChange={(v) =>
+                commit({ ...styles, fontFamily: v === 'inherit' ? '' : v })
+              }
+            >
+              <SelectTrigger className="h-8 bg-zinc-950 border-zinc-800 text-xs">
+                <SelectValue placeholder="Default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inherit">Default (inherit)</SelectItem>
+                {FONT_FAMILY_PRESETS.map((font) => (
+                  <SelectItem key={font} value={font} style={{ fontFamily: font }}>
+                    {font}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <SliderField
+            label="Font size"
+            value={fontSize}
+            min={10}
+            max={72}
+            step={1}
+            unit="px"
+            onChange={(v) => {
+              setFontSize(v)
+              commit({ ...styles, fontSize: v ? `${v}px` : '' })
+            }}
+          />
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Font weight</Label>
+            <Select
+              value={styles.fontWeight || '400'}
+              onValueChange={(v) => commit({ ...styles, fontWeight: v })}
+            >
+              <SelectTrigger className="h-8 bg-zinc-950 border-zinc-800 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FONT_WEIGHT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
         {/* Shadow */}
         <div className="space-y-3 pt-1">
@@ -361,6 +432,9 @@ export function EditorStylePanel({
               boxShadow: '',
               transform: '',
               animation: '',
+              fontFamily: '',
+              fontSize: '',
+              fontWeight: '',
             })
           }}
         >

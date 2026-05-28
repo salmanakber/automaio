@@ -1,0 +1,201 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Loader2, Upload, ImageIcon, Check } from 'lucide-react'
+import { parseJsonResponse } from '@/lib/api/parse-json-response'
+import type { MediaLibraryItem } from '@/lib/integrations/cloudinary'
+
+type MediaManagerDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projectId: string
+  onSelect: (url: string) => void
+}
+
+export function MediaManagerDialog({
+  open,
+  onOpenChange,
+  projectId,
+  onSelect,
+}: MediaManagerDialogProps) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [items, setItems] = useState<MediaLibraryItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const [cloudinaryConfigured, setCloudinaryConfigured] = useState(true)
+  const [selectedUrl, setSelectedUrl] = useState('')
+  const [manualUrl, setManualUrl] = useState('')
+
+  const loadMedia = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/media`, { credentials: 'same-origin' })
+      const data = await parseJsonResponse<{
+        items?: MediaLibraryItem[]
+        cloudinaryConfigured?: boolean
+        error?: string
+      }>(res)
+      if (!res.ok) throw new Error(data.error ?? 'Failed to load media')
+      setItems(data.items ?? [])
+      setCloudinaryConfigured(data.cloudinaryConfigured !== false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load media')
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    if (open) {
+      setSelectedUrl('')
+      setManualUrl('')
+      void loadMedia()
+    }
+  }, [open, loadMedia])
+
+  const uploadFile = async (file: File) => {
+    setUploading(true)
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`/api/projects/${projectId}/media`, {
+        method: 'POST',
+        body: form,
+        credentials: 'same-origin',
+      })
+      const data = await parseJsonResponse<{ item?: MediaLibraryItem; items?: MediaLibraryItem[]; error?: string }>(
+        res,
+      )
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
+      setItems(data.items ?? [])
+      if (data.item?.url) setSelectedUrl(data.item.url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleUse = () => {
+    const url = selectedUrl || manualUrl.trim()
+    if (!url) return
+    onSelect(url)
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#0c0c0e] border-zinc-800 text-white sm:max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5 text-violet-400" />
+            Media library
+          </DialogTitle>
+          <DialogDescription className="text-zinc-500">
+            Upload images to Cloudinary or pick from your project library.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void uploadFile(file)
+              e.target.value = ''
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            className="gap-2 bg-violet-600 hover:bg-violet-500"
+            disabled={uploading || !cloudinaryConfigured}
+            onClick={() => fileRef.current?.click()}
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Upload to Cloudinary
+          </Button>
+          {!cloudinaryConfigured && (
+            <span className="text-[10px] text-amber-400">Add Cloudinary env vars to enable uploads</span>
+          )}
+        </div>
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar border border-zinc-800 rounded-lg p-2 bg-zinc-950/50">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-zinc-500 text-sm gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-zinc-600 text-sm gap-2">
+              <ImageIcon className="h-8 w-8 opacity-40" />
+              <p>No images yet — upload your first asset.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                    selectedUrl === item.url
+                      ? 'border-violet-500 ring-2 ring-violet-500/30'
+                      : 'border-zinc-800 hover:border-zinc-600'
+                  }`}
+                  onClick={() => setSelectedUrl(item.url)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={item.url} alt={item.name ?? 'Media'} className="w-full h-full object-cover" />
+                  {selectedUrl === item.url && (
+                    <span className="absolute top-1 right-1 bg-violet-600 rounded-full p-0.5">
+                      <Check className="h-3 w-3 text-white" />
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2 pt-2 border-t border-zinc-800">
+          <label className="text-[10px] font-bold uppercase text-zinc-500">Or paste image URL</label>
+          <Input
+            value={manualUrl}
+            onChange={(e) => setManualUrl(e.target.value)}
+            placeholder="https://res.cloudinary.com/…"
+            className="bg-zinc-950 border-zinc-800 h-8 text-xs"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" className="border-zinc-700" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            className="bg-violet-600 hover:bg-violet-500"
+            disabled={!selectedUrl && !manualUrl.trim()}
+            onClick={handleUse}
+          >
+            Use image
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

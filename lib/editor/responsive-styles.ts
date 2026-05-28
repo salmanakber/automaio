@@ -15,6 +15,9 @@ export type ElementStyles = {
   boxShadow?: string
   transform?: string
   animation?: string
+  fontFamily?: string
+  fontSize?: string
+  fontWeight?: string
 }
 
 export type StyleTarget = {
@@ -52,6 +55,37 @@ export const ANIMATION_PRESETS = [
   { label: 'Pulse', value: 'am-pulse 2s ease-in-out infinite' },
   { label: 'Bounce', value: 'am-bounce 1.2s ease-in-out infinite' },
 ] as const
+
+export const FONT_FAMILY_PRESETS = [
+  'Inter',
+  'Roboto',
+  'Open Sans',
+  'Lato',
+  'Montserrat',
+  'Poppins',
+  'Playfair Display',
+  'Merriweather',
+  'Source Sans 3',
+  'DM Sans',
+] as const
+
+export const FONT_WEIGHT_OPTIONS = [
+  { label: 'Regular', value: '400' },
+  { label: 'Medium', value: '500' },
+  { label: 'Semibold', value: '600' },
+  { label: 'Bold', value: '700' },
+] as const
+
+export function parseFontSize(raw?: string): number {
+  if (!raw?.trim()) return 16
+  const n = parseInt(raw.replace('px', ''), 10)
+  return Number.isFinite(n) ? n : 16
+}
+
+export function parseFontFamily(raw?: string): string {
+  if (!raw?.trim()) return ''
+  return raw.split(',')[0].replace(/['"]/g, '').trim()
+}
 
 export type TransformValues = {
   rotate: number

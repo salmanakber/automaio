@@ -5,7 +5,8 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Sparkles, Type, Image as ImageIcon, Link as LinkIcon, Trash2, Code, Loader2 } from 'lucide-react'
+import { Sparkles, Type, Image as ImageIcon, Link as LinkIcon, Trash2, Code, Loader2, FolderOpen } from 'lucide-react'
+import { MediaManagerDialog } from '@/components/projects/MediaManagerDialog'
 
 export type SelectedElement = {
   id: string
@@ -41,6 +42,7 @@ export function ElementEditorPanel({
   const [localSrc, setLocalSrc] = useState('')
   const [localAlt, setLocalAlt] = useState('')
   const [localCode, setLocalCode] = useState('')
+  const [mediaOpen, setMediaOpen] = useState(false)
 
   useEffect(() => {
     if (!element) return
@@ -139,13 +141,30 @@ export function ElementEditorPanel({
         {element.kind === 'image' && (
           <>
             <div className="space-y-2">
-              <Label className="text-[10px] text-zinc-500 uppercase font-bold">Image URL</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-[10px] text-zinc-500 uppercase font-bold">Image URL</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[10px] gap-1 border-zinc-700"
+                  onClick={() => setMediaOpen(true)}
+                >
+                  <FolderOpen className="h-3 w-3" /> Media library
+                </Button>
+              </div>
               <Input
                 value={localSrc}
                 onChange={(e) => setLocalSrc(e.target.value)}
                 className="bg-zinc-950 border-zinc-800 h-8 text-xs"
               />
             </div>
+            {localSrc && (
+              <div className="rounded-lg border border-zinc-800 overflow-hidden bg-zinc-950">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={localSrc} alt={localAlt || 'Preview'} className="w-full max-h-32 object-cover" />
+              </div>
+            )}
             <div className="space-y-2">
               <Label className="text-[10px] text-zinc-500 uppercase font-bold">Alt text</Label>
               <Input
@@ -201,7 +220,7 @@ export function ElementEditorPanel({
         >
           <Trash2 className="h-4 w-4" />
         </Button>
-        <Button variant="outline" className="flex-1 h-8 text-[10px] uppercase border-zinc-700" onClick={onClose}>
+        <Button variant="outline" className="flex-1 h-8 text-[10px] uppercase border-zinc-700 text-zinc-400" onClick={onClose}>
           Close
         </Button>
         <Button
@@ -216,6 +235,13 @@ export function ElementEditorPanel({
           Apply changes
         </Button>
       </div>
+
+      <MediaManagerDialog
+        open={mediaOpen}
+        onOpenChange={setMediaOpen}
+        projectId={projectId}
+        onSelect={(url) => setLocalSrc(url)}
+      />
     </div>
   )
 }
