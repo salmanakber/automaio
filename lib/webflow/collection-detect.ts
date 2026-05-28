@@ -1,6 +1,11 @@
 import type { CollectionField } from '@/lib/webflow/field-mapper'
 import { resolveRenderingStrategy } from '@/lib/content/rendering-strategy'
-import { collectionSupportsRemoteRuntime } from '@/lib/webflow/cms-collection-schema'
+import {
+  collectionSupportsRemoteRuntime,
+  collectionSupportsSplitPlainText,
+  collectionSupportsIframeEmbed,
+} from '@/lib/webflow/cms-collection-schema'
+import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 import { SECTION_FIELD_ALIASES } from '@/lib/webflow/section-cms-bindings'
 
 export type CollectionCapabilities = {
@@ -18,7 +23,7 @@ export type CollectionCapabilities = {
   sectionFieldCount: number
   embedFieldSlugs: string[]
   recommendedContentTypes: Array<'landing_page' | 'blog_post' | 'cms_entry'>
-  renderMode: 'remote_runtime' | 'split_plain_text' | 'iframe_embed' | 'rich_text_html' | 'custom_code'
+  renderMode: PublishHtmlMode
   renderReason: string
   htmlLineCount: number
   customCodeAccess: boolean
@@ -66,6 +71,7 @@ export function detectCollectionCapabilities(
 
   const hasRemoteRuntimeFields = collectionSupportsRemoteRuntime(fields)
   const hasSplitPlainTextFields = collectionSupportsSplitPlainText(fields)
+  const hasIframeEmbedFields = collectionSupportsIframeEmbed(fields)
 
   const hasCustomCodeAccess = options?.hasCustomCodeAccess ?? false
   const htmlLineCount = options?.htmlLineCount ?? 0
@@ -73,7 +79,7 @@ export function detectCollectionCapabilities(
     htmlLineCount > 0 ? Array(htmlLineCount).fill('').join('\n') : '<section></section>',
     hasCustomCodeAccess,
     undefined,
-    { hasRemoteRuntimeFields, hasSplitPlainTextFields },
+    { hasRemoteRuntimeFields, hasSplitPlainTextFields, hasIframeEmbedFields },
   )
 
   const recommendedContentTypes: CollectionCapabilities['recommendedContentTypes'] = []
@@ -117,7 +123,7 @@ export function detectCollectionCapabilities(
     renderReason: strategy.reason,
     htmlLineCount,
     customCodeAccess: hasCustomCodeAccess,
-    embedAutoSetupPossible: hasCustomCodeAccess && strategy.strategy !== 'rich_text_html',
+    embedAutoSetupPossible: hasCustomCodeAccess,
   }
 }
 

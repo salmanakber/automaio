@@ -19,8 +19,10 @@ import type { AssembledLandingPage } from '@/lib/webflow/landing-page-assembler'
 import {
   collectionSupportsRemoteRuntime,
   collectionSupportsSplitPlainText,
+  collectionSupportsIframeEmbed,
   resolveRuntimeFieldSlug,
   resolveSplitFieldSlug,
+  resolveIframeFieldSlug,
 } from '@/lib/webflow/cms-collection-schema'
 import { buildRuntimeConfigJson } from '@/lib/runtime/build-page-schema'
 import type { LandingPageSchema } from '@/lib/runtime/types'
@@ -53,13 +55,8 @@ export type AutomaioContentPayload = {
   custom?: Record<string, string>
 }
 
-/** How landing page HTML is delivered to Webflow CMS. */
-export type PublishHtmlMode =
-  | 'remote_runtime'
-  | 'split_plain_text'
-  | 'iframe_embed'
-  | 'rich_text_html'
-  | 'custom_code'
+/** How landing page HTML is delivered to Webflow CMS (three delivery modes only). */
+export type PublishHtmlMode = 'remote_runtime' | 'split_plain_text' | 'iframe_embed'
 
 export type BuildFieldPlanOptions = {
   htmlMode?: PublishHtmlMode
@@ -105,9 +102,13 @@ const FIELD_ALIASES: Record<keyof CmsFieldMapping, string[]> = {
     'code-embed',
     'automaio-html',
   ],
+  html: ['html', 'html-content', 'html_content'],
+  css: ['css', 'css-content', 'css_content'],
+  js: ['js', 'js-content', 'js_content'],
   'html-content': ['html-content', 'html_content', 'html'],
   'css-content': ['css-content', 'css_content', 'css'],
   'js-content': ['js-content', 'js_content', 'js'],
+  'iframe-url': ['iframe-url', 'iframe_url', 'embed-url', 'page-url'],
   'page-id': ['page-id', 'page_id', 'automaio-page-id', 'automaio-id', 'automaio-campaign-id'],
   'runtime-config': ['runtime-config', 'runtime_config'],
   'preview-image': ['preview-image', 'preview_image', 'preview-image-url'],
@@ -246,10 +247,10 @@ export function previewFieldMapping(
     rows.push({
       logicalKey: 'collection-template',
       label: 'Webflow collection template',
-      webflowSlug: 'html-content + css-content + js-content',
-      value: 'Add Automaio embed snippet to Collection Template',
+      webflowSlug: 'html + css + js',
+      value: 'Collection template runner injects CMS Plain Text fields',
       included: true,
-      note: 'SEO-friendly direct HTML rendering (not iframe)',
+      note: 'SEO-friendly — markup in html/css/js fields, not iframe',
     })
   }
 
@@ -308,28 +309,35 @@ export function buildWebflowFieldPlan(
   const hasLandingHtml = !isBlogPost && isLandingPage && Boolean(htmlContent)
   const hasRuntimeFields = collectionSupportsRemoteRuntime(collectionFields)
   const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
+  const hasIframeFields = collectionSupportsIframeEmbed(collectionFields)
   const isFullTemplate =
     !isBlogPost &&
     Boolean(htmlContent && (hasLandingHtml || isFullHtmlDocument(htmlContent)))
-  const resolvedMode =
+  const resolvedMode: PublishHtmlMode =
     options?.htmlMode ??
-    (hasRuntimeFields ? 'remote_runtime' : hasSplitFields ? 'split_plain_text' : 'iframe_embed')
+    (hasRuntimeFields
+      ? 'remote_runtime'
+      : hasSplitFields
+        ? 'split_plain_text'
+        : hasIframeFields
+          ? 'iframe_embed'
+          : 'remote_runtime')
   const useRemoteRuntime =
-    hasRuntimeFields &&
     resolvedMode === 'remote_runtime' &&
     Boolean(payload.automaioId || options?.pageSchema)
   const useSplitPlainText =
-    !useRemoteRuntime &&
-    hasSplitFields &&
     resolvedMode === 'split_plain_text' &&
+    hasSplitFields &&
     Boolean(options?.assembledLanding)
+  const useIframeCms =
+    resolvedMode === 'iframe_embed' && hasIframeFields && Boolean(payload.automaioId)
   const htmlMode: PublishHtmlMode = useRemoteRuntime
     ? 'remote_runtime'
     : useSplitPlainText
       ? 'split_plain_text'
-      : resolvedMode
-  const useIframeEmbed =
-    isFullTemplate && htmlMode === 'iframe_embed' && !useSplitPlainText && !useRemoteRuntime
+      : useIframeCms
+        ? 'iframe_embed'
+        : resolvedMode
 
   assign('name', payload.name)
   assign('slug', payload.slug)
@@ -378,29 +386,30 @@ export function buildWebflowFieldPlan(
     if (cssSlug && split.cssContent) result[cssSlug] = split.cssContent
     if (jsSlug && split.jsContent) result[jsSlug] = split.jsContent
 
+    assign('html', split.htmlContent)
+    assign('css', split.cssContent)
+    assign('js', split.jsContent)
     assign('html-content', split.htmlContent)
     assign('css-content', split.cssContent)
     assign('js-content', split.jsContent)
     assign('preview-image', payload.previewImage)
-  } else if (isFullTemplate) {
-    // Landing pages: entire design lives in one CMS body field — full HTML or iframe embed.
-    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
+  } else if (useIframeCms && payload.automaioId) {
     const appUrl = getAppBaseUrl()
-
-    let bodyValue: string
-    if (useIframeEmbed && payload.automaioId) {
-      const iframeUrl = buildProjectIframeUrl(appUrl, payload.automaioId)
-      bodyValue = buildRichTextIframeEmbed(appUrl, payload.automaioId, iframeUrl)
-    } else {
-      bodyValue = sanitizeForWebflowRichText(
-        extractRichTextWithAssets(htmlContent) ||
-          extractRichTextFragment(htmlContent) ||
-          htmlContent ||
-          textContent ||
-          htmlToPlainSummary(htmlContent),
-      )
-    }
-
+    const iframeUrl = buildProjectIframeUrl(appUrl, payload.automaioId)
+    const iframeSlug = resolveIframeFieldSlug('iframeUrl', collectionFields)
+    if (iframeSlug) result[iframeSlug] = iframeUrl
+    assign('iframe-url', iframeUrl)
+    assign('preview-image', payload.previewImage)
+    embedFieldSlug = iframeSlug
+  } else if (isFullTemplate && !useRemoteRuntime && !useSplitPlainText) {
+    richTextFieldSlug = resolveRichTextFieldSlug(collectionFields, overrides)
+    const bodyValue = sanitizeForWebflowRichText(
+      extractRichTextWithAssets(htmlContent) ||
+        extractRichTextFragment(htmlContent) ||
+        htmlContent ||
+        textContent ||
+        htmlToPlainSummary(htmlContent),
+    )
     if (richTextFieldSlug && bodyValue) {
       result[richTextFieldSlug] = bodyValue
     } else {
@@ -467,21 +476,8 @@ export function buildWebflowFieldPlan(
     fieldData: sanitized,
     embedFieldSlug,
     richTextFieldSlug,
-    usesEmbed: Boolean(
-      isFullTemplate &&
-        useIframeEmbed &&
-        payload.automaioId &&
-        !isBlogPost &&
-        !useSplitPlainText &&
-        !useRemoteRuntime,
-    ),
-    htmlMode: useRemoteRuntime
-      ? 'remote_runtime'
-      : useSplitPlainText
-        ? 'split_plain_text'
-        : isFullTemplate
-          ? htmlMode
-          : 'rich_text_html',
+    usesEmbed: Boolean(useIframeCms && payload.automaioId && !isBlogPost),
+    htmlMode,
   }
 }
 

@@ -450,19 +450,23 @@ export function NewLandingPageWizard({
                         label="Render mode"
                         value={
                           collectionCaps.renderMode === 'iframe_embed'
-                            ? 'Iframe embed (Automaio hosted)'
-                            : 'CMS Rich Text (direct HTML)'
+                            ? 'Iframe embed (iframe-url field)'
+                            : collectionCaps.renderMode === 'split_plain_text'
+                              ? 'Split HTML (html, css, js fields)'
+                              : collectionCaps.renderMode === 'remote_runtime'
+                                ? 'Remote runtime (Page ID + API)'
+                                : 'Auto from collection fields'
                         }
                       />
                       <DetectRow
                         label="OAuth embed"
-                        value={collectionCaps.embedAutoSetupPossible ? 'Auto-setup available' : 'Rich Text fallback'}
+                        value={collectionCaps.embedAutoSetupPossible ? 'Auto-setup available' : 'Manual template paste'}
                       />
                       <DetectRow label="Body field" value={collectionCaps.hasRichTextBody ? 'Rich Text ✓' : collectionCaps.hasPlainTextBody ? 'Plain Text ✓' : 'Not detected'} />
                       <DetectRow label="CMS body field" value={collectionCaps.hasRichTextBody ? 'Rich Text ✓' : 'Required'} />
                     </div>
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      {collectionCaps.renderReason} Publish sends the full page HTML (or iframe embed) into one body field plus SEO.
+                      {collectionCaps.renderReason} Publish maps content to the active delivery mode fields (runtime, split html/css/js, or iframe-url).
                     </p>
                   </div>
                 )}
@@ -499,7 +503,13 @@ export function NewLandingPageWizard({
               <p><strong>Collection:</strong> {collections.find((c) => c.id === collectionId)?.name}</p>
               {collectionCaps && (
                 <Badge variant="outline" className="text-[10px]">
-                  {collectionCaps.renderMode === 'iframe_embed' ? 'Iframe in CMS body' : 'Full HTML in CMS body'}
+                  {collectionCaps.renderMode === 'iframe_embed'
+                    ? 'Iframe URL field'
+                    : collectionCaps.renderMode === 'split_plain_text'
+                      ? 'Split html / css / js'
+                      : collectionCaps.renderMode === 'remote_runtime'
+                        ? 'Remote runtime'
+                        : 'Delivery auto'}
                 </Badge>
               )}
             </div>

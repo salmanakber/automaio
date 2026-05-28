@@ -37,7 +37,10 @@ import {
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { ScheduleNotifyPanel, type ScheduleNotifySettings } from '@/components/projects/ScheduleNotifyPanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
-import type { PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
+import {
+  normalizePublishHtmlMode,
+  type PublishHtmlModeOverride,
+} from '@/lib/content/rendering-strategy'
 
 type PublishDialogProps = {
   open: boolean
@@ -177,11 +180,7 @@ export function PublishDialog({
     setPublishMode('now')
     setScheduledAt(defaultScheduleInput())
     const params = (project?.parameters as Record<string, unknown>) ?? {}
-    const mode = params.publishHtmlMode
-    setPublishHtmlMode(
-      mode === 'iframe_embed' || mode === 'rich_text_html' || mode === 'custom_code' ||
-      mode === 'remote_runtime' || mode === 'split_plain_text' || mode === 'auto' ? mode : 'auto',
-    )
+    setPublishHtmlMode(normalizePublishHtmlMode(params.publishHtmlMode))
     if (project?.cmsCollectionId) loadPreview()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, projectId, project?.cmsCollectionId])
@@ -414,11 +413,9 @@ export function PublishDialog({
                           value: 'auto',
                           label: `Auto Mode — resolved by schema${preview?.htmlLineCount ? ` (${preview.htmlLineCount} lines)` : ''}`,
                         },
-                        { value: 'remote_runtime', label: '⚡ Remote Runtime — instant server-side sync' },
-                        { value: 'split_plain_text', label: 'Split HTML / CSS / JS — static assets' },
-                        { value: 'custom_code', label: 'Raw HTML Body CMS injection' },
-                        { value: 'iframe_embed', label: 'Embedded iFrame architecture' },
-                        { value: 'rich_text_html', label: 'Force Rich Text output payload' },
+                        { value: 'remote_runtime', label: 'Remote runtime — Page ID + runtime.js on collection template' },
+                        { value: 'split_plain_text', label: 'Split HTML — html, css, js Plain Text fields' },
+                        { value: 'iframe_embed', label: 'Iframe embed — iframe-url Plain Text field' },
                       ].map((opt) => (
                         <SelectItem
                           key={opt.value}
@@ -443,7 +440,7 @@ export function PublishDialog({
                             Client-side JavaScript rendering is active. Standard web crawlers may be unable to parse or index layout structures effectively.
                           </p>
                           <p className="text-[11px] text-zinc-500 leading-relaxed">
-                            For organic discovery, utilize <strong className="text-zinc-400 font-medium">Split HTML/CSS/JS</strong> or <strong className="text-zinc-400 font-medium">Rich Text</strong> layouts which write properties directly into native containers.
+                            For organic discovery, use <strong className="text-zinc-400 font-medium">Split HTML/CSS/JS</strong> so markup is stored in Plain Text fields and rendered in the collection template.
                           </p>
                         </div>
                       </div>

@@ -1,49 +1,52 @@
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
-import { DEFAULT_HTML_LINE_THRESHOLD } from '@/lib/platform/rendering-settings'
-
-/** @deprecated Use getHtmlLineThreshold() for admin-configurable value. */
-export const HTML_LINE_THRESHOLD = DEFAULT_HTML_LINE_THRESHOLD
 
 export type RenderingStrategy = {
   lineCount: number
-  strategy: 'remote_runtime' | 'split_plain_text' | 'custom_code' | 'iframe_embed' | 'rich_text_html'
+  strategy: PublishHtmlMode
   htmlMode: PublishHtmlMode
   reason: string
 }
 
 export type PublishHtmlModeOverride = PublishHtmlMode | 'auto'
 
+const DELIVERY_MODES: PublishHtmlMode[] = ['remote_runtime', 'split_plain_text', 'iframe_embed']
+
+export function normalizePublishHtmlMode(raw: unknown): PublishHtmlModeOverride {
+  if (raw === 'auto') return 'auto'
+  if (DELIVERY_MODES.includes(raw as PublishHtmlMode)) return raw as PublishHtmlMode
+  // Legacy modes map to closest delivery option
+  if (raw === 'rich_text_html' || raw === 'custom_code') return 'split_plain_text'
+  return 'auto'
+}
+
 export function countHtmlLines(html: string): number {
   if (!html?.trim()) return 0
   return html.split('\n').length
 }
 
-/**
- * Decide how to deliver HTML on Webflow:
- * - Small HTML (< threshold) with custom_code access → custom_code (Plain Text / embed field)
- * - Large HTML (≥ threshold) → iframe_embed (iframe snippet in Rich Text)
- * - No custom_code access → rich_text_html fallback
- */
 export type RenderingStrategyOptions = {
   hasRemoteRuntimeFields?: boolean
   hasSplitPlainTextFields?: boolean
+  hasIframeEmbedFields?: boolean
 }
 
+/**
+ * Resolve delivery mode (only remote runtime, split HTML, or iframe embed).
+ */
 export function resolveRenderingStrategy(
-  html: string,
-  hasCustomCodeAccess: boolean,
-  threshold: number = DEFAULT_HTML_LINE_THRESHOLD,
+  _html: string,
+  _hasCustomCodeAccess: boolean,
+  _threshold?: number,
   options?: RenderingStrategyOptions,
 ): RenderingStrategy {
-  const lineCount = countHtmlLines(html)
+  const lineCount = countHtmlLines(_html)
 
   if (options?.hasRemoteRuntimeFields) {
     return {
       lineCount,
       strategy: 'remote_runtime',
       htmlMode: 'remote_runtime',
-      reason:
-        'Remote runtime — Webflow stores Page ID only; platform renders via runtime.js',
+      reason: 'Remote runtime — Webflow stores Page ID; content loads from Automaio API',
     }
   }
 
@@ -52,34 +55,24 @@ export function resolveRenderingStrategy(
       lineCount,
       strategy: 'split_plain_text',
       htmlMode: 'split_plain_text',
-      reason:
-        'Collection has HTML/CSS/JS Plain Text fields — direct SEO-friendly rendering on Webflow',
+      reason: 'Split HTML/CSS/JS — content in Plain Text CMS fields (html, css, js)',
     }
   }
 
-  if (!hasCustomCodeAccess) {
-    return {
-      lineCount,
-      strategy: 'rich_text_html',
-      htmlMode: 'rich_text_html',
-      reason: 'Custom code unavailable — using CMS Rich Text delivery',
-    }
-  }
-
-  if (lineCount >= threshold) {
+  if (options?.hasIframeEmbedFields) {
     return {
       lineCount,
       strategy: 'iframe_embed',
       htmlMode: 'iframe_embed',
-      reason: `HTML exceeds ${threshold} lines — iframe embed in Rich Text field`,
+      reason: 'Iframe embed — iframe-url Plain Text field loads hosted page',
     }
   }
 
   return {
     lineCount,
-    strategy: 'custom_code',
-    htmlMode: 'custom_code',
-    reason: `HTML under ${threshold} lines — full page HTML in CMS body field`,
+    strategy: 'remote_runtime',
+    htmlMode: 'remote_runtime',
+    reason: 'Default — use remote runtime (add Page ID field or create collection via Automaio)',
   }
 }
 
@@ -90,21 +83,22 @@ export function resolveHtmlModeWithOverride(
   threshold: number,
   options?: RenderingStrategyOptions,
 ): RenderingStrategy {
-  if (override && override !== 'auto') {
+  const normalized = normalizePublishHtmlMode(override)
+
+  if (normalized !== 'auto' && DELIVERY_MODES.includes(normalized)) {
     const lineCount = countHtmlLines(html)
     const reasons: Record<PublishHtmlMode, string> = {
-      remote_runtime: 'Manual: remote runtime (Page ID in CMS, render from platform API)',
-      split_plain_text: 'Manual: split HTML/CSS/JS into Plain Text CMS fields (legacy)',
-      custom_code: 'Manual: full HTML in CMS body field',
-      iframe_embed: 'Manual: iframe embed snippet in Rich Text field',
-      rich_text_html: 'Manual: full HTML in Rich Text field',
+      remote_runtime: 'Manual: remote runtime (Page ID + runtime.js on collection template)',
+      split_plain_text: 'Manual: split HTML/CSS/JS in Plain Text fields (html, css, js)',
+      iframe_embed: 'Manual: iframe embed via iframe-url Plain Text field',
     }
     return {
       lineCount,
-      strategy: override === 'custom_code' ? 'custom_code' : override,
-      htmlMode: override,
-      reason: reasons[override],
+      strategy: normalized,
+      htmlMode: normalized,
+      reason: reasons[normalized],
     }
   }
+
   return resolveRenderingStrategy(html, hasCustomCodeAccess, threshold, options)
 }

@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { getAppBaseUrl } from '@/lib/app-url'
-import { buildCollectionEmbedSnippet } from '@/lib/webflow/embed-setup'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
-import { ensureAutomaioEmbedForIntegration } from '@/lib/webflow/site-embed'
-import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
+import {
+  ensureCollectionDeliverySetup,
+  getCollectionTemplateSnippet,
+} from '@/lib/webflow/collection-delivery-setup'
+import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 
 type CollectionsJson = {
   automaioEmbed?: { scriptId?: string; configuredAt?: string }
   automaioRuntime?: { scriptId?: string; configuredAt?: string; collectionId?: string }
+  automaioDelivery?: { mode?: PublishHtmlMode; scriptId?: string; configuredAt?: string }
 }
 
 async function getIntegrationForUser(integrationId: string, userId: string) {
@@ -29,7 +32,16 @@ function readCollectionsJson(raw: unknown): CollectionsJson {
   return raw as CollectionsJson
 }
 
-/** Check custom code access and runtime bootstrap status for the connected site. */
+const DELIVERY_MODES: PublishHtmlMode[] = ['remote_runtime', 'split_plain_text', 'iframe_embed']
+
+function parseDeliveryMode(raw: unknown): PublishHtmlMode {
+  if (typeof raw === 'string' && DELIVERY_MODES.includes(raw as PublishHtmlMode)) {
+    return raw as PublishHtmlMode
+  }
+  return 'remote_runtime'
+}
+
+/** Check custom code access and delivery bootstrap status for the connected site. */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -48,34 +60,53 @@ export async function GET(
     const access = await checkCustomCodeAccess(integration.webflowApiKey, integration.webflowSiteId)
     const appUrl = getAppBaseUrl()
 
-    const runtimeConfigured = Boolean(collectionsJson.automaioRuntime?.scriptId)
+    const deliveryMode = collectionsJson.automaioDelivery?.mode
+    const runtimeConfigured = Boolean(
+      collectionsJson.automaioRuntime?.scriptId ||
+        (deliveryMode === 'remote_runtime' && collectionsJson.automaioDelivery?.scriptId),
+    )
+    const deliveryConfigured = Boolean(collectionsJson.automaioDelivery?.scriptId)
     const legacyEmbedConfigured = Boolean(collectionsJson.automaioEmbed?.scriptId)
-    const embedConfigured = runtimeConfigured || legacyEmbedConfigured
+    const embedConfigured = runtimeConfigured || deliveryConfigured || legacyEmbedConfigured
 
-    let message = access.message
+    let message = access.ok
+      ? 'Custom code access is available.'
+      : access.message
     if (access.ok) {
-      if (runtimeConfigured) {
+      if (deliveryMode === 'split_plain_text' && deliveryConfigured) {
         message =
-          'Remote runtime bootstrap is active on your collection template. Pages render from Automaio automatically — no embed paste required.'
+          'Split HTML delivery is active — collection template loads html, css, and js from CMS Plain Text fields.'
+      } else if (deliveryMode === 'iframe_embed' && deliveryConfigured) {
+        message =
+          'Iframe embed delivery is active — collection template loads iframe-url from CMS.'
+      } else if (runtimeConfigured) {
+        message =
+          'Remote runtime bootstrap is active on your collection template. Pages render from Automaio automatically.'
       } else if (legacyEmbedConfigured) {
         message =
-          'Legacy iframe embed is active. New landing collections use remote runtime instead — sync or publish to upgrade.'
+          'Legacy site embed detected. Publish a landing page to switch to remote runtime, split HTML, or iframe embed.'
       } else {
         message =
-          'Automatic runtime setup is available. Create a landing collection or publish a page to apply it — no manual embed paste needed.'
+          'Automatic delivery setup is available. Publish a landing page or run setup to configure the collection template.'
       }
     }
+
+    const activeMode = deliveryMode ?? (runtimeConfigured ? 'remote_runtime' : undefined)
 
     return NextResponse.json({
       customCodeAccess: access.ok,
       message,
+      deliveryMode: activeMode,
       runtimeConfigured,
+      deliveryConfigured,
       legacyEmbedConfigured,
-      /** @deprecated Use runtimeConfigured — kept for older UI clients */
+      /** @deprecated Use runtimeConfigured / deliveryConfigured */
       embedConfigured,
       runtimeUrl: `${appUrl}/webflow/runtime.js`,
       runtimeCollectionSnippet: buildWebflowRuntimeCollectionEmbed(appUrl),
-      collectionEmbedSnippet: buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId),
+      collectionTemplateSnippet: activeMode
+        ? getCollectionTemplateSnippet(activeMode, appUrl)
+        : getCollectionTemplateSnippet('remote_runtime', appUrl),
       templatesCollectionId: integration.templatesCollectionId,
     })
   } catch (error) {
@@ -84,7 +115,7 @@ export async function GET(
   }
 }
 
-/** Retry automatic runtime bootstrap on the collection template (OAuth + custom_code required). */
+/** Configure collection template for a delivery mode (OAuth + custom_code required). */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -105,31 +136,21 @@ export async function POST(
         ? body.collectionId
         : integration.templatesCollectionId ?? integration.campaignsCollectionId
 
-    const preferLegacyEmbed = body.mode === 'iframe_embed'
-
-    const appUrl = getAppBaseUrl()
-
-    if (preferLegacyEmbed) {
-      const result = await ensureAutomaioEmbedForIntegration(id, {
-        collectionId: collectionId ?? undefined,
-        publishSite: body.publishSite !== false,
-      })
-
-      if (!result.success) {
-        return NextResponse.json({
-          success: false,
-          needsReconnect: result.needsReconnect,
-          error: result.error,
-          collectionEmbedSnippet: buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId),
-        })
-      }
-
-      return NextResponse.json({ success: true, mode: 'iframe_embed', automaioEmbed: result.automaioEmbed })
+    if (!collectionId) {
+      return NextResponse.json(
+        { error: 'Select a collection or pass collectionId in the request body.' },
+        { status: 400 },
+      )
     }
 
-    const result = await ensureAutomaioRuntimeForIntegration(id, {
-      collectionId: collectionId ?? undefined,
+    const mode = parseDeliveryMode(body.mode)
+    const appUrl = getAppBaseUrl()
+
+    const result = await ensureCollectionDeliverySetup(id, {
+      collectionId,
+      mode,
       publishSite: body.publishSite !== false,
+      force: body.force === true,
     })
 
     if (!result.success) {
@@ -137,19 +158,22 @@ export async function POST(
         success: false,
         needsReconnect: result.needsReconnect,
         error: result.error,
-        runtimeCollectionSnippet: buildWebflowRuntimeCollectionEmbed(appUrl),
-        collectionEmbedSnippet: buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId),
+        mode,
+        collectionTemplateSnippet: result.collectionTemplateSnippet,
+        runtimeCollectionSnippet:
+          mode === 'remote_runtime' ? buildWebflowRuntimeCollectionEmbed(appUrl) : undefined,
       })
     }
 
     return NextResponse.json({
       success: true,
-      mode: 'remote_runtime',
-      automaioRuntime: result.automaioRuntime,
-      runtimeConfigured: true,
+      mode: result.mode,
+      templateAutoConfigured: result.templateAutoConfigured,
+      collectionTemplateSnippet: result.collectionTemplateSnippet,
+      runtimeConfigured: mode === 'remote_runtime',
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Runtime setup failed'
+    const message = error instanceof Error ? error.message : 'Delivery setup failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

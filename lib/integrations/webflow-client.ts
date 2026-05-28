@@ -67,6 +67,31 @@ export class WebflowClient {
     }>(`/collections/${collectionId}`)
   }
 
+  async createCollectionField(
+    collectionId: string,
+    field: {
+      type: string
+      displayName: string
+      isRequired?: boolean
+      isEditable?: boolean
+    },
+  ) {
+    return this.request<{
+      id: string
+      slug: string
+      displayName: string
+      type: string
+    }>(`/collections/${collectionId}/fields`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: field.type,
+        displayName: field.displayName,
+        isRequired: field.isRequired ?? false,
+        isEditable: field.isEditable ?? true,
+      }),
+    })
+  }
+
   async createCollection(
     siteId: string,
     payload: {

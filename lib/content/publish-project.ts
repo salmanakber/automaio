@@ -15,13 +15,15 @@ import {
   buildCollectionEmbedSnippet,
   buildProjectEmbedSnippet,
 } from '@/lib/webflow/embed-setup'
-import { ensureAutomaioEmbedForIntegration } from '@/lib/webflow/site-embed'
-import { ensureAutomaioRuntimeForIntegration, clearAutomaioSiteLevelRuntime } from '@/lib/webflow/runtime-site-embed'
 import { buildWebflowLiveUrl } from '@/lib/webflow/live-url'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
-import { resolveHtmlModeWithOverride, type PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
+import {
+  normalizePublishHtmlMode,
+  resolveHtmlModeWithOverride,
+  type PublishHtmlModeOverride,
+} from '@/lib/content/rendering-strategy'
 import { getHtmlLineThreshold } from '@/lib/platform/rendering-settings'
 import { buildProjectIframeUrl } from '@/lib/webflow/embed-page'
 import { applyLayoutControlsToHtml, parseLayoutControls } from '@/lib/webflow/layout-controls'
@@ -29,9 +31,12 @@ import { assembleLandingPageForWebflow } from '@/lib/webflow/landing-page-assemb
 import {
   collectionSupportsRemoteRuntime,
   collectionSupportsSplitPlainText,
+  collectionSupportsIframeEmbed,
 } from '@/lib/webflow/cms-collection-schema'
-import { buildWebflowCollectionTemplateEmbed } from '@/lib/webflow/collection-template-snippet'
-import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
+import {
+  ensureCollectionDeliverySetup,
+  getCollectionTemplateSnippet,
+} from '@/lib/webflow/collection-delivery-setup'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
 import { applyHtmlModeFieldCleanup } from '@/lib/webflow/html-mode-field-cleanup'
 import {
@@ -55,18 +60,7 @@ export type PublishProjectOptions = {
 }
 
 function parsePublishHtmlMode(params: Record<string, unknown>): PublishHtmlModeOverride {
-  const raw = params.publishHtmlMode
-  if (
-    raw === 'iframe_embed' ||
-    raw === 'rich_text_html' ||
-    raw === 'custom_code' ||
-    raw === 'split_plain_text' ||
-    raw === 'remote_runtime' ||
-    raw === 'auto'
-  ) {
-    return raw
-  }
-  return 'auto'
+  return normalizePublishHtmlMode(params.publishHtmlMode)
 }
 
 async function prepareProjectHtml(
@@ -110,6 +104,7 @@ export async function getProjectPublishPreview(projectId: string) {
   const threshold = await getHtmlLineThreshold()
   const hasRuntimeFields = collectionSupportsRemoteRuntime(collectionFields)
   const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
+  const hasIframeFields = collectionSupportsIframeEmbed(collectionFields)
 
   let htmlMode: PublishHtmlMode = 'remote_runtime'
   if (integration && htmlForStrategy.trim() && project.contentType !== 'blog_post') {
@@ -119,7 +114,11 @@ export async function getProjectPublishPreview(projectId: string) {
       access.ok,
       publishHtmlMode,
       threshold,
-      { hasRemoteRuntimeFields: hasRuntimeFields, hasSplitPlainTextFields: hasSplitFields },
+      {
+        hasRemoteRuntimeFields: hasRuntimeFields,
+        hasSplitPlainTextFields: hasSplitFields,
+        hasIframeEmbedFields: hasIframeFields,
+      },
     )
     htmlMode = strategy.htmlMode
   }
@@ -128,7 +127,7 @@ export async function getProjectPublishPreview(projectId: string) {
   let assembledLanding
   if (htmlForStrategy.trim() && project.contentType !== 'blog_post') {
     pageSchema = buildLandingPageSchema(project, htmlForStrategy)
-    if (hasSplitFields && htmlMode === 'split_plain_text') {
+    if (htmlMode === 'split_plain_text') {
       assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
         scopeId: project.id,
         allowJs: true,
@@ -174,13 +173,10 @@ export async function getProjectPublishPreview(projectId: string) {
         ? buildCollectionEmbedSnippet(appUrl, integration.webflowSiteId)
         : null,
     projectEmbedSnippet: buildProjectEmbedSnippet(appUrl, projectId),
-    collectionTemplateSnippet: hasRuntimeFields
-      ? buildWebflowRuntimeCollectionEmbed(appUrl)
-      : hasSplitFields
-        ? buildWebflowCollectionTemplateEmbed()
-        : null,
+    collectionTemplateSnippet: getCollectionTemplateSnippet(plan.htmlMode, appUrl),
     usesSplitPlainText: plan.htmlMode === 'split_plain_text',
     usesRemoteRuntime: plan.htmlMode === 'remote_runtime',
+    usesIframeEmbed: plan.htmlMode === 'iframe_embed',
     runtimeUrl: `${appUrl}/webflow/runtime.js`,
     runtimeConfigured: Boolean(
       (integration?.collections as CollectionsJson | null)?.automaioRuntime?.scriptId,
@@ -338,18 +334,20 @@ export async function publishContentProject(
   })
   if (!integration) throw new Error('Webflow integration not found')
 
+  const appUrl = getAppBaseUrl()
   const { payload, htmlForStrategy } = await prepareProjectHtml(project)
   if (!payload.templateHtml && !payload.bodyHtml) {
     throw new Error('Add content or pick a template before publishing')
   }
 
-  const collectionFields = await getCollectionFields(integration, project.cmsCollectionId)
-
   const projectParams = (project.parameters as Record<string, unknown>) ?? {}
   const publishHtmlMode = parsePublishHtmlMode(projectParams)
   const threshold = await getHtmlLineThreshold()
+  let collectionFields = await getCollectionFields(integration, project.cmsCollectionId)
+
   const hasRuntimeFields = collectionSupportsRemoteRuntime(collectionFields)
   const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
+  const hasIframeFields = collectionSupportsIframeEmbed(collectionFields)
 
   const isHtmlPage = project.contentType !== 'blog_post' && Boolean(htmlForStrategy.trim())
   let htmlMode: PublishHtmlMode = 'remote_runtime'
@@ -363,7 +361,11 @@ export async function publishContentProject(
       customCode.ok,
       publishHtmlMode,
       threshold,
-      { hasRemoteRuntimeFields: hasRuntimeFields, hasSplitPlainTextFields: hasSplitFields },
+      {
+        hasRemoteRuntimeFields: hasRuntimeFields,
+        hasSplitPlainTextFields: hasSplitFields,
+        hasIframeEmbedFields: hasIframeFields,
+      },
     )
     htmlMode = strategy.htmlMode
   }
@@ -372,7 +374,7 @@ export async function publishContentProject(
   let assembledLanding
   if (isHtmlPage) {
     pageSchema = buildLandingPageSchema(project, htmlForStrategy)
-    if (hasSplitFields && htmlMode === 'split_plain_text') {
+    if (htmlMode === 'split_plain_text') {
       assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
         scopeId: projectId,
         allowJs: true,
@@ -465,114 +467,44 @@ export async function publishContentProject(
   let runtimeNeedsReconnect = false
   const usedSplitPlainText = plan.htmlMode === 'split_plain_text'
   const usedRemoteRuntime = plan.htmlMode === 'remote_runtime'
-  let usedRichTextFallback = plan.htmlMode === 'rich_text_html'
+  const usedIframeEmbed = plan.htmlMode === 'iframe_embed'
+  let collectionTemplateSnippet = getCollectionTemplateSnippet(plan.htmlMode, appUrl)
 
-  if (htmlModeChanged && !usedRemoteRuntime) {
-    try {
-      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
-    } catch {
-      // Non-fatal
-    }
-  }
+  if (isHtmlPage && project.cmsCollectionId) {
+    const deliveryResult = await ensureCollectionDeliverySetup(integration.id, {
+      collectionId: project.cmsCollectionId,
+      mode: plan.htmlMode,
+      publishSite: false,
+      force: htmlModeChanged,
+    })
 
-  if (usedRemoteRuntime) {
-    let runtimeResult: Awaited<ReturnType<typeof ensureAutomaioRuntimeForIntegration>>
-    try {
-      runtimeResult = await ensureAutomaioRuntimeForIntegration(integration.id, {
-        collectionId: project.cmsCollectionId ?? undefined,
-        publishSite: false,
-        skipIfConfigured: !htmlModeChanged,
-      })
-    } catch (runtimeErr) {
-      runtimeResult = {
-        success: false,
-        needsReconnect: true,
-        recoverable: true,
-        error: runtimeErr instanceof Error ? runtimeErr.message : 'Runtime setup failed',
+    collectionFields = deliveryResult.fields.map((f) => ({
+      slug: f.slug,
+      name: f.name ?? f.slug,
+      type: f.type,
+    }))
+    collectionTemplateSnippet = deliveryResult.collectionTemplateSnippet
+
+    if (deliveryResult.success) {
+      embedAutoConfigured = deliveryResult.templateAutoConfigured ?? false
+      runtimeAutoConfigured = usedRemoteRuntime && embedAutoConfigured
+
+      if (usedRemoteRuntime) {
+        embedMessage =
+          'Published with remote runtime. Collection template updated — Page ID + runtime.js load content from Automaio.'
+      } else if (usedSplitPlainText) {
+        embedMessage =
+          'Published with split HTML/CSS/JS fields (html, css, js). Collection template runner installed — previous delivery modes cleared from template.'
+      } else if (usedIframeEmbed) {
+        embedMessage =
+          'Published with iframe embed (iframe-url field). Collection template iframe runner installed — previous delivery modes cleared.'
       }
-    }
-
-    if (runtimeResult.success) {
-      runtimeAutoConfigured = true
-      embedAutoConfigured = true
-      embedMessage =
-        'Published with remote runtime. Automaio automatically configured your collection template — pages render from the platform without pasting embed code.'
-    } else if (runtimeResult.needsReconnect) {
-      runtimeNeedsReconnect = true
+    } else if (deliveryResult.needsReconnect) {
       embedNeedsReconnect = true
+      runtimeNeedsReconnect = usedRemoteRuntime
       embedMessage =
-        'Published with remote runtime. Reconnect Webflow in Settings to enable automatic template setup, or add the runtime embed snippet manually.'
-    } else {
-      embedMessage =
-        'Published with remote runtime. Webflow CMS stores Page ID + SEO only — content updates deploy without republishing CMS HTML.'
-    }
-  } else if (usedSplitPlainText) {
-    embedMessage =
-      'Landing page published to HTML/CSS/JS Plain Text CMS fields. Add the Automaio collection template embed to your Webflow Collection Template page.'
-    try {
-      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
-    } catch {
-      // Non-fatal
-    }
-  } else if (usedRichTextFallback && isHtmlPage) {
-    embedMessage =
-      'HTML page published to CMS Rich Text field. Bind a Rich Text element to your body field on the collection template in Webflow Designer.'
-    try {
-      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
-    } catch {
-      // Non-fatal
-    }
-  } else if (!usedRemoteRuntime && isHtmlPage) {
-    try {
-      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
-    } catch {
-      // Non-fatal
-    }
-  }
-
-  if (html.trim() && plan.usesEmbed) {
-    let embedResult: Awaited<ReturnType<typeof ensureAutomaioEmbedForIntegration>>
-    try {
-      embedResult = await ensureAutomaioEmbedForIntegration(integration.id, {
-        collectionId: project.cmsCollectionId,
-        publishSite: false,
-      })
-    } catch (embedErr) {
-      embedResult = {
-        success: false,
-        needsReconnect: true,
-        recoverable: true,
-        error: embedErr instanceof Error ? embedErr.message : 'Embed setup failed',
-      }
-    }
-
-    if (embedResult.success) {
-      embedAutoConfigured = true
-      embedMessage =
-        'Content synced to CMS, embed script applied to your collection template, and site published.'
-    } else if (embedResult.needsReconnect) {
-      // Fallback: push full HTML into Rich Text and skip iframe embed.
-      plan = buildWebflowFieldPlan(
-        payload,
-        collectionFields,
-        integration.cmsFieldMapping,
-        project.cmsCollectionId,
-        { htmlMode: 'rich_text_html' },
-      )
-      fieldData = applyHtmlModeFieldCleanup(
-        plan.fieldData,
-        'rich_text_html',
-        collectionFields,
-      )
-      try {
-        await upsertCms(fieldData)
-      } catch (err) {
-        throw new Error(formatWebflowValidationError(err))
-      }
-      usedRichTextFallback = true
-      embedNeedsReconnect = false
-      embedMessage =
-        'Automatic embed unavailable — full HTML saved to your CMS Rich Text field instead. Add a Rich Text block bound to the body field on your collection template.'
+        deliveryResult.error ??
+        'Reconnect Webflow in Settings (custom_code permission) to auto-configure the collection template, or paste the template snippet manually.'
     }
   }
 
@@ -601,7 +533,6 @@ export async function publishContentProject(
     itemSlug: payload.slug ?? slugify(project.name),
   })
 
-  const appUrl = getAppBaseUrl()
   const previewUrl = buildProjectIframeUrl(appUrl, projectId)
 
   await prisma.contentProject.update({
@@ -628,16 +559,12 @@ export async function publishContentProject(
     embedMessage,
     runtimeAutoConfigured,
     runtimeNeedsReconnect,
-    usedRichTextFallback,
     usedSplitPlainText,
     usedRemoteRuntime,
+    usedIframeEmbed,
     htmlMode: plan.htmlMode,
     usesEmbed: plan.usesEmbed,
-    collectionTemplateSnippet: usedRemoteRuntime
-      ? buildWebflowRuntimeCollectionEmbed(appUrl)
-      : usedSplitPlainText
-        ? buildWebflowCollectionTemplateEmbed()
-        : null,
+    collectionTemplateSnippet,
     runtimeUrl: `${appUrl}/webflow/runtime.js`,
     runtimeApiUrl: `${appUrl}/api/runtime/pages/${projectId}`,
     embedFieldSlug: plan.embedFieldSlug,
