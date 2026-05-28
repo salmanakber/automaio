@@ -33,6 +33,11 @@ import {
 import { buildWebflowCollectionTemplateEmbed } from '@/lib/webflow/collection-template-snippet'
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
+import {
+  publishWebflowCmsItems,
+  publishWebflowSiteWithRetry,
+  isWebflowRateLimitError,
+} from '@/lib/webflow/publish-site'
 
 function slugify(value: string) {
   return value
@@ -352,16 +357,28 @@ export async function publishContentProject(
   let cmsItemId = project.webflowCmsItemId ?? project.sourceCmsItemId
 
   const upsertCms = async (data: Record<string, unknown>) => {
+    const goLive = project.showOnWebsite !== false
+
     if (cmsItemId) {
       await client.updateCollectionItem(project.cmsCollectionId!, cmsItemId, data)
-    } else {
-      const created = await client.createCollectionItem(
-        project.cmsCollectionId!,
-        data,
-        { isDraft: !project.showOnWebsite },
-      )
-      cmsItemId = created.id
+      if (goLive) {
+        await publishWebflowCmsItems(client, project.cmsCollectionId!, [cmsItemId])
+      }
+      return
     }
+
+    if (goLive) {
+      const created = await client.createLiveCollectionItem(project.cmsCollectionId!, data)
+      cmsItemId = created.id
+      return
+    }
+
+    const created = await client.createCollectionItem(
+      project.cmsCollectionId!,
+      data,
+      { isDraft: true },
+    )
+    cmsItemId = created.id
   }
 
   try {
@@ -408,7 +425,8 @@ export async function publishContentProject(
     try {
       runtimeResult = await ensureAutomaioRuntimeForIntegration(integration.id, {
         collectionId: project.cmsCollectionId ?? undefined,
-        publishSite: shouldPublishSite,
+        publishSite: false,
+        skipIfConfigured: true,
       })
     } catch (runtimeErr) {
       runtimeResult = {
@@ -446,7 +464,7 @@ export async function publishContentProject(
     try {
       embedResult = await ensureAutomaioEmbedForIntegration(integration.id, {
         collectionId: project.cmsCollectionId,
-        publishSite: shouldPublishSite,
+        publishSite: false,
       })
     } catch (embedErr) {
       embedResult = {
@@ -480,12 +498,21 @@ export async function publishContentProject(
       embedNeedsReconnect = false
       embedMessage =
         'Automatic embed unavailable — full HTML saved to your CMS Rich Text field instead. Add a Rich Text block bound to the body field on your collection template.'
-      if (shouldPublishSite) {
-        await client.publishSite(integration.webflowSiteId)
+    }
+  }
+
+  if (shouldPublishSite) {
+    try {
+      await publishWebflowSiteWithRetry(client, integration.webflowSiteId)
+    } catch (publishErr) {
+      if (isWebflowRateLimitError(publishErr)) {
+        embedMessage =
+          embedMessage ||
+          'CMS item saved. Webflow site publish hit rate limit — wait ~60 seconds and republish from Webflow, or publish again with "Publish Webflow site" unchecked.'
+      } else {
+        throw publishErr
       }
     }
-  } else if (shouldPublishSite) {
-    await client.publishSite(integration.webflowSiteId)
   }
 
   const collectionsJson = integration.collections as {

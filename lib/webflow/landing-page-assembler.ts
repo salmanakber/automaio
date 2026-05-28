@@ -85,6 +85,21 @@ export function scopeCssToTemplate(css: string, scopeClass: string): string {
             if (!s) return s
             if (s === 'html' || s === 'body' || s === ':root') return scope
             if (s.startsWith(scope)) return s
+
+            const wrapperRoot =
+              /^\.ai-landing-wrap(?:per)?(?:\b|$)/.test(s) ||
+              s === '.ai-template-scope' ||
+              s.startsWith('.ai-landing-wrap ') ||
+              s.startsWith('.ai-landing-wrapper ')
+
+            if (wrapperRoot) {
+              const rest = s
+                .replace(/^\.ai-landing-wrap(?:per)?/, '')
+                .replace(/^\.ai-template-scope/, '')
+              const rootClass = `.${scopeClass}.ai-landing-wrapper`
+              return rest.trim() ? `${rootClass}${rest}` : rootClass
+            }
+
             return `${scope} ${s}`
           })
           .join(', ')
@@ -110,7 +125,45 @@ function wrapWithScope(html: string, scopeClass: string): string {
   const scopePattern = new RegExp(`class=["'][^"']*${scopeClass}`, 'i')
   if (scopePattern.test(trimmed)) return trimmed
 
-  return `<div class="${scopeClass} ai-landing-wrapper">\n${trimmed}\n</div>`
+  return `<div class="${scopeClass} ai-landing-wrapper ai-template-scope">\n${trimmed}\n</div>`
+}
+
+/** Base reset styles so Webflow global CSS does not break Automaio templates. */
+export function buildWebflowIsolationCss(scopeClass: string): string {
+  const scope = `.${scopeClass}.ai-landing-wrapper`
+  return `
+${scope} {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  color: var(--automaio-text, #0f172a);
+  background: var(--automaio-bg, #ffffff);
+}
+${scope} *,
+${scope} *::before,
+${scope} *::after {
+  box-sizing: border-box;
+}
+${scope} img {
+  max-width: 100%;
+  height: auto;
+}
+${scope} h1, ${scope} h2, ${scope} h3, ${scope} h4, ${scope} h5, ${scope} h6 {
+  margin: 0 0 0.5em;
+  line-height: 1.2;
+  font-weight: 700;
+}
+${scope} p {
+  margin: 0 0 1em;
+}
+${scope} a {
+  color: inherit;
+}
+`.trim()
 }
 
 function wrapJsInScopeIife(js: string, scopeClass: string): string {
@@ -150,7 +203,12 @@ export function assembleLandingPageForWebflow(
   htmlContent = wrapWithScope(htmlContent, scopeClass)
 
   const rawCss = [imports, inlineCss].filter(Boolean).join('\n\n')
-  let cssContent = scopeCssToTemplate(rawCss, scopeClass)
+  let cssContent = [
+    buildWebflowIsolationCss(scopeClass),
+    scopeCssToTemplate(rawCss, scopeClass),
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 
   // Fallback: if scoping produced empty output but we had CSS, scope the wrapper only
   if (!cssContent.trim() && rawCss.trim()) {

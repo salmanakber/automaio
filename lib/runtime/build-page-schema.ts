@@ -1,6 +1,8 @@
 import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { tagTextElements, groupElementsBySection } from '@/lib/ai/dom-patcher'
 import { assembleLandingPageForWebflow } from '@/lib/webflow/landing-page-assembler'
+import { applyThemeToHtml, resolveTemplateTheme } from '@/lib/templates/theme'
+import type { TemplateStructure } from '@/lib/templates/starter-templates'
 import type { LandingPageSchema, LandingPageSection, LandingPageSectionType } from '@/lib/runtime/types'
 
 type ProjectLike = {
@@ -72,12 +74,16 @@ export function buildLandingPageSchema(project: ProjectLike, htmlOverride?: stri
     project.renderedHtml?.trim() ||
     renderProjectHtml(project, params)
 
-  const assembled = assembleLandingPageForWebflow(html, {
+  const structure = project.template?.templateStructure as TemplateStructure | undefined
+  const theme = resolveTemplateTheme(structure)
+  const htmlWithTheme = applyThemeToHtml(html, theme)
+
+  const assembled = assembleLandingPageForWebflow(htmlWithTheme, {
     scopeId: project.id,
     allowJs: true,
   })
 
-  const sections = buildSectionsFromHtml(html)
+  const sections = buildSectionsFromHtml(htmlWithTheme)
 
   return {
     version: 1,

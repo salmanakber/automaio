@@ -3,17 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -n NEXT,WORKER,WEBFLOW -c blue,green,yellow \"next dev -p 3301\" \"tsx watch server/worker-server.ts\" \"cd webflow-designer-ext && npx @webflow/webflow-cli extension serve\"",
     "build": "next build",
-    "start": "next start",
+    "build:all": "npm run build && cd webflow-designer-ext && npx @webflow/webflow-cli extension build",
+    "start": "concurrently -n NEXT,WORKER -c blue,green \"next start\" \"tsx server/worker-server.ts\"",
     "lint": "eslint .",
     "db:seed": "prisma db seed",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "worker": "tsx watch server/worker-server.ts",
     "worker:start": "tsx server/worker-server.ts",
-    "worker:dev": "concurrently \"npm run dev\" \"npm run worker\"",
-    "worker:background": "node --loader tsx/esm server/worker-server.ts &",
     "webflow:extension": "cd webflow-designer-ext && npx @webflow/webflow-cli extension serve"
   },
   "dependencies": {

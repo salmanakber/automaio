@@ -110,6 +110,32 @@ export class WebflowClient {
     )
   }
 
+  /** Create + immediately publish a CMS item to the live site. */
+  async createLiveCollectionItem(collectionId: string, fieldData: Record<string, unknown>) {
+    return this.request<{ id: string; fieldData?: Record<string, unknown> }>(
+      `/collections/${collectionId}/items/live`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          isArchived: false,
+          fieldData,
+        }),
+      },
+    )
+  }
+
+  /** Publish staged CMS item(s) to the live Webflow site. */
+  async publishCollectionItems(collectionId: string, itemIds: string[]) {
+    if (!itemIds.length) return { publishedItemIds: [] as string[] }
+    return this.request<{ publishedItemIds?: string[] }>(
+      `/collections/${collectionId}/items/publish`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ itemIds }),
+      },
+    )
+  }
+
   async updateCollectionItem(
     collectionId: string,
     itemId: string,

@@ -3,7 +3,7 @@ import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { prisma } from '@/lib/prisma'
 import { isCustomCodePermissionError, isEmbedRecoverableError } from '@/lib/webflow/embed-permissions'
 
-const RUNTIME_SCRIPT_VERSION = '1.0.1'
+const RUNTIME_SCRIPT_VERSION = '1.0.2'
 const RUNTIME_SCRIPT_DISPLAY_NAME = 'Automaio Runtime Bootstrap'
 
 export type AutomaioRuntimeMeta = {
@@ -25,7 +25,7 @@ type CollectionsJson = {
 /** Inline bootstrap — auto-mounts #ai-page-root and loads runtime.js without manual embed paste. */
 export function buildRuntimeInlineBootstrap(webflowSiteId: string, apiUrl: string): string {
   const base = apiUrl.replace(/\/$/, '')
-  return `(function(){var u="${base}",s="${webflowSiteId}";
+  return `(function(){if(window.__automaioBootstrap)return;window.__automaioBootstrap=1;var u="${base}",s="${webflowSiteId}";
 function mkRoot(){var r=document.getElementById("ai-page-root");if(!r){r=document.createElement("div");r.id="ai-page-root";r.setAttribute("data-automaio-root","true");var m=document.querySelector("main")||document.querySelector("[role=main]")||document.body;m.insertBefore(r,m.firstChild);}return r;}
 function showStatus(msg,isErr){var r=mkRoot();r.innerHTML='<p style="font-family:system-ui;padding:1rem 1.25rem;color:'+(isErr?"#b45309":"#64748b")+';font-size:13px;margin:0;line-height:1.5">'+msg+'</p>';}
 function parsePageIdFromJson(text){if(!text||text.indexOf("pageId")===-1)return null;try{var j=JSON.parse(text.trim());if(j.pageId&&String(j.pageId).trim())return String(j.pageId).trim();}catch(e){var m=text.match(/"pageId"\\s*:\\s*"([^"]+)"/);if(m)return m[1];}return null;}
@@ -39,7 +39,7 @@ if(isValidPageId(t)&&t.length>=20)return t;}
 return null;}
 function render(pageId){var root=mkRoot();root.setAttribute("data-automaio-page-id",pageId);function go(){window.AutomaioRuntime.render({pageId:pageId,target:"#ai-page-root",apiBase:u,hideShell:true});}
 if(window.AutomaioRuntime)return go();
-var sc=document.createElement("script");sc.src=u+"/webflow/runtime.js?v=1.0.1";sc.onload=go;sc.onerror=function(){showStatus("Automaio: failed to load runtime.js from "+u,true);};document.head.appendChild(sc);}
+var sc=document.createElement("script");sc.src=u+"/webflow/runtime.js?v=1.0.2";sc.onload=go;sc.onerror=function(){showStatus("Automaio: failed to load runtime.js from "+u,true);};document.head.appendChild(sc);}
 var pid=findPageId();if(pid){render(pid);return;}
 showStatus("Automaio: resolving page…",false);
 var sl=location.pathname.split("/").filter(Boolean).pop();
@@ -166,7 +166,7 @@ async function applyCustomCodeScripts(
 /** Register + apply Automaio runtime bootstrap on collection template (no manual embed paste). */
 export async function ensureAutomaioRuntimeForIntegration(
   integrationId: string,
-  options?: { collectionId?: string; publishSite?: boolean },
+  options?: { collectionId?: string; publishSite?: boolean; skipIfConfigured?: boolean },
 ): Promise<EnsureAutomaioRuntimeResult> {
   const integration = await prisma.webflowIntegration.findUnique({
     where: { id: integrationId },
@@ -180,6 +180,21 @@ export async function ensureAutomaioRuntimeForIntegration(
   const collectionId = options?.collectionId ?? integration.templatesCollectionId ?? undefined
 
   try {
+    if (
+      options?.skipIfConfigured &&
+      existing?.scriptId &&
+      existing.apiUrl === appUrl &&
+      existing.scriptVersion
+    ) {
+      const registered = await client.listRegisteredScripts(integration.webflowSiteId)
+      const stillConfigured = registered.some(
+        (s) => s.id === existing.scriptId && s.version === existing.scriptVersion,
+      )
+      if (stillConfigured) {
+        return { success: true, automaioRuntime: existing }
+      }
+    }
+
     const sourceCode = buildRuntimeInlineBootstrap(integration.webflowSiteId, appUrl)
     const { scriptId, version: scriptVersion } = await resolveRuntimeScript(
       client,
@@ -205,6 +220,8 @@ export async function ensureAutomaioRuntimeForIntegration(
 
     const scriptEntry = { id: scriptId, location: 'footer' as const, version: scriptVersion }
     await applyCustomCodeScripts(client, integration.webflowSiteId, pageId, scriptEntry)
+    // Site-level bootstrap ensures CMS routes work even when the collection template has no blocks yet.
+    await applyCustomCodeScripts(client, integration.webflowSiteId, undefined, scriptEntry)
 
     const automaioRuntime: AutomaioRuntimeMeta = {
       scriptId,

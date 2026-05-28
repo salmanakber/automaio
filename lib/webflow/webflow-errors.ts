@@ -54,6 +54,14 @@ export function formatWebflowValidationError(error: unknown): string {
     return parsed.message
   }
 
+  if (/rate limit|429|too many requests/i.test(msg)) {
+    return (
+      'Webflow rate limit reached (too many publish requests). ' +
+      'Your CMS item was saved — wait 60 seconds, then publish again with "Publish Webflow site" unchecked, ' +
+      'or publish the site manually from Webflow.'
+    )
+  }
+
   if (/Field not described in schema/i.test(msg)) {
     return 'Webflow rejected unknown CMS fields. Sync your collection in Settings and try again.'
   }
