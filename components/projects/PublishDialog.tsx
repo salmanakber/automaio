@@ -46,6 +46,8 @@ type PublishDialogProps = {
   projectId: string
   orgId: string
   onPublished?: (result?: { liveUrl?: string; previewUrl?: string }) => void
+  /** Flush visual editor HTML to DB before publish (blocks, styles, etc.). */
+  onBeforePublish?: () => Promise<string | null | void>
 }
 
 type PublishResult = {
@@ -94,6 +96,7 @@ export function PublishDialog({
   projectId,
   orgId,
   onPublished,
+  onBeforePublish,
 }: PublishDialogProps) {
   const [publishing, setPublishing] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -194,6 +197,13 @@ export function PublishDialog({
     setResult(null)
     try {
       await savePublishSettings()
+      let renderedHtml: string | undefined
+      if (onBeforePublish) {
+        const flushed = await onBeforePublish()
+        if (typeof flushed === 'string' && flushed.trim()) {
+          renderedHtml = flushed.trim()
+        }
+      }
       if (publishMode === 'later') {
         const scheduledFor = new Date(scheduledAt)
         if (Number.isNaN(scheduledFor.getTime())) throw new Error('Please pick a valid date and time')
@@ -221,7 +231,7 @@ export function PublishDialog({
       const res = await fetch(`/api/projects/${projectId}?action=publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publishSite }),
+        body: JSON.stringify({ publishSite, renderedHtml }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Publish failed')

@@ -84,6 +84,7 @@ export type SectionSelection = {
 
 export type ProjectVisualEditorHandle = {
   save: () => Promise<void>
+  flushSave: () => Promise<string | null>
   runBulkAi: (prompt: string) => Promise<void>
   postMessage: (msg: Record<string, unknown>) => void
   hasChanges: boolean
@@ -105,7 +106,13 @@ export type ProjectVisualEditorHandle = {
 interface ProjectVisualEditorProps {
   html: string
   projectId: string
+  autoSaveEnabled?: boolean
   onSave?: (html: string) => void
+  onAutoSaveStateChange?: (state: {
+    hasChanges: boolean
+    autoSaving: boolean
+    saved: boolean
+  }) => void
   onSelectElement?: (el: SelectedElement | null) => void
   onFocusRect?: (rect: { top: number; left: number; width: number; height: number } | null) => void
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void
@@ -194,7 +201,9 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     {
       html,
       projectId,
+      autoSaveEnabled = true,
       onSave,
+      onAutoSaveStateChange,
       onSelectElement,
       onFocusRect,
       onHistoryChange,
@@ -210,7 +219,9 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
   const pendingTextRef = useRef<((els: Record<string, { text: string; tag: string }>) => void) | null>(null)
   const pendingHtmlRef = useRef<((h: string) => void) | null>(null)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const autoSavingRef = useRef(false)
+  const saveChainRef = useRef<Promise<string | null>>(Promise.resolve(null))
+  const skipIframeReloadRef = useRef(false)
+  const iframeInitializedRef = useRef(false)
 
   const [selected, setSelected] = useState<SelectedElement | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
@@ -247,8 +258,11 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
 
   const isStudio = variant === 'studio'
 
-  // Write HTML directly into the iframe document — works everywhere,
-  // no srcdoc encoding issues, no blob URL CSP blocks
+  useEffect(() => {
+    onAutoSaveStateChange?.({ hasChanges, autoSaving, saved })
+  }, [hasChanges, autoSaving, saved, onAutoSaveStateChange])
+
+  // Write HTML into iframe — skip reload when we just saved (prevents wiping in-progress edits)
   const writeToIframe = useCallback(() => {
     const iframe = iframeRef.current
     if (!iframe || !html?.trim()) return
@@ -273,8 +287,12 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
   }, [html])
 
   useEffect(() => {
-    // Small delay ensures iframe element is mounted in DOM
+    if (skipIframeReloadRef.current) {
+      skipIframeReloadRef.current = false
+      return
+    }
     const timer = setTimeout(writeToIframe, 100)
+    iframeInitializedRef.current = true
     return () => clearTimeout(timer)
   }, [writeToIframe])
 
@@ -311,53 +329,82 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     [],
   )
 
-  const persistHtml = useCallback(
-    async (options?: { silent?: boolean }) => {
-      const silent = options?.silent ?? false
-      if (autoSavingRef.current) return
-      autoSavingRef.current = true
-      if (silent) setAutoSaving(true)
-      else setSaving(true)
-
-      try {
-        const cleanHtml = await new Promise<string>((resolve) => {
-          pendingHtmlRef.current = resolve
-          postToIframe({ type: 'am-get-html' })
-          setTimeout(() => {
-            if (pendingHtmlRef.current) {
-              pendingHtmlRef.current = null
-              resolve(html)
-            }
-          }, 3000)
-        })
-
-        const res = await fetch(`/api/projects/${projectId}/html`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ renderedHtml: cleanHtml }),
-          credentials: 'same-origin',
-        })
-        const data = await parseJsonResponse<{ error?: string }>(res)
-        if (!res.ok) throw new Error(data.error ?? 'Save failed')
-
-        setHasChanges(false)
-        setSaved(true)
-        onSave?.(cleanHtml)
-        setTimeout(() => setSaved(false), silent ? 1500 : 3000)
-      } finally {
-        autoSavingRef.current = false
-        if (silent) setAutoSaving(false)
-        else setSaving(false)
+  const requestCleanHtml = useCallback((): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (!iframeReady) {
+        reject(new Error('Editor not ready'))
+        return
       }
+      pendingHtmlRef.current = resolve
+      postToIframe({ type: 'am-get-html' })
+      setTimeout(() => {
+        if (pendingHtmlRef.current) {
+          pendingHtmlRef.current = null
+          reject(new Error('Timed out waiting for editor HTML'))
+        }
+      }, 8000)
+    })
+  }, [iframeReady, postToIframe])
+
+  const persistHtml = useCallback(
+    async (options?: { silent?: boolean }): Promise<string | null> => {
+      const silent = options?.silent ?? false
+
+      const runSave = async (): Promise<string> => {
+        if (silent) setAutoSaving(true)
+        else setSaving(true)
+
+        try {
+          const cleanHtml = await requestCleanHtml()
+
+          const res = await fetch(`/api/projects/${projectId}/html`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ renderedHtml: cleanHtml }),
+            credentials: 'same-origin',
+          })
+          const data = await parseJsonResponse<{ error?: string }>(res)
+          if (!res.ok) throw new Error(data.error ?? 'Save failed')
+
+          setHasChanges(false)
+          setSaved(true)
+          skipIframeReloadRef.current = true
+          onSave?.(cleanHtml)
+          setTimeout(() => setSaved(false), silent ? 1500 : 3000)
+          return cleanHtml
+        } finally {
+          if (silent) setAutoSaving(false)
+          else setSaving(false)
+        }
+      }
+
+      const task = (): Promise<string | null> =>
+        runSave().catch((err) => {
+          if (!silent) throw err
+          console.error('[ProjectVisualEditor] auto-save failed:', err)
+          return null
+        })
+
+      saveChainRef.current = saveChainRef.current.then(task, task)
+      return saveChainRef.current
     },
-    [html, onSave, postToIframe, projectId],
+    [onSave, projectId, requestCleanHtml],
   )
 
   const scheduleAutoSave = useCallback(() => {
+    if (!autoSaveEnabled) return
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => {
       void persistHtml({ silent: true })
     }, 1200)
+  }, [autoSaveEnabled, persistHtml])
+
+  const flushSave = useCallback(async (): Promise<string | null> => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
+    return persistHtml({ silent: false })
   }, [persistHtml])
 
   useEffect(() => {
@@ -749,6 +796,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
 
   useImperativeHandle(ref, () => ({
     save: handleSave,
+    flushSave,
     runBulkAi: async (prompt: string) => handleBulkAi(prompt),
     postMessage: postToIframe,
     hasChanges,

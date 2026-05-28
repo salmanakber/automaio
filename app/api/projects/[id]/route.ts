@@ -134,8 +134,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
       const body = await req.json().catch(() => ({}))
+      const renderedHtmlOverride =
+        typeof body.renderedHtml === 'string' && body.renderedHtml.trim()
+          ? body.renderedHtml.trim()
+          : undefined
       const result = await publishContentProject(id, {
         publishSite: body.publishSite ?? existing.publishSite,
+        renderedHtmlOverride,
       })
       return NextResponse.json({ success: true, ...result })
     } catch (error) {

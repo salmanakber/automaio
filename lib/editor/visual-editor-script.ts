@@ -932,6 +932,8 @@ window.addEventListener('message',function(ev){
       x.removeAttribute('data-am-col-widths');x.removeAttribute('data-am-col-gap');x.removeAttribute('draggable');
       x.removeAttribute('contenteditable');x.classList.remove('am-active','am-block-active','am-block-hover','am-dragging','am-drop-active');
     });
+    var resp=c.querySelector('#automaio-responsive');
+    if(resp&&!resp.getAttribute('data-am-rules'))resp.removeAttribute('id');
     window.parent.postMessage({type:'am-clean-html',html:'<!DOCTYPE html>\\n'+c.outerHTML},'*');
   }
 });

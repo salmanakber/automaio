@@ -33,6 +33,7 @@ import {
 import { buildWebflowCollectionTemplateEmbed } from '@/lib/webflow/collection-template-snippet'
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
+import { applyHtmlModeFieldCleanup } from '@/lib/webflow/html-mode-field-cleanup'
 import {
   publishWebflowCmsItems,
   publishWebflowSiteWithRetry,
@@ -49,6 +50,8 @@ function slugify(value: string) {
 
 export type PublishProjectOptions = {
   publishSite?: boolean
+  /** Fresh HTML from the visual editor — saved before publish when provided. */
+  renderedHtmlOverride?: string
 }
 
 function parsePublishHtmlMode(params: Record<string, unknown>): PublishHtmlModeOverride {
@@ -284,10 +287,43 @@ async function buildProjectPayload(
   }
 }
 
+async function persistProjectRenderedHtml(
+  projectId: string,
+  renderedHtml: string,
+  existingParams: Record<string, unknown>,
+) {
+  const pageSchema = buildLandingPageSchema(
+    { id: projectId, name: '', renderedHtml, parameters: existingParams },
+    renderedHtml,
+  )
+  await prisma.contentProject.update({
+    where: { id: projectId },
+    data: {
+      renderedHtml,
+      parameters: {
+        ...existingParams,
+        pageSchema: JSON.stringify(pageSchema),
+        runtimeVersion: String(pageSchema.version),
+      } as object,
+    },
+  })
+}
+
 export async function publishContentProject(
   projectId: string,
   options?: PublishProjectOptions,
 ) {
+  if (options?.renderedHtmlOverride?.trim()) {
+    const existing = await prisma.contentProject.findUnique({ where: { id: projectId } })
+    if (existing) {
+      await persistProjectRenderedHtml(
+        projectId,
+        options.renderedHtmlOverride.trim(),
+        (existing.parameters as Record<string, unknown>) ?? {},
+      )
+    }
+  }
+
   const project = await prisma.contentProject.findUnique({
     where: { id: projectId },
     include: { template: true },
@@ -351,7 +387,11 @@ export async function publishContentProject(
     project.cmsCollectionId,
     { htmlMode: isHtmlPage ? htmlMode : undefined, assembledLanding, pageSchema },
   )
-  let fieldData = plan.fieldData
+  let fieldData = applyHtmlModeFieldCleanup(
+    plan.fieldData,
+    plan.htmlMode,
+    collectionFields,
+  )
 
   const client = new WebflowClient(integration.webflowApiKey)
   let cmsItemId = project.webflowCmsItemId ?? project.sourceCmsItemId
@@ -401,13 +441,20 @@ export async function publishContentProject(
       }
     : existingParams
 
+  const previousHtmlMode = projectParams.lastPublishedHtmlMode as PublishHtmlMode | undefined
+  const htmlModeChanged = Boolean(previousHtmlMode && previousHtmlMode !== plan.htmlMode)
+
   await prisma.contentProject.update({
     where: { id: projectId },
     data: {
       renderedHtml: html,
       webflowCmsItemId: cmsItemId,
       status: 'published',
-      parameters: schemaParams,
+      parameters: {
+        ...schemaParams,
+        lastPublishedHtmlMode: plan.htmlMode,
+        htmlModeChangedAt: htmlModeChanged ? new Date().toISOString() : projectParams.htmlModeChangedAt,
+      } as object,
     },
   })
 
@@ -420,13 +467,21 @@ export async function publishContentProject(
   const usedRemoteRuntime = plan.htmlMode === 'remote_runtime'
   let usedRichTextFallback = plan.htmlMode === 'rich_text_html'
 
+  if (htmlModeChanged && !usedRemoteRuntime) {
+    try {
+      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
+    } catch {
+      // Non-fatal
+    }
+  }
+
   if (usedRemoteRuntime) {
     let runtimeResult: Awaited<ReturnType<typeof ensureAutomaioRuntimeForIntegration>>
     try {
       runtimeResult = await ensureAutomaioRuntimeForIntegration(integration.id, {
         collectionId: project.cmsCollectionId ?? undefined,
         publishSite: false,
-        skipIfConfigured: true,
+        skipIfConfigured: !htmlModeChanged,
       })
     } catch (runtimeErr) {
       runtimeResult = {
@@ -504,7 +559,11 @@ export async function publishContentProject(
         project.cmsCollectionId,
         { htmlMode: 'rich_text_html' },
       )
-      fieldData = plan.fieldData
+      fieldData = applyHtmlModeFieldCleanup(
+        plan.fieldData,
+        'rich_text_html',
+        collectionFields,
+      )
       try {
         await upsertCms(fieldData)
       } catch (err) {

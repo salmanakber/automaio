@@ -10,12 +10,10 @@ import {
   Tablet,
   Save,
   Loader2,
-  Sparkles,
   Upload,
   CheckCircle2,
   ZoomIn,
   ZoomOut,
-  Wand2,
   RefreshCw,
   Trash2,
   LayoutGrid,
@@ -24,16 +22,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
 
 import {
   ProjectVisualEditor,
@@ -77,9 +68,12 @@ export default function ProjectStudioPage() {
   const [saved, setSaved] = useState(false)
   const [showPublish, setShowPublish] = useState(false)
   const [zoom, setZoom] = useState(1)
-  const [aiOpen, setAiOpen] = useState(false)
-  const [aiPrompt, setAiPrompt] = useState('')
-  const [aiProgress, setAiProgress] = useState(false)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
+  const [editorSaveState, setEditorSaveState] = useState({
+    hasChanges: false,
+    autoSaving: false,
+    saved: false,
+  })
   const [aiStep, setAiStep] = useState(0)
   const [seoGenerating, setSeoGenerating] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -155,13 +149,23 @@ export default function ProjectStudioPage() {
         const data = await parseJsonResponse<{ error?: string }>(res)
         if (!res.ok) throw new Error(data.error ?? 'Failed to save fields')
       }
-      await editorRef.current?.save()
+      await editorRef.current?.flushSave()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const openPublishDialog = async () => {
+    setSaveError('')
+    try {
+      await editorRef.current?.flushSave()
+      setShowPublish(true)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save before publish failed')
     }
   }
 
@@ -191,22 +195,6 @@ export default function ProjectStudioPage() {
       console.error(err)
     } finally {
       setSeoGenerating(false)
-    }
-  }
-
-  const runBulkAi = async () => {
-    if (!aiPrompt.trim()) return
-    setAiOpen(false)
-    setAiProgress(true)
-    setAiStep(0)
-    const stepTimer = setInterval(() => setAiStep((s) => Math.min(s + 1, 3)), 4000)
-    try {
-      await editorRef.current?.runBulkAi(aiPrompt)
-      setAiPrompt('')
-    } finally {
-      clearInterval(stepTimer)
-      setAiProgress(false)
-      setAiStep(0)
     }
   }
 
@@ -338,15 +326,28 @@ export default function ProjectStudioPage() {
                 <CheckCircle2 className="h-3 w-3" /> Saved
               </span>
             )}
+            {!isBlogPost && editorSaveState.autoSaving && (
+              <span className="text-xs text-zinc-500 flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" /> Auto-saving…
+              </span>
+            )}
+            {!isBlogPost && editorSaveState.hasChanges && !editorSaveState.autoSaving && (
+              <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-500">
+                Unsaved
+              </Badge>
+            )}
             {!isBlogPost && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1.5"
-              onClick={() => setAiOpen(true)}
-            >
-              <Wand2 className="h-3.5 w-3.5" /> AI Generate
-            </Button>
+              <div className="flex items-center gap-2 px-2 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
+                <Switch
+                  id="auto-save"
+                  checked={autoSaveEnabled}
+                  onCheckedChange={setAutoSaveEnabled}
+                  className="scale-75"
+                />
+                <Label htmlFor="auto-save" className="text-[10px] text-zinc-400 cursor-pointer">
+                  Auto-save
+                </Label>
+              </div>
             )}
             {isLandingPage && (
               <Button
@@ -363,7 +364,7 @@ export default function ProjectStudioPage() {
               variant="outline"
               size="sm"
               className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300"
-              onClick={() => setShowPublish(true)}
+              onClick={() => void openPublishDialog()}
             >
               <Upload className="h-4 w-4 mr-2" /> Publish
             </Button>
@@ -504,6 +505,8 @@ export default function ProjectStudioPage() {
                   projectId={projectId}
                   variant="studio"
                   editViewport={viewport}
+                  autoSaveEnabled={autoSaveEnabled}
+                  onAutoSaveStateChange={setEditorSaveState}
                   onSelectElement={handleSelectElement}
                   onFocusRect={handleFocusRect}
                   onSectionSelect={handleSectionSelect}
@@ -595,6 +598,7 @@ export default function ProjectStudioPage() {
           project={project}
           projectId={projectId}
           orgId={orgId}
+          onBeforePublish={async () => (await editorRef.current?.flushSave()) ?? null}
           onPublished={(result) => {
             if (result?.liveUrl) setPublishedLiveUrl(result.liveUrl)
             load()
@@ -602,9 +606,9 @@ export default function ProjectStudioPage() {
         />
 
         <AiProgressOverlay
-          open={aiProgress || repersonalizing}
+          open={repersonalizing}
           step={aiStep}
-          label={repersonalizing ? 'Re-personalizing your landing page' : 'AI is updating your template'}
+          label="Re-personalizing your landing page"
         />
 
         {isLandingPage && (
@@ -618,35 +622,6 @@ export default function ProjectStudioPage() {
             onRunningChange={setRepersonalizing}
           />
         )}
-
-        <Dialog open={aiOpen} onOpenChange={setAiOpen}>
-          <DialogContent className="bg-[#0c0c0e] border-zinc-800 text-white sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-blue-400" />
-                AI Generate All Text
-              </DialogTitle>
-              <DialogDescription className="text-zinc-500">
-                Describe your product or campaign. AI updates text blocks only — layout and images stay intact.
-              </DialogDescription>
-            </DialogHeader>
-            <Textarea
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              rows={6}
-              placeholder="Describe your business, audience, tone, and key messages…"
-              className="bg-zinc-950 border-zinc-800 text-sm"
-            />
-            <DialogFooter>
-              <Button variant="outline" className="border-zinc-700" onClick={() => setAiOpen(false)}>
-                Cancel
-              </Button>
-              <Button className="bg-blue-600 gap-2" onClick={runBulkAi} disabled={!aiPrompt.trim()}>
-                <Sparkles className="h-4 w-4" /> Generate
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </TooltipProvider>
   )
