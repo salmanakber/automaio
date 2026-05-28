@@ -25,7 +25,6 @@ import {
 import {
   ExternalLink,
   Globe,
-  Layout,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -35,8 +34,8 @@ import {
   CalendarClock,
   Zap,
   ShieldCheck,
-  ChevronRight,
-  Info,
+  AlertTriangle,
+  Layout,
 } from 'lucide-react'
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { ScheduleNotifyPanel, type ScheduleNotifySettings } from '@/components/projects/ScheduleNotifyPanel'
@@ -44,11 +43,12 @@ import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import type { PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
 import { cn } from '@/lib/utils'
 
-// Types and Helper functions remain same as logic...
+// --- Types ---
+
 type PublishDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  project: Record<string, unknown> | null
+  project: Record<string, any> | null
   projectId: string
   orgId: string
   onPublished?: (result?: { liveUrl?: string; previewUrl?: string }) => void
@@ -87,6 +87,8 @@ function defaultScheduleInput() {
   return d.toISOString().slice(0, 16)
 }
 
+// --- Component ---
+
 export function PublishDialog({
   open,
   onOpenChange,
@@ -95,7 +97,6 @@ export function PublishDialog({
   orgId,
   onPublished,
 }: PublishDialogProps) {
-  // ... Keep all existing state and logic (savePublishSettings, loadPreview, handleSubmit, etc.)
   const [publishing, setPublishing] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [preview, setPreview] = useState<PublishPreview | null>(null)
@@ -115,6 +116,8 @@ export function PublishDialog({
 
   const isLandingPage = project?.contentType === 'landing_page'
   const minScheduleInput = useMemo(() => new Date().toISOString().slice(0, 16), [open])
+
+  // --- Logic ---
 
   const savePublishSettings = async () => {
     const params = { ...((project?.parameters as Record<string, unknown>) ?? {}) }
@@ -171,6 +174,7 @@ export function PublishDialog({
     setResult(null)
     try {
       await savePublishSettings()
+
       if (publishMode === 'later') {
         const scheduledFor = new Date(scheduledAt)
         if (Number.isNaN(scheduledFor.getTime())) throw new Error('Invalid timestamp')
@@ -190,6 +194,7 @@ export function PublishDialog({
         onPublished?.()
         return
       }
+
       const res = await fetch(`/api/projects/${projectId}?action=publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -197,10 +202,11 @@ export function PublishDialog({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Sync failed')
+
       setResult({
         type: data.embedNeedsReconnect ? 'warning' : 'success',
         message: data.embedMessage ?? 'Project successfully synchronized with Webflow.',
-        ...data
+        ...data,
       })
       onPublished?.({ liveUrl: data.liveUrl, previewUrl: data.previewUrl })
     } catch (err) {
@@ -210,83 +216,100 @@ export function PublishDialog({
     }
   }
 
+  // --- Render ---
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#09090b] border-zinc-800 text-white sm:max-w-[620px] max-h-[92vh] overflow-y-auto selection:bg-blue-500/30">
-        <DialogHeader className="space-y-1">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 px-2 py-0 h-5 text-[10px] uppercase tracking-wider font-bold">
-              Production Release
+      <DialogContent className="bg-[#09090b] border-zinc-800 text-white sm:max-w-[640px] p-0 gap-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.6)] border-t-violet-500/20">
+        
+        {/* Sticky Header */}
+        <DialogHeader className="p-6 pb-4 border-b border-zinc-800/50 bg-zinc-950/40">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <DialogTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
+                Deployment Center
+              </DialogTitle>
+              <DialogDescription className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">
+                Webflow CMS Sync & Release Strategy
+              </DialogDescription>
+            </div>
+            <Badge 
+              variant="outline" 
+              className={cn(
+                "px-3 py-1 border-2 font-bold transition-all",
+                preview?.canPublish === false 
+                  ? "bg-red-500/10 text-red-400 border-red-500/20" 
+                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+              )}
+            >
+              {previewLoading ? 'Validating...' : preview?.canPublish === false ? 'Action Required' : 'Ready to Sync'}
             </Badge>
           </div>
-          <DialogTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
-            Deployment Center
-          </DialogTitle>
-          <DialogDescription className="text-zinc-500 text-sm">
-            Synchronize content with Webflow CMS and manage production availability.
-          </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 space-y-5">
-          {/* Status Overview Card */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 group hover:border-zinc-700/50 transition-colors">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                <Globe className="h-5 w-5 text-blue-400" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-zinc-400 uppercase tracking-tight">Environment</p>
-                <p className="text-sm font-semibold truncate">Webflow CMS</p>
-              </div>
+        {/* Main Form Body - Scrollable */}
+        <div className="max-h-[62vh] overflow-y-auto custom-scrollbar p-6 space-y-6">
+          
+          {/* Status Row */}
+          <div className="flex items-center gap-4 p-3.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
+            <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+              <Globe className="h-5 w-5 text-blue-400" />
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/50 group hover:border-zinc-700/50 transition-colors">
-              <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <ShieldCheck className="h-5 w-5 text-emerald-400" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-zinc-400 uppercase tracking-tight">Status</p>
-                <div className="flex items-center gap-1.5">
-                  <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", preview?.canPublish === false ? "bg-amber-500" : "bg-emerald-500")} />
-                  <p className="text-sm font-semibold truncate">
-                    {previewLoading ? 'Validating...' : preview?.canPublish === false ? 'Action Required' : 'Ready to Sync'}
-                  </p>
-                </div>
-              </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter">Environment</p>
+              <p className="text-sm font-semibold truncate">Webflow CMS Integration</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter">Instance</p>
+              <p className="text-xs text-zinc-400 font-medium">
+                {project?.webflowCmsItemId ? 'Linked Record' : 'Create New'}
+              </p>
             </div>
           </div>
 
-          {/* Delivery Configuration */}
-          <div className="space-y-3 pt-2">
-             <div className="flex items-center justify-between">
-                <h4 className="text-[11px] font-black uppercase tracking-widest text-zinc-500">Delivery Strategy</h4>
-                <Button variant="ghost" size="sm" className="h-6 text-[10px] text-zinc-500 hover:text-white gap-1" onClick={loadPreview} disabled={previewLoading}>
-                  <RefreshCw className={cn("h-3 w-3", previewLoading && "animate-spin")} />
-                  Refresh Manifest
-                </Button>
-             </div>
+          {/* Section: Delivery Strategy */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-violet-400" /> Delivery Strategy
+              </h4>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-[10px] text-zinc-500 hover:text-white" 
+                onClick={loadPreview} 
+                disabled={previewLoading}
+              >
+                <RefreshCw className={cn("h-3 w-3 mr-1.5", previewLoading && "animate-spin")} />
+                Sync Metadata
+              </Button>
+            </div>
 
             {isLandingPage && (
-              <div className="space-y-3 p-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-zinc-400">Rendering Mode</Label>
-                  <Select value={publishHtmlMode} onValueChange={(v) => setPublishHtmlMode(v as PublishHtmlModeOverride)}>
-                    <SelectTrigger className="bg-zinc-950 border-zinc-800 h-10 text-xs focus:ring-blue-500/40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-300">
-                      <SelectItem value="auto">System Default (Intelligent Auto-switch)</SelectItem>
-                      <SelectItem value="remote_runtime">🔥 Remote Runtime (Instant Updates)</SelectItem>
-                      <SelectItem value="split_plain_text">SEO Optimized (Legacy Split)</SelectItem>
-                      <SelectItem value="custom_code">Full Payload (Rich Text Body)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-4 animate-in fade-in duration-500">
+                <Select value={publishHtmlMode} onValueChange={(v) => setPublishHtmlMode(v as PublishHtmlModeOverride)}>
+                  <SelectTrigger className="bg-zinc-950 border-zinc-800 h-10 text-xs focus:ring-violet-500/40">
+                    <SelectValue placeholder="Select Delivery Mode" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                    <SelectItem value="auto">System Intelligent Default</SelectItem>
+                    <SelectItem value="remote_runtime">Edge Runtime (Direct JS Render)</SelectItem>
+                    <SelectItem value="split_plain_text">Static Split (Optimized for SEO)</SelectItem>
+                    <SelectItem value="custom_code">Full Payload (Rich Text Body)</SelectItem>
+                  </SelectContent>
+                </Select>
 
-                {preview?.usesRemoteRuntime && (
-                  <div className="flex gap-2 p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                    <Zap className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-zinc-400 leading-relaxed italic">
-                      High-performance runtime detected. Content will synchronize via Automaio Edge — no manual code injection required.
+                {/* RESTORED & IMPROVED: SEO Note */}
+                {(publishHtmlMode === 'remote_runtime' || preview?.htmlMode === 'remote_runtime') && (
+                  <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-2.5">
+                    <div className="flex items-center gap-2 text-amber-400">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="text-[11px] font-black uppercase tracking-tight">Critical SEO Assessment</span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/70 leading-relaxed">
+                      Edge Runtime delivers high-performance interactivity via JavaScript. However, 
+                      <span className="text-amber-400 font-bold underline decoration-amber-400/30"> this is not optimal for search bots</span> that do not execute JS. 
+                      Switch to <span className="text-white font-semibold">Static Split</span> if organic search indexing is your primary goal.
                     </p>
                   </div>
                 )}
@@ -294,34 +317,52 @@ export function PublishDialog({
             )}
           </div>
 
-          {/* Release Strategy */}
-          <div className="space-y-3 pt-2">
-            <h4 className="text-[11px] font-black uppercase tracking-widest text-zinc-500">Release Strategy</h4>
-            <RadioGroup value={publishMode} onValueChange={(v) => setPublishMode(v as 'now' | 'later')} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className={cn("flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer", publishMode === 'now' ? "bg-blue-500/5 border-blue-500/40" : "bg-zinc-900/30 border-zinc-800/50")}>
-                <RadioGroupItem value="now" id="now" className="border-zinc-700 text-blue-500" />
-                <Label htmlFor="now" className="flex-1 cursor-pointer">
-                  <p className="text-sm font-semibold">Immediate Release</p>
-                  <p className="text-[10px] text-zinc-500">Sync to production now</p>
-                </Label>
-              </div>
-              <div className={cn("flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer", publishMode === 'later' ? "bg-blue-500/5 border-blue-500/40" : "bg-zinc-900/30 border-zinc-800/50")}>
-                <RadioGroupItem value="later" id="later" className="border-zinc-700 text-blue-500" />
-                <Label htmlFor="later" className="flex-1 cursor-pointer">
-                  <p className="text-sm font-semibold">Scheduled Deployment</p>
-                  <p className="text-[10px] text-zinc-500">Deploy at a specific time</p>
-                </Label>
-              </div>
+          {/* Section: Release Timing */}
+          <div className="space-y-4 pt-2">
+            <h4 className="text-[11px] font-black uppercase tracking-widest text-zinc-500">Release Management</h4>
+            <RadioGroup 
+              value={publishMode} 
+              onValueChange={(v) => setPublishMode(v as 'now' | 'later')} 
+              className="grid grid-cols-2 gap-3"
+            >
+              <Label 
+                htmlFor="now" 
+                className={cn(
+                  "flex flex-col gap-1.5 p-3.5 rounded-xl border cursor-pointer transition-all",
+                  publishMode === 'now' ? "bg-violet-500/10 border-violet-500/40" : "bg-zinc-900/30 border-zinc-800/50"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="now" id="now" className="border-zinc-700" />
+                  <span className="text-sm font-bold">Immediate Sync</span>
+                </div>
+                <span className="text-[10px] text-zinc-500 ml-6 italic">Deploy changes instantly</span>
+              </Label>
+              <Label 
+                htmlFor="later" 
+                className={cn(
+                  "flex flex-col gap-1.5 p-3.5 rounded-xl border cursor-pointer transition-all",
+                  publishMode === 'later' ? "bg-violet-500/10 border-violet-500/40" : "bg-zinc-900/30 border-zinc-800/50"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="later" id="later" className="border-zinc-700" />
+                  <span className="text-sm font-bold">Scheduled</span>
+                </div>
+                <span className="text-[10px] text-zinc-500 ml-6 italic">Queue for future release</span>
+              </Label>
             </RadioGroup>
 
             {publishMode === 'later' && (
-              <div className="space-y-3 p-4 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/20 animate-in fade-in slide-in-from-top-2">
-                <div className="space-y-1.5">
-                   <Label htmlFor="schedule" className="text-[10px] uppercase font-bold text-zinc-500">Execution Time</Label>
-                   <input
-                    id="schedule" type="datetime-local" min={minScheduleInput} value={scheduledAt}
+              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 space-y-4 animate-in slide-in-from-top-2">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-tighter">Execution Window</Label>
+                  <input
+                    type="datetime-local"
+                    min={minScheduleInput}
+                    value={scheduledAt}
                     onChange={(e) => setScheduledAt(e.target.value)}
-                    className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-blue-500/50 transition-colors"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:border-violet-500/50 outline-none transition-colors"
                   />
                 </div>
                 <ScheduleNotifyPanel orgId={orgId} value={notifySettings} onChange={setNotifySettings} />
@@ -329,50 +370,39 @@ export function PublishDialog({
             )}
           </div>
 
-          {/* Visibility Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2 border-t border-zinc-800/50">
-            <div className="flex items-center justify-between p-2">
+          {/* Visibility Switches */}
+          <div className="grid grid-cols-2 gap-6 py-4 border-y border-zinc-800/50 bg-zinc-950/20 -mx-6 px-6">
+            <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-xs font-bold text-zinc-200">Live Visibility</p>
-                <p className="text-[10px] text-zinc-500 italic leading-snug">Toggle CMS "Published" status.</p>
+                <p className="text-[11px] font-black text-zinc-200 uppercase tracking-tight">Public Release</p>
+                <p className="text-[10px] text-zinc-500 italic">Toggle Live/Draft state</p>
               </div>
-              <Switch checked={showOnWebsite} onCheckedChange={setShowOnWebsite} className="data-[state=checked]:bg-blue-500" />
+              <Switch checked={showOnWebsite} onCheckedChange={setShowOnWebsite} className="data-[state=checked]:bg-emerald-500 shadow-lg" />
             </div>
-            <div className="flex items-center justify-between p-2">
+            <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-xs font-bold text-zinc-200">Site-wide Sync</p>
-                <p className="text-[10px] text-zinc-500 italic leading-snug">Republish global site files.</p>
+                <p className="text-[11px] font-black text-zinc-200 uppercase tracking-tight">Global Sync</p>
+                <p className="text-[10px] text-zinc-500 italic">Republish full Webflow site</p>
               </div>
-              <Switch checked={publishSite} onCheckedChange={setPublishSite} className="data-[state=checked]:bg-blue-500" />
+              <Switch checked={publishSite} onCheckedChange={setPublishSite} className="data-[state=checked]:bg-emerald-500 shadow-lg" />
             </div>
           </div>
 
-          {/* Results Display */}
+          {/* Results Area */}
           {result && (
             <div className={cn(
-              "p-4 rounded-xl border animate-in zoom-in-95 duration-200",
-              result.type === 'success' ? "bg-emerald-500/5 border-emerald-500/20" : result.type === 'warning' ? "bg-amber-500/5 border-amber-500/20" : "bg-red-500/5 border-red-500/20"
+              "p-4 rounded-xl border animate-in slide-in-from-bottom-2 duration-300",
+              result.type === 'success' ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"
             )}>
-              <div className="flex items-start gap-3">
-                {result.type === 'success' ? <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" /> : <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />}
-                <div className="space-y-3 w-full">
-                  <p className={cn("text-xs font-medium", result.type === 'success' ? "text-emerald-400" : "text-amber-400")}>{result.message}</p>
+              <div className="flex gap-3">
+                {result.type === 'success' ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <AlertCircle className="h-5 w-5 text-red-400" />}
+                <div className="space-y-3 flex-1 min-w-0">
+                  <p className={cn("text-sm font-bold", result.type === 'success' ? "text-emerald-400" : "text-red-400")}>{result.message}</p>
                   
-                  {result.embedNeedsReconnect && (
-                    <div className="p-3 bg-zinc-950/50 border border-zinc-800 rounded-lg space-y-3">
-                       <p className="text-[11px] text-zinc-400 leading-relaxed">
-                         OAuth scopes for <code className="text-amber-300">custom_code</code> are required for automated sync. 
-                       </p>
-                       <Button asChild variant="outline" className="w-full h-8 text-[11px] border-zinc-700 hover:bg-zinc-800 gap-2">
-                          <Link href={`/dashboard/${orgId}/settings?tab=integrations`}><Plug className="h-3.5 w-3.5" /> Authorize Scopes</Link>
-                       </Button>
-                    </div>
-                  )}
-
                   {result.liveUrl && (
-                    <Button asChild size="sm" variant="secondary" className="h-8 text-[11px] font-bold w-full bg-zinc-800 hover:bg-zinc-700 text-white">
+                    <Button asChild size="sm" variant="secondary" className="h-8 text-[11px] font-bold bg-zinc-800 hover:bg-zinc-700 text-white w-full border border-zinc-700">
                       <a href={result.liveUrl} target="_blank" rel="noreferrer">
-                        Open Production Page <ExternalLink className="ml-2 h-3 w-3" />
+                        View Live Production <ExternalLink className="ml-2 h-3 w-3" />
                       </a>
                     </Button>
                   )}
@@ -382,12 +412,18 @@ export function PublishDialog({
           )}
         </div>
 
-        <DialogFooter className="flex items-center gap-3 pt-4 border-t border-zinc-800/50">
-          <Button variant="ghost" className="flex-1 text-zinc-500 hover:text-white" onClick={() => onOpenChange(false)} disabled={publishing}>
+        {/* Sticky Action Footer */}
+        <DialogFooter className="p-4 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-800/80 sticky bottom-0 w-full flex flex-row gap-3 z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+          <Button
+            variant="ghost"
+            className="flex-1 text-zinc-500 hover:text-white font-bold h-11"
+            onClick={() => onOpenChange(false)}
+            disabled={publishing}
+          >
             Cancel
           </Button>
           <Button
-            className="flex-1 bg-blue-600 hover:bg-blue-500 shadow-xl shadow-blue-900/20 font-bold transition-all active:scale-[0.98] gap-2"
+            className="flex-[2] bg-violet-600 hover:bg-violet-500 shadow-2xl shadow-violet-900/30 font-black tracking-tight transition-all active:scale-[0.97] gap-2 h-11 text-[13px]"
             onClick={handleSubmit}
             disabled={publishing || (preview !== null && preview.canPublish === false)}
           >
@@ -396,9 +432,9 @@ export function PublishDialog({
             ) : publishMode === 'later' ? (
               <CalendarClock className="h-4 w-4" />
             ) : (
-              <Zap className="h-4 w-4 fill-current" />
+              <ShieldCheck className="h-4 w-4 fill-white/10" />
             )}
-            {publishMode === 'later' ? 'Schedule Release' : 'Initiate Release'}
+            {publishMode === 'later' ? 'Confirm Schedule' : 'Initiate Sync Release'}
           </Button>
         </DialogFooter>
       </DialogContent>
