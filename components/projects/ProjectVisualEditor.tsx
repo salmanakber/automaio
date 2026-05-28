@@ -17,25 +17,43 @@ import {
 import { Sparkles, Save, Loader2, CheckCircle2, MousePointerClick, Wand2, AlertTriangle } from 'lucide-react'
 import { VISUAL_EDITOR_SCRIPT } from '@/lib/editor/visual-editor-script'
 import { buildWidgetHtml, type EditorWidgetType } from '@/lib/editor/editor-widgets'
+import type { EditViewport, ElementStyles, StyleTarget } from '@/lib/editor/responsive-styles'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 
-/* ─── Editor styles injected into the iframe ─── */
+/* ─── Elementor-style editor chrome injected into the iframe ─── */
 const EDITOR_CSS = `
-[data-am-id] { transition: outline 0.15s ease, background 0.15s ease; cursor: pointer !important; }
-[data-am-id]:hover { outline: 2px dashed #3b82f6 !important; outline-offset: 3px; }
-[data-am-id].am-active { outline: 2px solid #3b82f6 !important; outline-offset: 3px; background: rgba(59,130,246,0.04) !important; }
-[data-am-kind="container"] { outline-offset: 2px; }
-[data-am-kind="container"]:hover { outline: 2px dashed #8b5cf6 !important; }
+[data-am-id] { transition: outline 0.12s ease, box-shadow 0.12s ease, background 0.12s ease; cursor: pointer !important; }
+[data-am-id]:hover { outline: 1px dashed #a78bfa !important; outline-offset: 2px; }
+[data-am-id].am-active { outline: 2px solid #7c3aed !important; outline-offset: 2px; background: rgba(124,58,237,0.04) !important; }
+[data-am-block] { position: relative; }
+[data-am-block]:hover, [data-am-block].am-block-hover {
+  outline: 2px solid #c026d3 !important; outline-offset: -1px;
+  box-shadow: inset 0 0 0 1px rgba(192,38,211,0.25);
+}
+[data-am-block].am-block-active {
+  outline: 2px solid #a21caf !important; outline-offset: -1px;
+  box-shadow: 0 0 0 4px rgba(162,28,175,0.15), inset 0 0 0 1px rgba(162,28,175,0.35);
+}
+[data-am-block].am-dragging { opacity: 0.45 !important; outline: 2px dashed #7c3aed !important; }
+[data-am-drop-zone].am-drop-active {
+  outline: 2px dashed #22c55e !important; outline-offset: 4px;
+  background: rgba(34,197,94,0.06) !important; min-height: 48px;
+}
+[data-am-kind="container"]:not([data-am-block]):hover { outline: 1px dashed #8b5cf6 !important; }
 #am-tb { position: fixed; z-index: 999999; display: none; pointer-events: auto; }
-#am-tb-inner { background: #0f172a; border-radius: 10px; padding: 3px; display: flex; gap: 2px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); white-space: nowrap; }
-#am-tb button { color: #fff; border: none; padding: 6px 12px; border-radius: 7px; cursor: pointer; font: 500 12px/1 system-ui,sans-serif; display: flex; align-items: center; gap: 5px; background: transparent; }
-#am-tb button:hover { background: #1e293b; }
-#am-tb .am-ai { background: linear-gradient(135deg,#8b5cf6,#6366f1); }
-#am-tb .am-ai:hover { background: linear-gradient(135deg,#7c3aed,#4f46e5); }
+#am-tb-inner { background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 4px; display: flex; align-items: center; gap: 2px; box-shadow: 0 12px 40px rgba(0,0,0,0.45); white-space: nowrap; }
+#am-tb button { color: #fafafa; border: none; padding: 7px 11px; border-radius: 6px; cursor: pointer; font: 600 11px/1 system-ui,sans-serif; display: flex; align-items: center; gap: 4px; background: transparent; }
+#am-tb button:hover { background: #27272a; }
+#am-tb .am-drag { cursor: grab; color: #a78bfa; padding: 7px 8px; }
+#am-tb .am-drag:active { cursor: grabbing; }
+#am-tb .am-ai { background: linear-gradient(135deg,#7c3aed,#a855f7); }
+#am-tb .am-ai:hover { background: linear-gradient(135deg,#6d28d9,#9333ea); }
 #am-tb .am-done { background: #059669; }
 #am-tb .am-done:hover { background: #047857; }
 #am-tb .am-del { background: #dc2626; }
 #am-tb .am-del:hover { background: #b91c1c; }
+html[data-am-edit-viewport="mobile"] body { outline: 3px solid rgba(236,72,153,0.25); outline-offset: -3px; }
+html[data-am-edit-viewport="tablet"] body { outline: 3px solid rgba(59,130,246,0.2); outline-offset: -3px; }
 `
 
 /* Editor script lives in lib/editor/visual-editor-script.ts */
@@ -53,12 +71,29 @@ type SelectedElement = {
   inlineTags?: string
 }
 
+export type SectionSelection = {
+  id: string
+  tag: string
+  widget?: string
+  layout?: string
+  isDropZone?: boolean
+  padding?: { top: number; right: number; bottom: number; left: number }
+  columnWidths?: number[]
+  gap?: number
+}
+
 export type ProjectVisualEditorHandle = {
   save: () => Promise<void>
   runBulkAi: (prompt: string) => Promise<void>
   postMessage: (msg: Record<string, unknown>) => void
   hasChanges: boolean
-  insertWidget: (type: EditorWidgetType) => void
+  insertWidget: (type: EditorWidgetType, options?: { targetId?: string; position?: 'before' | 'after' | 'inside' }) => void
+  setSectionLayout: (targetId: string, layout: '1col' | '2col' | '3col') => void
+  setSectionPadding: (targetId: string, padding: SectionSelection['padding']) => void
+  setColumnWidths: (targetId: string, widths: number[]) => void
+  setColumnGap: (targetId: string, gap: number) => void
+  setElementStyles: (targetId: string, styles: ElementStyles) => void
+  stackColumnsOnMobile: (targetId: string) => void
   undo: () => void
   redo: () => void
   duplicate: () => void
@@ -74,6 +109,9 @@ interface ProjectVisualEditorProps {
   onSelectElement?: (el: SelectedElement | null) => void
   onFocusRect?: (rect: { top: number; left: number; width: number; height: number } | null) => void
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void
+  onSectionSelect?: (section: SectionSelection | null) => void
+  onStyleTargetChange?: (target: StyleTarget | null) => void
+  editViewport?: EditViewport
   variant?: 'default' | 'studio'
   zoom?: number
 }
@@ -160,6 +198,9 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       onSelectElement,
       onFocusRect,
       onHistoryChange,
+      onSectionSelect,
+      onStyleTargetChange,
+      editViewport = 'desktop',
       variant = 'default',
       zoom = 1,
     },
@@ -241,6 +282,32 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     (msg: Record<string, unknown>) => {
       iframeRef.current?.contentWindow?.postMessage(msg, '*')
     },
+    [],
+  )
+
+  useEffect(() => {
+    if (!iframeReady) return
+    postToIframe({ type: 'am-set-viewport', viewport: editViewport })
+  }, [editViewport, iframeReady, postToIframe])
+
+  const buildStyleTarget = useCallback(
+    (payload: {
+      id: string
+      tag: string
+      widget?: string
+      text?: string
+      styles?: ElementStyles
+    }): StyleTarget => ({
+      id: payload.id,
+      tag: payload.tag,
+      label:
+        payload.widget ||
+        (payload.text && payload.text.length > 24
+          ? payload.text.slice(0, 24) + '…'
+          : payload.text) ||
+        payload.tag,
+      styles: payload.styles ?? {},
+    }),
     [],
   )
 
@@ -329,6 +396,17 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
             if (d.rect) {
               onFocusRect?.(d.rect)
             }
+            if (d.styles) {
+              onStyleTargetChange?.(
+                buildStyleTarget({
+                  id: d.id,
+                  tag: d.tag,
+                  widget: d.widget,
+                  text: d.text,
+                  styles: d.styles,
+                }),
+              )
+            }
           }
           break
         case 'am-deleted':
@@ -408,16 +486,121 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
           setHasChanges(true)
           scheduleAutoSave()
           break
+        case 'am-section-selected':
+          if (d.id) {
+            onSectionSelect?.({
+              id: d.id,
+              tag: d.tag,
+              widget: d.widget,
+              layout: d.layout,
+              isDropZone: d.isDropZone,
+              padding: d.padding,
+              columnWidths: d.columnWidths,
+              gap: d.gap,
+            })
+            if (d.styles) {
+              onStyleTargetChange?.(
+                buildStyleTarget({
+                  id: d.id,
+                  tag: d.tag,
+                  widget: d.widget,
+                  styles: d.styles,
+                }),
+              )
+            }
+          } else {
+            onSectionSelect?.(null)
+          }
+          break
+        case 'am-styles-updated':
+          if (d.id && d.styles) {
+            onStyleTargetChange?.(
+              buildStyleTarget({
+                id: d.id,
+                tag: d.tag ?? 'div',
+                widget: d.widget,
+                styles: d.styles,
+              }),
+            )
+          }
+          setHasChanges(true)
+          scheduleAutoSave()
+          break
       }
     }
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [selected?.id, onSelectElement, onFocusRect, isStudio, scheduleAutoSave, onHistoryChange])
+  }, [selected?.id, onSelectElement, onFocusRect, isStudio, scheduleAutoSave, onHistoryChange, onSectionSelect, onStyleTargetChange, buildStyleTarget])
 
   const insertWidget = useCallback(
-    (type: EditorWidgetType) => {
-      postToIframe({ type: 'am-insert-widget', html: buildWidgetHtml(type) })
+    (type: EditorWidgetType, options?: { targetId?: string; position?: 'before' | 'after' | 'inside' }) => {
+      const html = buildWidgetHtml(type)
+      if (options?.targetId && options.position === 'inside') {
+        postToIframe({ type: 'am-insert-inside', html, targetId: options.targetId })
+      } else {
+        postToIframe({
+          type: 'am-insert-widget',
+          html,
+          targetId: options?.targetId,
+          position: options?.position ?? 'after',
+        })
+      }
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
+
+  const setSectionLayout = useCallback(
+    (targetId: string, layout: '1col' | '2col' | '3col') => {
+      postToIframe({ type: 'am-set-layout', targetId, layout })
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
+
+  const setSectionPadding = useCallback(
+    (targetId: string, padding: SectionSelection['padding']) => {
+      if (!padding) return
+      postToIframe({ type: 'am-set-padding', targetId, padding })
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
+
+  const setColumnWidths = useCallback(
+    (targetId: string, widths: number[]) => {
+      postToIframe({ type: 'am-set-column-widths', targetId, widths })
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
+
+  const setColumnGap = useCallback(
+    (targetId: string, gap: number) => {
+      postToIframe({ type: 'am-set-gap', targetId, gap })
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
+
+  const setElementStyles = useCallback(
+    (targetId: string, styles: ElementStyles) => {
+      postToIframe({ type: 'am-set-styles', targetId, styles })
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
+
+  const stackColumnsOnMobile = useCallback(
+    (targetId: string) => {
+      postToIframe({ type: 'am-stack-columns', targetId })
       setHasChanges(true)
       scheduleAutoSave()
     },
@@ -544,6 +727,12 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     postMessage: postToIframe,
     hasChanges,
     insertWidget,
+    setSectionLayout,
+    setSectionPadding,
+    setColumnWidths,
+    setColumnGap,
+    setElementStyles,
+    stackColumnsOnMobile,
     undo: handleUndo,
     redo: handleRedo,
     duplicate: handleDuplicate,

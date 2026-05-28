@@ -18,6 +18,7 @@ import {
   Wand2,
   RefreshCw,
   Trash2,
+  LayoutGrid,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -47,6 +48,9 @@ import { BlogStudioPanel } from '@/components/projects/BlogStudioPanel'
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { EditorToolbar } from '@/components/projects/EditorToolbar'
 import { EditorThemePanel } from '@/components/projects/EditorThemePanel'
+import { EditorSectionPanel, type SectionSelection } from '@/components/projects/EditorSectionPanel'
+import { EditorStylePanel } from '@/components/projects/EditorStylePanel'
+import type { StyleTarget } from '@/lib/editor/responsive-styles'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 import {
@@ -56,6 +60,7 @@ import {
   type TemplateTheme,
 } from '@/lib/templates/theme'
 import type { TemplateStructure } from '@/lib/templates/starter-templates'
+import { buildBlankStarterPage, buildMinimalStarterPage } from '@/lib/editor/elementor-blocks'
 
 export default function ProjectStudioPage() {
   const params = useParams()
@@ -88,6 +93,9 @@ export default function ProjectStudioPage() {
   const [deleting, setDeleting] = useState(false)
   const [editorCanUndo, setEditorCanUndo] = useState(false)
   const [editorCanRedo, setEditorCanRedo] = useState(false)
+  const [sectionSelection, setSectionSelection] = useState<SectionSelection | null>(null)
+  const [styleTarget, setStyleTarget] = useState<StyleTarget | null>(null)
+  const [bootstrappingBlank, setBootstrappingBlank] = useState(false)
   const [editorTheme, setEditorTheme] = useState<TemplateTheme>(DEFAULT_TEMPLATE_THEME)
   const seoAutoTried = useRef(false)
 
@@ -217,6 +225,21 @@ export default function ProjectStudioPage() {
       setZoom((z) => Math.max(z, 1.15))
     }
   }, [])
+
+  const handleSectionSelect = useCallback((section: SectionSelection | null) => {
+    setSectionSelection(section)
+  }, [])
+
+  const bootstrapBlankPage = async (mode: 'full' | 'minimal') => {
+    setBootstrappingBlank(true)
+    try {
+      const starter = mode === 'full' ? buildBlankStarterPage() : buildMinimalStarterPage()
+      await handleImportHtml(starter)
+      setEditorKey((k) => k + 1)
+    } finally {
+      setBootstrappingBlank(false)
+    }
+  }
 
   useEffect(() => {
     if (!project || loading || seoAutoTried.current) return
@@ -442,6 +465,11 @@ export default function ProjectStudioPage() {
                   Focus mode
                 </Badge>
               )}
+              {viewport !== 'desktop' && (
+                <Badge variant="outline" className="bg-pink-950/50 border-pink-800 text-pink-400 font-mono text-[10px] capitalize">
+                  Editing {viewport} styles
+                </Badge>
+              )}
             </div>
             )}
 
@@ -460,6 +488,33 @@ export default function ProjectStudioPage() {
               className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative flex flex-col"
             >
               <div className="flex-1 min-h-0 relative">
+                {!renderedHtml.trim() && isLandingPage && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#121214]/95 backdrop-blur-sm p-8 text-center">
+                    <LayoutGrid className="h-10 w-10 text-violet-400 mb-4" />
+                    <h3 className="text-lg font-semibold text-white mb-2">Start building your page</h3>
+                    <p className="text-sm text-zinc-400 mb-6 max-w-sm">
+                      Choose a starter layout with header &amp; footer blocks, then drag more sections from the panel below.
+                    </p>
+                    <div className="flex flex-wrap gap-3 justify-center">
+                      <Button
+                        className="bg-violet-600 hover:bg-violet-700 gap-2"
+                        disabled={bootstrappingBlank}
+                        onClick={() => bootstrapBlankPage('full')}
+                      >
+                        {bootstrappingBlank ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Full starter (Header + Hero + Footer)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="border-zinc-600 gap-2"
+                        disabled={bootstrappingBlank}
+                        onClick={() => bootstrapBlankPage('minimal')}
+                      >
+                        Minimal (Header + Section + Footer)
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <ProjectVisualEditor
                   key={editorKey}
                   ref={editorRef}
@@ -467,8 +522,11 @@ export default function ProjectStudioPage() {
                   projectId={projectId}
                   variant="studio"
                   zoom={zoom}
+                  editViewport={viewport}
                   onSelectElement={handleSelectElement}
                   onFocusRect={handleFocusRect}
+                  onSectionSelect={handleSectionSelect}
+                  onStyleTargetChange={setStyleTarget}
                   onHistoryChange={({ canUndo, canRedo }) => {
                     setEditorCanUndo(canUndo)
                     setEditorCanRedo(canRedo)
@@ -484,6 +542,52 @@ export default function ProjectStudioPage() {
                   onDelete={(id) => {
                     editorRef.current?.postMessage({ type: 'am-delete-external', id })
                     setSelectedElement(null)
+                  }}
+                />
+
+                <EditorStylePanel
+                  target={styleTarget}
+                  editViewport={viewport}
+                  onClose={() => setStyleTarget(null)}
+                  onApplyStyles={(id, styles) => editorRef.current?.setElementStyles(id, styles)}
+                />
+
+                <EditorSectionPanel
+                  section={sectionSelection}
+                  editViewport={viewport}
+                  onClose={() => setSectionSelection(null)}
+                  onSetLayout={(layout) => {
+                    if (sectionSelection?.id) {
+                      editorRef.current?.setSectionLayout(sectionSelection.id, layout)
+                    }
+                  }}
+                  onSetPadding={(padding) => {
+                    if (sectionSelection?.id) {
+                      editorRef.current?.setSectionPadding(sectionSelection.id, padding)
+                    }
+                  }}
+                  onSetColumnWidths={(widths) => {
+                    if (sectionSelection?.id) {
+                      editorRef.current?.setColumnWidths(sectionSelection.id, widths)
+                    }
+                  }}
+                  onSetGap={(gap) => {
+                    if (sectionSelection?.id) {
+                      editorRef.current?.setColumnGap(sectionSelection.id, gap)
+                    }
+                  }}
+                  onStackMobile={() => {
+                    if (sectionSelection?.id) {
+                      editorRef.current?.stackColumnsOnMobile(sectionSelection.id)
+                    }
+                  }}
+                  onInsertInside={(type) => {
+                    if (sectionSelection?.id) {
+                      editorRef.current?.insertWidget(type, {
+                        targetId: sectionSelection.id,
+                        position: 'inside',
+                      })
+                    }
                   }}
                 />
               </div>

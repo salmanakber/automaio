@@ -11,7 +11,7 @@ export type SelectedElement = {
   id: string
   text: string
   tag: string
-  kind?: 'text' | 'image' | 'code' | 'link'
+  kind?: 'text' | 'image' | 'code' | 'link' | 'container'
   src?: string
   alt?: string
   href?: string

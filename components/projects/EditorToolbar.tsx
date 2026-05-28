@@ -1,5 +1,6 @@
 'use client'
 
+import type { ComponentType } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Type,
@@ -10,8 +11,17 @@ import {
   Copy,
   Plus,
   MousePointer2,
+  GripVertical,
+  Layers,
+  Box,
+  Sparkles,
 } from 'lucide-react'
-import { EDITOR_WIDGETS, type EditorWidgetType } from '@/lib/editor/editor-widgets'
+import {
+  EDITOR_WIDGETS,
+  EDITOR_CATEGORY_LABELS,
+  buildWidgetHtml,
+  type EditorWidgetType,
+} from '@/lib/editor/editor-widgets'
 import {
   Accordion,
   AccordionContent,
@@ -28,12 +38,58 @@ type EditorToolbarProps = {
   onInsertWidget: (type: EditorWidgetType) => void
 }
 
-const CATEGORY_LABELS = {
-  text: 'Text',
-  media: 'Media',
-  layout: 'Layout',
-  blocks: 'Blocks',
-} as const
+const CATEGORY_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  structure: Layers,
+  basic: Type,
+  media: ImageIcon,
+  blocks: Box,
+}
+
+function WidgetButton({
+  type,
+  label,
+  category,
+  onInsert,
+}: {
+  type: EditorWidgetType
+  label: string
+  category: string
+  onInsert: (type: EditorWidgetType) => void
+}) {
+  const html = buildWidgetHtml(type)
+
+  return (
+    <button
+      type="button"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-am-widget', type)
+        e.dataTransfer.setData('application/x-am-widget-html', html)
+        e.dataTransfer.setData('text/plain', `am-widget:${type}`)
+        e.dataTransfer.effectAllowed = 'copy'
+      }}
+      onClick={() => onInsert(type)}
+      className="group relative flex flex-col items-center justify-center gap-1 h-16 w-[calc(50%-4px)] rounded-lg border border-zinc-700/80 bg-zinc-900/80 hover:border-violet-500/60 hover:bg-violet-950/30 transition-all cursor-grab active:cursor-grabbing"
+      title={`Drag onto canvas or click to insert · ${label}`}
+    >
+      <GripVertical className="absolute top-1 right-1 h-2.5 w-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+      {category === 'basic' && type === 'heading' ? (
+        <Type className="h-4 w-4 text-violet-400" />
+      ) : category === 'media' && type === 'image' ? (
+        <ImageIcon className="h-4 w-4 text-violet-400" />
+      ) : category === 'structure' ? (
+        <LayoutGrid className="h-4 w-4 text-violet-400" />
+      ) : category === 'blocks' ? (
+        <Sparkles className="h-4 w-4 text-violet-400" />
+      ) : (
+        <Plus className="h-4 w-4 text-violet-400" />
+      )}
+      <span className="text-[9px] font-medium text-zinc-400 group-hover:text-zinc-200 text-center leading-tight px-1">
+        {label}
+      </span>
+    </button>
+  )
+}
 
 export function EditorToolbar({
   canUndo,
@@ -45,17 +101,22 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   const grouped = EDITOR_WIDGETS.reduce(
     (acc, w) => {
+      if (!acc[w.category]) acc[w.category] = []
       acc[w.category].push(w)
       return acc
     },
-    { text: [] as typeof EDITOR_WIDGETS, media: [], layout: [], blocks: [] },
+    {} as Record<string, typeof EDITOR_WIDGETS>,
   )
 
+  const categories = Object.keys(EDITOR_CATEGORY_LABELS) as Array<keyof typeof EDITOR_CATEGORY_LABELS>
+
   return (
-    <div className="border-t border-zinc-800 bg-[#09090b] shrink-0">
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-zinc-800/80">
-        <MousePointer2 className="h-3.5 w-3.5 text-zinc-500 mr-1" />
-        <span className="text-[10px] text-zinc-500 mr-2">Click any element · drag guides follow cursor</span>
+    <div className="border-t border-zinc-800 bg-[#09090b] shrink-0 max-h-[42vh] flex flex-col">
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-zinc-800/80 shrink-0">
+        <MousePointer2 className="h-3.5 w-3.5 text-violet-400 mr-1" />
+        <span className="text-[10px] text-zinc-500">
+          Drag blocks onto canvas · reorder by dragging
+        </span>
         <div className="flex-1" />
         <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!canUndo} onClick={onUndo} title="Undo (Ctrl+Z)">
           <Undo2 className="h-3.5 w-3.5" />
@@ -64,44 +125,41 @@ export function EditorToolbar({
           <Redo2 className="h-3.5 w-3.5" />
         </Button>
         <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px] gap-1" onClick={onDuplicate} title="Duplicate selected">
-          <Copy className="h-3 w-3" /> Duplicate
+          <Copy className="h-3 w-3" /> Dup
         </Button>
       </div>
 
-      <Accordion type="multiple" defaultValue={['text', 'blocks']} className="px-2 pb-2">
-        {(Object.keys(grouped) as Array<keyof typeof grouped>).map((cat) => (
-          <AccordionItem key={cat} value={cat} className="border-zinc-800">
-            <AccordionTrigger className="py-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400 hover:no-underline">
-              {CATEGORY_LABELS[cat]}
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="flex flex-wrap gap-1.5 pb-2">
-                {grouped[cat].map((w) => (
-                  <Button
-                    key={w.type}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-[10px] border-zinc-700 bg-zinc-900 gap-1.5"
-                    onClick={() => onInsertWidget(w.type)}
-                  >
-                    {cat === 'text' && w.type === 'heading' ? (
-                      <Type className="h-3 w-3" />
-                    ) : cat === 'media' && w.type === 'image' ? (
-                      <ImageIcon className="h-3 w-3" />
-                    ) : cat === 'layout' ? (
-                      <LayoutGrid className="h-3 w-3" />
-                    ) : (
-                      <Plus className="h-3 w-3" />
-                    )}
-                    {w.label}
-                  </Button>
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+      <div className="overflow-y-auto custom-scrollbar flex-1">
+        <Accordion type="multiple" defaultValue={['structure', 'blocks']} className="px-2 pb-2">
+          {categories.map((cat) => {
+            const Icon = CATEGORY_ICONS[cat] ?? Plus
+            const items = grouped[cat] ?? []
+            if (!items.length) return null
+            return (
+              <AccordionItem key={cat} value={cat} className="border-zinc-800">
+                <AccordionTrigger className="py-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400 hover:no-underline gap-2">
+                  <Icon className="h-3 w-3 text-violet-500" />
+                  {EDITOR_CATEGORY_LABELS[cat]}
+                  <span className="text-zinc-600 font-normal normal-case">({items.length})</span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="flex flex-wrap gap-2 pb-2">
+                    {items.map((w) => (
+                      <WidgetButton
+                        key={w.type}
+                        type={w.type}
+                        label={w.label}
+                        category={cat}
+                        onInsert={onInsertWidget}
+                      />
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            )
+          })}
+        </Accordion>
+      </div>
     </div>
   )
 }
