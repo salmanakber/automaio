@@ -256,6 +256,9 @@ model EmailSubscriber {
   email          String
   firstName      String?
   lastName       String?
+  audienceType   String   @default("general") // general, newsletter, lead, customer, vip, etc.
+  source         String?  // form, import, manual
+  leadFormId     String?
   status         String   @default("active") // active, unsubscribed, bounced
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -263,6 +266,7 @@ model EmailSubscriber {
   @@unique([organizationId, email])
   @@index([organizationId])
   @@index([status])
+  @@index([audienceType])
 }
 
 // Dynamic lead capture forms

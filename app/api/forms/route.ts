@@ -7,7 +7,7 @@ import crypto from 'crypto'
 export type FormField = {
   id: string
   label: string
-  type: 'text' | 'email' | 'phone' | 'textarea' | 'select'
+  type: 'text' | 'email' | 'phone' | 'textarea' | 'select' | 'checkbox' | 'number' | 'date' | 'url'
   required?: boolean
   placeholder?: string
   options?: string[]

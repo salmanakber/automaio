@@ -45,8 +45,17 @@ import { AiProgressOverlay } from '@/components/projects/AiProgressOverlay'
 import { RepersonalizePanel } from '@/components/projects/RepersonalizePanel'
 import { BlogStudioPanel } from '@/components/projects/BlogStudioPanel'
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
+import { EditorToolbar } from '@/components/projects/EditorToolbar'
+import { EditorThemePanel } from '@/components/projects/EditorThemePanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
+import {
+  DEFAULT_TEMPLATE_THEME,
+  buildThemeCss,
+  resolveTemplateTheme,
+  type TemplateTheme,
+} from '@/lib/templates/theme'
+import type { TemplateStructure } from '@/lib/templates/starter-templates'
 
 export default function ProjectStudioPage() {
   const params = useParams()
@@ -77,6 +86,9 @@ export default function ProjectStudioPage() {
   const [editorKey, setEditorKey] = useState(0)
   const [publishedLiveUrl, setPublishedLiveUrl] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [editorCanUndo, setEditorCanUndo] = useState(false)
+  const [editorCanRedo, setEditorCanRedo] = useState(false)
+  const [editorTheme, setEditorTheme] = useState<TemplateTheme>(DEFAULT_TEMPLATE_THEME)
   const seoAutoTried = useRef(false)
 
   const load = useCallback(async () => {
@@ -101,6 +113,18 @@ export default function ProjectStudioPage() {
     if (!project) return
     const params = (project.parameters as Record<string, unknown>) ?? {}
     if (typeof params.liveUrl === 'string') setPublishedLiveUrl(params.liveUrl)
+    try {
+      const stored = params.editorTheme
+      if (typeof stored === 'string') setEditorTheme(JSON.parse(stored) as TemplateTheme)
+      else if (stored && typeof stored === 'object') setEditorTheme(stored as TemplateTheme)
+      else {
+        const structure = (project as { template?: { templateStructure?: unknown } }).template
+          ?.templateStructure as TemplateStructure | undefined
+        setEditorTheme(resolveTemplateTheme(structure))
+      }
+    } catch {
+      setEditorTheme(DEFAULT_TEMPLATE_THEME)
+    }
   }, [project])
 
   const saveParameters = async (nextProject: Record<string, unknown>) => {
@@ -382,7 +406,22 @@ export default function ProjectStudioPage() {
                 seoGenerating={seoGenerating}
               />
               {isLandingPage && (
-                <div className="p-4 border-t border-zinc-800">
+                <div className="p-4 border-t border-zinc-800 space-y-4">
+                  <EditorThemePanel
+                    theme={editorTheme}
+                    onChange={setEditorTheme}
+                    onApply={() => {
+                      editorRef.current?.applyThemeCss(buildThemeCss(editorTheme))
+                      const params = (project?.parameters as Record<string, unknown>) ?? {}
+                      saveParameters({
+                        ...project!,
+                        parameters: {
+                          ...params,
+                          editorTheme: JSON.stringify(editorTheme),
+                        },
+                      })
+                    }}
+                  />
                   <ProjectUrlsCard
                     projectId={projectId}
                     liveUrl={publishedLiveUrl}
@@ -418,29 +457,43 @@ export default function ProjectStudioPage() {
                 width: viewport === 'desktop' ? '100%' : viewport === 'tablet' ? '768px' : '375px',
                 height: '100%',
               }}
-              className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative"
+              className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative flex flex-col"
             >
-              <ProjectVisualEditor
-                key={editorKey}
-                ref={editorRef}
-                html={renderedHtml}
-                projectId={projectId}
-                variant="studio"
-                zoom={zoom}
-                onSelectElement={handleSelectElement}
-                onFocusRect={handleFocusRect}
-                onSave={(html) => setProject((p) => (p ? { ...p, renderedHtml: html } : p))}
-              />
+              <div className="flex-1 min-h-0 relative">
+                <ProjectVisualEditor
+                  key={editorKey}
+                  ref={editorRef}
+                  html={renderedHtml}
+                  projectId={projectId}
+                  variant="studio"
+                  zoom={zoom}
+                  onSelectElement={handleSelectElement}
+                  onFocusRect={handleFocusRect}
+                  onHistoryChange={({ canUndo, canRedo }) => {
+                    setEditorCanUndo(canUndo)
+                    setEditorCanRedo(canRedo)
+                  }}
+                  onSave={(html) => setProject((p) => (p ? { ...p, renderedHtml: html } : p))}
+                />
 
-              <ElementEditorPanel
-                element={selectedElement}
-                projectId={projectId}
-                onClose={() => setSelectedElement(null)}
-                onUpdate={(msg) => editorRef.current?.postMessage(msg)}
-                onDelete={(id) => {
-                  editorRef.current?.postMessage({ type: 'am-delete-external', id })
-                  setSelectedElement(null)
-                }}
+                <ElementEditorPanel
+                  element={selectedElement}
+                  projectId={projectId}
+                  onClose={() => setSelectedElement(null)}
+                  onUpdate={(msg) => editorRef.current?.postMessage(msg)}
+                  onDelete={(id) => {
+                    editorRef.current?.postMessage({ type: 'am-delete-external', id })
+                    setSelectedElement(null)
+                  }}
+                />
+              </div>
+              <EditorToolbar
+                canUndo={editorCanUndo}
+                canRedo={editorCanRedo}
+                onUndo={() => editorRef.current?.undo()}
+                onRedo={() => editorRef.current?.redo()}
+                onDuplicate={() => editorRef.current?.duplicate()}
+                onInsertWidget={(type) => editorRef.current?.insertWidget(type)}
               />
             </motion.div>
             )}

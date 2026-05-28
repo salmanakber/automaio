@@ -19,9 +19,7 @@ import {
   renderTemplatePreview,
   resolvePreviewSample,
 } from '@/lib/templates/preview'
-import { DEFAULT_TEMPLATE_THEME, resolveTemplateTheme, type TemplateTheme } from '@/lib/templates/theme'
-import { WebflowThemeFields } from '@/components/admin/TemplateEditorPanels'
-import { TemplateColorsGuide } from '@/components/admin/TemplateColorsGuide'
+import { resolveTemplateTheme, type TemplateTheme } from '@/lib/templates/theme'
 
 export default function TemplateDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -38,7 +36,7 @@ export default function TemplateDetailPage() {
   const [status, setStatus] = useState<'draft' | 'published'>('published')
   const [category, setCategory] = useState<'landing' | 'email' | 'promo'>('landing')
   const [previewSample, setPreviewSample] = useState<Record<string, string>>({})
-  const [theme, setTheme] = useState<TemplateTheme>({ ...DEFAULT_TEMPLATE_THEME })
+  const [theme, setTheme] = useState<TemplateTheme>(resolveTemplateTheme(undefined))
 
   useEffect(() => {
     if (!id) return
@@ -90,7 +88,6 @@ export default function TemplateDetailPage() {
             status,
             category,
             previewSample: Object.keys(sample).length ? sample : undefined,
-            theme,
           },
         }),
       })
@@ -134,11 +131,11 @@ export default function TemplateDetailPage() {
       </AdminPageHeader>
 
       <div className="mx-auto max-w-7xl flex-1 space-y-6 p-6">
-        {editing ? <TemplateColorsGuide /> : null}
+        {editing ? null : null}
         <div className="grid gap-6 lg:grid-cols-2">
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>{editing ? 'Edit theme' : 'Details'}</CardTitle>
+            <CardTitle>{editing ? 'Edit template' : 'Details'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {editing ? (
@@ -194,12 +191,9 @@ export default function TemplateDetailPage() {
                     onChange={(e) => setHtml(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Structure only — lorem or empty headings are fine. AI writes real copy when
-                    users launch a campaign.
+                    Structure only — lorem or empty headings are fine. Brand colors are edited in the
+                    visual studio editor per project, not here.
                   </p>
-                </div>
-                <div className="rounded-lg border bg-muted/30 p-3">
-                  <WebflowThemeFields theme={theme} onChange={setTheme} />
                 </div>
               </>
             ) : (
@@ -217,7 +211,7 @@ export default function TemplateDetailPage() {
                   <dd className="font-medium capitalize">{category}</dd>
                 </div>
                 <p className="text-xs text-muted-foreground pt-2">
-                  Click <strong>Edit HTML</strong> to change layout and brand colors.
+                  Click <strong>Edit HTML</strong> to change layout structure. Colors are set per-project in the visual editor.
                 </p>
               </dl>
             )}

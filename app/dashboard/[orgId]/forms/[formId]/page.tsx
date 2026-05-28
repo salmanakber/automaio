@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { FormFieldBuilder } from '@/components/forms/FormFieldBuilder'
+import { FormLivePreview } from '@/components/forms/FormLivePreview'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { FormField } from '@/app/api/forms/route'
+import { AUDIENCE_TYPES } from '@/lib/campaigns/notify-audience'
 
 type Submission = {
   id: string
@@ -51,6 +53,7 @@ export default function FormDetailPage() {
   const [name, setName] = useState('')
   const [fields, setFields] = useState<FormField[]>([])
   const [successMessage, setSuccessMessage] = useState('')
+  const [audienceType, setAudienceType] = useState('lead')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -72,6 +75,7 @@ export default function FormDetailPage() {
         setName(f.name)
         setFields(f.fields as FormField[])
         setSuccessMessage(f.settings?.successMessage ?? 'Thanks! We will be in touch.')
+        setAudienceType((f.settings as { audienceType?: string })?.audienceType ?? 'lead')
         setIntegrationId(f.settings?.webflowIntegrationId ?? '')
         setPageId(f.settings?.webflowPageId ?? '')
       })
@@ -134,7 +138,7 @@ export default function FormDetailPage() {
         body: JSON.stringify({
           name,
           fields,
-          settings: { successMessage },
+          settings: { successMessage, audienceType },
         }),
       })
       if (!res.ok) throw new Error('Save failed')
@@ -205,6 +209,24 @@ export default function FormDetailPage() {
                       <Label>Success message</Label>
                       <Input value={successMessage} onChange={(e) => setSuccessMessage(e.target.value)} />
                     </div>
+                    <div className="space-y-2">
+                      <Label>Lead audience type</Label>
+                      <Select value={audienceType} onValueChange={setAudienceType}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AUDIENCE_TYPES.map((t) => (
+                            <SelectItem key={t} value={t} className="capitalize">
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Email submitters are tagged for scheduled publish notifications and campaigns.
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -237,40 +259,14 @@ export default function FormDetailPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Live preview</CardTitle>
+                    <CardDescription>Same styling as the Webflow runtime embed</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    {fields.map((field) => (
-                      <div key={field.id}>
-                        <label className="text-xs font-medium">
-                          {field.label}
-                          {field.required ? ' *' : ''}
-                        </label>
-                        {field.type === 'textarea' ? (
-                          <textarea
-                            className="mt-1 w-full rounded-md border px-3 py-2 text-sm bg-background"
-                            placeholder={field.placeholder}
-                            rows={3}
-                            disabled
-                          />
-                        ) : field.type === 'select' ? (
-                          <select className="mt-1 w-full rounded-md border px-3 py-2 text-sm bg-background" disabled>
-                            {(field.options ?? []).map((o) => (
-                              <option key={o}>{o}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'}
-                            className="mt-1 w-full rounded-md border px-3 py-2 text-sm bg-background"
-                            placeholder={field.placeholder}
-                            disabled
-                          />
-                        )}
-                      </div>
-                    ))}
-                    <Button className="w-full" disabled>
-                      Submit
-                    </Button>
+                  <CardContent>
+                    <FormLivePreview
+                      name={name}
+                      fields={fields}
+                      successMessage={successMessage}
+                    />
                   </CardContent>
                 </Card>
 

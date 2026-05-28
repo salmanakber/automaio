@@ -133,7 +133,7 @@ export function Sidebar({ orgId, campaignId }: SidebarProps) {
               active={isActive(`/dashboard/${orgId}/schedule`)}
             />
             <NavItem
-              href={`/dashboard/${orgId}/campaigns/new`}
+              href={`/dashboard/${orgId}/campaigns`}
               label="Campaigns"
               icon={Megaphone}
               active={isActive(`/dashboard/${orgId}/campaigns`)}

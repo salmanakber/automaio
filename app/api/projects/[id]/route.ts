@@ -162,6 +162,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         scheduledFor,
         frequency: body.frequency ?? 'once',
         publishSite: body.publishSite ?? existing.publishSite,
+        notifySubscribers: Boolean(body.notifySubscribers),
+        audienceTypes: Array.isArray(body.audienceTypes) ? body.audienceTypes : [],
+        emailCampaignId: body.emailCampaignId ?? undefined,
       })
       return NextResponse.json(result, { status: 201 })
     } catch (error) {

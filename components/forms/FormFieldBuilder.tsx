@@ -16,7 +16,17 @@ import { Badge } from '@/components/ui/badge'
 import { GripVertical, Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import type { FormField } from '@/app/api/forms/route'
 
-const FIELD_TYPES: FormField['type'][] = ['text', 'email', 'phone', 'textarea', 'select']
+const FIELD_TYPES: FormField['type'][] = [
+  'text',
+  'email',
+  'phone',
+  'textarea',
+  'select',
+  'checkbox',
+  'number',
+  'date',
+  'url',
+]
 
 type FormFieldBuilderProps = {
   fields: FormField[]

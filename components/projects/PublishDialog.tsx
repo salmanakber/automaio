@@ -35,6 +35,7 @@ import {
   CalendarClock,
 } from 'lucide-react'
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
+import { ScheduleNotifyPanel, type ScheduleNotifySettings } from '@/components/projects/ScheduleNotifyPanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import type { PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
 
@@ -99,6 +100,11 @@ export function PublishDialog({
   const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>('auto')
   const [result, setResult] = useState<PublishResult | null>(null)
   const [copied, setCopied] = useState(false)
+  const [notifySettings, setNotifySettings] = useState<ScheduleNotifySettings>({
+    notifySubscribers: false,
+    audienceTypes: ['lead', 'newsletter'],
+    emailCampaignId: '',
+  })
 
   const isLandingPage = project?.contentType === 'landing_page'
   const minScheduleInput = useMemo(() => new Date().toISOString().slice(0, 16), [open])
@@ -189,13 +195,16 @@ export function PublishDialog({
             scheduledFor: scheduledFor.toISOString(),
             frequency: 'once',
             publishSite,
+            notifySubscribers: notifySettings.notifySubscribers,
+            audienceTypes: notifySettings.audienceTypes,
+            emailCampaignId: notifySettings.emailCampaignId || undefined,
           }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? 'Schedule failed')
         setResult({
           type: 'success',
-          message: `Scheduled for ${scheduledFor.toLocaleString()}${publishSite ? ' (includes live site publish)' : ''}.`,
+          message: `Scheduled for ${scheduledFor.toLocaleString()}. Webflow publish runs in the background worker at that time${notifySettings.notifySubscribers ? ' + subscriber emails' : ''}.`,
         })
         onPublished?.()
         return
@@ -406,9 +415,13 @@ export function PublishDialog({
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
                 />
                 <p className="text-[10px] text-zinc-500">
-                  Requires Redis and the background worker (<code>pnpm run worker</code>).
+                  Queued in Redis — Webflow API runs only when the worker fires at this time (not now).
                 </p>
               </div>
+            )}
+
+            {publishMode === 'later' && (
+              <ScheduleNotifyPanel orgId={orgId} value={notifySettings} onChange={setNotifySettings} />
             )}
           </div>
 

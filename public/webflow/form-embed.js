@@ -1,4 +1,6 @@
 (function () {
+  'use strict'
+
   var script = document.currentScript
   if (!script) return
 
@@ -15,6 +17,7 @@
   if (!container) {
     container = document.createElement('div')
     container.id = containerId
+    container.setAttribute('data-automaio-form-root', 'true')
     script.parentNode.insertBefore(container, script.nextSibling)
   }
 
@@ -31,27 +34,28 @@
     return node
   }
 
-  fetch(base + '/api/forms/public/' + token)
+  fetch(base + '/api/runtime/forms/' + encodeURIComponent(token))
     .then(function (r) { return r.json() })
-    .then(function (data) {
-      if (!data.form) throw new Error('Form not found')
-      var form = data.form
-      var fields = form.fields || []
-      var settings = form.settings || {}
+    .then(function (schema) {
+      if (!schema || schema.error) throw new Error(schema.error || 'Form not found')
 
-      var style = el('style', null, [])
-      style.textContent =
-        '.automaio-form{font-family:system-ui,sans-serif;max-width:480px}' +
-        '.automaio-form label{display:block;font-size:13px;font-weight:500;margin-bottom:4px;color:#111}' +
-        '.automaio-form input,.automaio-form textarea,.automaio-form select{width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box}' +
-        '.automaio-form button{background:#111;color:#fff;border:0;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;width:100%}' +
-        '.automaio-form button:hover{opacity:.9}' +
-        '.automaio-form .success{padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;color:#065f46;font-size:14px}' +
-        '.automaio-form .error{padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;font-size:14px;margin-bottom:12px}'
-      container.appendChild(style)
+      var fields = schema.fields || []
+      var settings = schema.settings || {}
+      var css = (schema.render && schema.render.cssContent) || ''
+
+      if (css) {
+        var style = el('style', null, [])
+        style.textContent = css
+        document.head.appendChild(style)
+      }
 
       var formEl = el('form', { className: 'automaio-form' })
+      container.innerHTML = ''
       container.appendChild(formEl)
+
+      if (schema.name) {
+        formEl.appendChild(el('h3', { text: schema.name, className: 'automaio-form-title' }))
+      }
 
       fields.forEach(function (field) {
         var wrap = el('div')
@@ -64,9 +68,11 @@
           field.options.forEach(function (opt) {
             input.appendChild(el('option', { value: opt, text: opt }))
           })
+        } else if (field.type === 'checkbox') {
+          input = el('input', { type: 'checkbox', name: field.id })
         } else {
           input = el('input', {
-            type: field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text',
+            type: field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'number' ? 'number' : 'text',
             name: field.id,
             placeholder: field.placeholder || '',
           })
@@ -83,7 +89,9 @@
         var payload = {}
         fields.forEach(function (field) {
           var input = formEl.querySelector('[name="' + field.id + '"]')
-          if (input) payload[field.id] = input.value
+          if (!input) return
+          if (field.type === 'checkbox') payload[field.id] = input.checked
+          else payload[field.id] = input.value
         })
 
         fetch(base + '/api/forms/public/' + token, {
@@ -98,7 +106,7 @@
               return
             }
             formEl.innerHTML = ''
-            formEl.appendChild(el('div', { className: 'success', text: res.message || 'Thank you!' }))
+            formEl.appendChild(el('div', { className: 'success', text: res.message || settings.successMessage || 'Thank you!' }))
           })
           .catch(function () {
             var err = el('div', { className: 'error', text: 'Something went wrong. Please try again.' })
@@ -107,6 +115,6 @@
       })
     })
     .catch(function () {
-      container.innerHTML = '<p style="color:#991b1b;font-size:13px">Unable to load form.</p>'
+      container.innerHTML = '<p style="color:#991b1b;font-size:13px;font-family:system-ui">Unable to load form.</p>'
     })
 })()

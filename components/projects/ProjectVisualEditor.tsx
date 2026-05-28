@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Sparkles, Save, Loader2, CheckCircle2, MousePointerClick, Wand2, AlertTriangle } from 'lucide-react'
 import { VISUAL_EDITOR_SCRIPT } from '@/lib/editor/visual-editor-script'
+import { buildWidgetHtml, type EditorWidgetType } from '@/lib/editor/editor-widgets'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 
 /* ─── Editor styles injected into the iframe ─── */
@@ -23,6 +24,8 @@ const EDITOR_CSS = `
 [data-am-id] { transition: outline 0.15s ease, background 0.15s ease; cursor: pointer !important; }
 [data-am-id]:hover { outline: 2px dashed #3b82f6 !important; outline-offset: 3px; }
 [data-am-id].am-active { outline: 2px solid #3b82f6 !important; outline-offset: 3px; background: rgba(59,130,246,0.04) !important; }
+[data-am-kind="container"] { outline-offset: 2px; }
+[data-am-kind="container"]:hover { outline: 2px dashed #8b5cf6 !important; }
 #am-tb { position: fixed; z-index: 999999; display: none; pointer-events: auto; }
 #am-tb-inner { background: #0f172a; border-radius: 10px; padding: 3px; display: flex; gap: 2px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); white-space: nowrap; }
 #am-tb button { color: #fff; border: none; padding: 6px 12px; border-radius: 7px; cursor: pointer; font: 500 12px/1 system-ui,sans-serif; display: flex; align-items: center; gap: 5px; background: transparent; }
@@ -42,7 +45,7 @@ type SelectedElement = {
   id: string
   text: string
   tag: string
-  kind?: 'text' | 'image' | 'code' | 'link'
+  kind?: 'text' | 'image' | 'code' | 'link' | 'container'
   src?: string
   alt?: string
   href?: string
@@ -55,6 +58,13 @@ export type ProjectVisualEditorHandle = {
   runBulkAi: (prompt: string) => Promise<void>
   postMessage: (msg: Record<string, unknown>) => void
   hasChanges: boolean
+  insertWidget: (type: EditorWidgetType) => void
+  undo: () => void
+  redo: () => void
+  duplicate: () => void
+  applyThemeCss: (css: string) => void
+  canUndo: boolean
+  canRedo: boolean
 }
 
 interface ProjectVisualEditorProps {
@@ -63,6 +73,7 @@ interface ProjectVisualEditorProps {
   onSave?: (html: string) => void
   onSelectElement?: (el: SelectedElement | null) => void
   onFocusRect?: (rect: { top: number; left: number; width: number; height: number } | null) => void
+  onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void
   variant?: 'default' | 'studio'
   zoom?: number
 }
@@ -148,6 +159,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       onSave,
       onSelectElement,
       onFocusRect,
+      onHistoryChange,
       variant = 'default',
       zoom = 1,
     },
@@ -164,6 +176,8 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [autoSaving, setAutoSaving] = useState(false)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
   const [elementCount, setElementCount] = useState(0)
   const [iframeReady, setIframeReady] = useState(false)
   const [truncated, setTruncated] = useState(false)
@@ -294,6 +308,11 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
         case 'am-ready':
           setElementCount(d.count ?? 0)
           break
+        case 'am-history':
+          setCanUndo(Boolean(d.canUndo))
+          setCanRedo(Boolean(d.canRedo))
+          onHistoryChange?.({ canUndo: Boolean(d.canUndo), canRedo: Boolean(d.canRedo) })
+          break
         case 'am-selected':
           {
             const el: SelectedElement = {
@@ -394,7 +413,28 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [selected?.id, onSelectElement, onFocusRect, isStudio, scheduleAutoSave])
+  }, [selected?.id, onSelectElement, onFocusRect, isStudio, scheduleAutoSave, onHistoryChange])
+
+  const insertWidget = useCallback(
+    (type: EditorWidgetType) => {
+      postToIframe({ type: 'am-insert-widget', html: buildWidgetHtml(type) })
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
+
+  const handleUndo = useCallback(() => postToIframe({ type: 'am-undo' }), [postToIframe])
+  const handleRedo = useCallback(() => postToIframe({ type: 'am-redo' }), [postToIframe])
+  const handleDuplicate = useCallback(() => postToIframe({ type: 'am-duplicate' }), [postToIframe])
+  const applyThemeCss = useCallback(
+    (css: string) => {
+      postToIframe({ type: 'am-apply-theme', css })
+      setHasChanges(true)
+      scheduleAutoSave()
+    },
+    [postToIframe, scheduleAutoSave],
+  )
 
   const handleElementAi = async () => {
     if (!selected || !aiPrompt.trim()) return
@@ -503,6 +543,13 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     runBulkAi: async (prompt: string) => handleBulkAi(prompt),
     postMessage: postToIframe,
     hasChanges,
+    insertWidget,
+    undo: handleUndo,
+    redo: handleRedo,
+    duplicate: handleDuplicate,
+    applyThemeCss,
+    canUndo,
+    canRedo,
   }))
 
   if (!html?.trim()) {

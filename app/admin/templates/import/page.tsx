@@ -20,7 +20,6 @@ import {
   renderTemplatePreview,
 } from '@/lib/templates/preview'
 import { DEFAULT_TEMPLATE_THEME, type TemplateTheme } from '@/lib/templates/theme'
-import { WebflowThemeFields } from '@/components/admin/TemplateEditorPanels'
 import { TemplateColorsGuide } from '@/components/admin/TemplateColorsGuide'
 
 export default function ImportTemplatePage() {
@@ -213,33 +212,20 @@ export default function ImportTemplatePage() {
         </Card>
 
         {html.trim() ? (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">3. Webflow brand colors</CardTitle>
-                <CardDescription>
-                  Injected into HTML when publishing to Webflow CMS.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <WebflowThemeFields theme={theme} onChange={setTheme} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Live preview</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <iframe
-                  title="Import preview"
-                  className="h-[360px] w-full border-t bg-white"
-                  srcDoc={previewDoc}
-                  sandbox="allow-same-origin"
-                />
-              </CardContent>
-            </Card>
-          </>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Live preview</CardTitle>
+              <CardDescription>Brand colors are customized in the project visual editor after import.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <iframe
+                title="Import preview"
+                className="h-[360px] w-full border-t bg-white"
+                srcDoc={previewDoc}
+                sandbox="allow-same-origin"
+              />
+            </CardContent>
+          </Card>
         ) : null}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}

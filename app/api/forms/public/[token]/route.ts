@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { upsertLeadAsSubscriber } from '@/lib/campaigns/notify-audience'
 
 type RouteParams = { params: Promise<{ token: string }> }
 
@@ -39,6 +40,33 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const body = await req.json()
   const data = body.data ?? body
 
+  const settings = form.settings as {
+    successMessage?: string
+    redirectUrl?: string
+    audienceType?: string
+  } | null
+
+  const fields = form.fields as Array<{ id: string; type: string }>
+  const emailField = fields.find((f) => f.type === 'email')
+  const emailValue =
+    emailField && typeof data === 'object' && data !== null
+      ? String((data as Record<string, unknown>)[emailField.id] ?? '')
+      : ''
+
+  if (emailValue) {
+    const firstNameField = fields.find((f) => /first|fname/i.test(f.id))
+    await upsertLeadAsSubscriber({
+      organizationId: form.organizationId,
+      email: emailValue,
+      firstName:
+        firstNameField && typeof data === 'object'
+          ? String((data as Record<string, unknown>)[firstNameField.id] ?? '')
+          : undefined,
+      audienceType: settings?.audienceType ?? 'lead',
+      leadFormId: form.id,
+    }).catch(() => {})
+  }
+
   const submission = await prisma.formSubmission.create({
     data: {
       formId: form.id,
@@ -47,8 +75,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? undefined,
     },
   })
-
-  const settings = form.settings as { successMessage?: string; redirectUrl?: string } | null
 
   return NextResponse.json(
     {

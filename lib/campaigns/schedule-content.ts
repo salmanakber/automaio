@@ -9,11 +9,22 @@ export type ProjectScheduleInput = {
   scheduledFor: Date
   frequency?: string
   publishSite?: boolean
+  notifySubscribers?: boolean
+  audienceTypes?: string[]
+  emailCampaignId?: string
 }
 
 export async function scheduleContentProject(input: ProjectScheduleInput) {
-  const { projectId, organizationId, scheduledFor, frequency = 'once', publishSite = false } =
-    input
+  const {
+    projectId,
+    organizationId,
+    scheduledFor,
+    frequency = 'once',
+    publishSite = false,
+    notifySubscribers = false,
+    audienceTypes = [],
+    emailCampaignId,
+  } = input
 
   const now = Date.now()
   const scheduledMs = scheduledFor.getTime()
@@ -36,6 +47,9 @@ export async function scheduleContentProject(input: ProjectScheduleInput) {
         type: 'project_publish',
         publishSite,
         organizationId,
+        notifySubscribers,
+        audienceTypes,
+        emailCampaignId,
       },
     },
   })
@@ -58,6 +72,9 @@ export async function scheduleContentProject(input: ProjectScheduleInput) {
         type: 'project_publish',
         publishSite,
         organizationId,
+        notifySubscribers,
+        audienceTypes,
+        emailCampaignId,
         bullJobId: job.id,
       },
     },
@@ -140,6 +157,9 @@ export async function rescheduleRecurringProject(scheduleId: string) {
   const strategy = schedule.optimizationStrategy as {
     publishSite?: boolean
     organizationId?: string
+    notifySubscribers?: boolean
+    audienceTypes?: string[]
+    emailCampaignId?: string
   } | null
 
   return scheduleContentProject({
@@ -148,6 +168,9 @@ export async function rescheduleRecurringProject(scheduleId: string) {
     scheduledFor: nextDate,
     frequency: schedule.frequency,
     publishSite: strategy?.publishSite ?? schedule.project.publishSite,
+    notifySubscribers: strategy?.notifySubscribers,
+    audienceTypes: strategy?.audienceTypes,
+    emailCampaignId: strategy?.emailCampaignId,
   })
 }
 

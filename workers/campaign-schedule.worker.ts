@@ -9,6 +9,7 @@ import {
   rescheduleRecurringEmail,
   rescheduleRecurringProject,
 } from '@/lib/campaigns/schedule-content'
+import { notifyAudienceOnPublish } from '@/lib/campaigns/notify-audience'
 
 export async function createCampaignScheduleWorker() {
   const worker = new Worker<CampaignScheduleJob>(
@@ -28,7 +29,37 @@ export async function createCampaignScheduleWorker() {
             return { success: false, skipped: true, reason: 'cancelled' }
           }
 
-          await publishContentProject(campaignId, { publishSite })
+          const publishResult = await publishContentProject(campaignId, { publishSite })
+
+          const strategy = schedule.optimizationStrategy as {
+            notifySubscribers?: boolean
+            audienceTypes?: string[]
+            emailCampaignId?: string
+          } | null
+
+          if (strategy?.notifySubscribers && strategy.emailCampaignId) {
+            const project = await prisma.contentProject.findUnique({
+              where: { id: campaignId },
+            })
+            const params = (project?.parameters as Record<string, unknown>) ?? {}
+            const liveUrl =
+              typeof params.liveUrl === 'string'
+                ? params.liveUrl
+                : publishResult.liveUrl ?? undefined
+
+            try {
+              const notifyResult = await notifyAudienceOnPublish({
+                organizationId: organizationId ?? project!.organizationId,
+                emailCampaignId: strategy.emailCampaignId,
+                audienceTypes: strategy.audienceTypes,
+                projectName: project?.name,
+                liveUrl,
+              })
+              console.log('[Worker] Subscriber notify:', notifyResult)
+            } catch (notifyErr) {
+              console.error('[Worker] Subscriber notify failed:', notifyErr)
+            }
+          }
 
           await prisma.projectSchedule.update({
             where: { id: scheduleId },
