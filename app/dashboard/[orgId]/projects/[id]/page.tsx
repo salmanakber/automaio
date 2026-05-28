@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   ChevronLeft,
   Monitor,
@@ -341,7 +341,7 @@ export default function ProjectStudioPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 w-1/3">
-            <AnimatePresence>
+            <AnimatePresence> {/* ─── FRAMER MOTION ─── */}
               {saved && (
                 <motion.span 
                   initial={{ opacity: 0, x: 10 }} 
