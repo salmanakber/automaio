@@ -3,14 +3,17 @@ import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 /** Default delivery for new projects, collections, and Auto mode resolution. */
 export const DEFAULT_PUBLISH_DELIVERY_MODE: PublishHtmlMode = 'remote_runtime'
 
-/** Legacy delivery modes — require explicit user opt-in in publish UI. */
-export const LEGACY_PUBLISH_DELIVERY_MODES: PublishHtmlMode[] = [
+/** Alternate delivery modes (split HTML, iframe). */
+export const ALTERNATE_PUBLISH_DELIVERY_MODES: PublishHtmlMode[] = [
   'split_plain_text',
   'iframe_embed',
 ]
 
+/** @deprecated Use ALTERNATE_PUBLISH_DELIVERY_MODES */
+export const LEGACY_PUBLISH_DELIVERY_MODES = ALTERNATE_PUBLISH_DELIVERY_MODES
+
 export function isLegacyDeliveryMode(mode: string): boolean {
-  return LEGACY_PUBLISH_DELIVERY_MODES.includes(mode as PublishHtmlMode)
+  return ALTERNATE_PUBLISH_DELIVERY_MODES.includes(mode as PublishHtmlMode)
 }
 
 /**
@@ -34,14 +37,19 @@ export const WEBFLOW_MARKETPLACE_POLICY = {
   ],
 } as const
 
-export const LEGACY_DELIVERY_WARNINGS: {
-  split_plain_text: string
-  iframe_embed: string
-} = {
+export const DELIVERY_MODE_DESCRIPTIONS: Record<PublishHtmlMode, string> = {
+  remote_runtime:
+    'Recommended — JSON page schema on Automaio, Webflow CMS stores Page ID + SEO. Template script loads content from Automaio API.',
   split_plain_text:
-    'Legacy mode: HTML/CSS are injected from CMS. JavaScript from CMS is not executed (Webflow App Store policy). Use Remote runtime for JSON schema + AutomaioRuntime enhancements.',
+    'HTML, CSS, and JS stored in CMS Plain Text fields (html, css, js). Collection template injects all three on publish.',
   iframe_embed:
-    'Legacy mode: content loads in an iframe. Crawlers may not index iframe content. Remote runtime is recommended for marketplace and SEO.',
+    'Hosted page URL in iframe-url field. Good for quick previews; remote runtime is better for SEO.',
+}
+
+/** @deprecated */
+export const LEGACY_DELIVERY_WARNINGS = {
+  split_plain_text: DELIVERY_MODE_DESCRIPTIONS.split_plain_text,
+  iframe_embed: DELIVERY_MODE_DESCRIPTIONS.iframe_embed,
 }
 
 export const RECOMMENDED_DELIVERY_BLURB =

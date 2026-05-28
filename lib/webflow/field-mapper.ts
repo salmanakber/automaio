@@ -319,11 +319,9 @@ export function buildWebflowFieldPlan(
     resolvedMode === 'remote_runtime' &&
     Boolean(payload.automaioId || options?.pageSchema)
   const useSplitPlainText =
-    resolvedMode === 'split_plain_text' &&
-    hasSplitFields &&
-    Boolean(options?.assembledLanding)
+    resolvedMode === 'split_plain_text' && Boolean(options?.assembledLanding)
   const useIframeCms =
-    resolvedMode === 'iframe_embed' && hasIframeFields && Boolean(payload.automaioId)
+    resolvedMode === 'iframe_embed' && Boolean(payload.automaioId)
   const htmlMode: PublishHtmlMode = useRemoteRuntime
     ? 'remote_runtime'
     : useSplitPlainText

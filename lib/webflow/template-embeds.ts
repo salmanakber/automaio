@@ -15,30 +15,43 @@ function wfPlainText(path: string): string {
   return `{{wf {"path":"${path}","type":"PlainText"} }}`
 }
 
-function injectSplitMarkup(root: string, styleEl: string, html: string, css: string): string {
+function injectSplitMarkup(
+  rootId: string,
+  styleId: string,
+  html: string,
+  css: string,
+  js: string,
+): string {
   return `(function(){
   var html = ${html};
   var css = ${css};
+  var js = ${js};
   if (html && html.indexOf('{{') === -1) {
-    var root = document.getElementById('${root}');
+    var root = document.getElementById('${rootId}');
     if (root) root.innerHTML = html;
   }
   if (css && css.indexOf('{{') === -1) {
-    var styleEl = document.getElementById('${styleEl}');
+    var styleEl = document.getElementById('${styleId}');
     if (styleEl) styleEl.textContent = css;
+  }
+  if (js && js.indexOf('{{') === -1) {
+    var tag = document.createElement('script');
+    tag.textContent = js;
+    (document.getElementById('${rootId}') || document.body).appendChild(tag);
   }
 })();`
 }
 
-/** Collection template body — split HTML/CSS from CMS (JS field stored but not executed). */
+/** Collection template — split HTML/CSS/JS from CMS Plain Text fields. */
 export function buildWebflowSplitCollectionEmbed(): string {
   const htmlBinding = `\`${wfPlainText(SPLIT_CMS_FIELD_PATHS.html)}\``
   const cssBinding = `\`${wfPlainText(SPLIT_CMS_FIELD_PATHS.css)}\``
-  return `<!-- Automaio Legacy Split HTML — html + css only (no CMS JS execution) -->
+  const jsBinding = `\`${wfPlainText(SPLIT_CMS_FIELD_PATHS.js)}\``
+  return `<!-- Automaio Split HTML — bind Plain Text fields: html, css, js -->
 <div id="page-root"></div>
 <style id="page-style"></style>
 <script>
-${injectSplitMarkup('page-root', 'page-style', htmlBinding, cssBinding)}
+${injectSplitMarkup('page-root', 'page-style', htmlBinding, cssBinding, jsBinding)}
 <\/script>`
 }
 
@@ -71,7 +84,7 @@ export function buildWebflowIframeCollectionEmbed(): string {
 <\/script>`
 }
 
-/** Registered inline script — html/css only, marketplace-safe. */
+/** Registered inline script — split html / css / js from CMS. */
 export function buildSplitInlineBootstrap(): string {
   return `(function(){
 if(window.__automaioSplitBoot)return;window.__automaioSplitBoot=1;
@@ -80,11 +93,13 @@ var el=document.getElementById('am-'+s)||document.querySelector('[data-am-cms="'
 if(el){var t=(el.textContent||'').trim();if(t&&t.indexOf('{{')===-1&&t.length>0)return t;}}return '';}
 var html=read(['html','html-content','html_content']);
 var css=read(['css','css-content','css_content']);
-if(!html&&!css)return;
+var js=read(['js','js-content','js_content']);
+if(!html&&!css&&!js)return;
 var root=document.getElementById('page-root')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'page-root'}));
 var styleEl=document.getElementById('page-style')||(function(){var s=document.createElement('style');s.id='page-style';document.head.appendChild(s);return s;})();
 if(html)root.innerHTML=html;
 if(css)styleEl.textContent=css;
+if(js){var t=document.createElement('script');t.textContent=js;root.appendChild(t);}
 })();`
 }
 

@@ -3,6 +3,7 @@ import { validateSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAccessByUserId } from '@/lib/api/org-access'
 import { publishContentProject } from '@/lib/content/publish-project'
+import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 import { deleteWebflowCmsItemForProject } from '@/lib/webflow/delete-cms-item'
 import { scheduleContentProject } from '@/lib/campaigns/schedule-content'
 
@@ -138,9 +139,15 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         typeof body.renderedHtml === 'string' && body.renderedHtml.trim()
           ? body.renderedHtml.trim()
           : undefined
+      const publishHtmlMode =
+        typeof body.publishHtmlMode === 'string' ? body.publishHtmlMode : undefined
+      const slug = typeof body.slug === 'string' ? body.slug.trim() : undefined
+
       const result = await publishContentProject(id, {
         publishSite: body.publishSite ?? existing.publishSite,
         renderedHtmlOverride,
+        publishHtmlMode: publishHtmlMode as PublishHtmlMode | undefined,
+        slug,
       })
       return NextResponse.json({ success: true, ...result })
     } catch (error) {

@@ -56,6 +56,37 @@ async function listAutomaioScriptIds(client: WebflowClient, siteId: string): Pro
   return registered.filter(isAutomaioDeliveryScript).map((s) => s.id)
 }
 
+/** True when the collection template page already has the active delivery script attached. */
+export async function collectionTemplateHasDeliveryScript(
+  client: WebflowClient,
+  siteId: string,
+  collectionId: string,
+  mode: DeliveryMode,
+  collectionsJson: CollectionsJson,
+): Promise<boolean> {
+  const templatePage = await client.findCollectionTemplatePage(siteId, collectionId)
+  if (!templatePage?.id) return false
+
+  try {
+    const current = await client.getPageCustomCode(templatePage.id)
+    const onPage = new Set((current.scripts ?? []).map((s) => s.id))
+
+    if (mode === 'remote_runtime') {
+      const runtimeId = collectionsJson.automaioRuntime?.scriptId
+      if (runtimeId && onPage.has(runtimeId)) return true
+      const delivery = collectionsJson.automaioDelivery
+      return delivery?.mode === 'remote_runtime' && Boolean(delivery.scriptId && onPage.has(delivery.scriptId))
+    }
+
+    const delivery = collectionsJson.automaioDelivery
+    return Boolean(
+      delivery?.mode === mode && delivery.scriptId && onPage.has(delivery.scriptId),
+    )
+  } catch {
+    return false
+  }
+}
+
 async function removeScriptsFromTemplatePage(
   client: WebflowClient,
   siteId: string,
@@ -242,7 +273,15 @@ export async function ensureCollectionDeliverySetup(
         : buildWebflowIframeCollectionEmbed()
 
   const modeChanged = Boolean(previousMode && previousMode !== mode)
-  const shouldReconfigure = options.force || modeChanged || !collectionsJson.automaioDelivery?.scriptId
+  const hasTemplateScript = await collectionTemplateHasDeliveryScript(
+    client,
+    integration.webflowSiteId,
+    options.collectionId,
+    mode,
+    collectionsJson,
+  )
+  const shouldReconfigure =
+    options.force || modeChanged || !hasTemplateScript || collectionsJson.automaioDelivery?.mode !== mode
 
   if (mode === 'remote_runtime') {
     try {

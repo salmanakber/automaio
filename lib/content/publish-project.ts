@@ -61,10 +61,14 @@ export type PublishProjectOptions = {
   publishSite?: boolean
   /** Fresh HTML from the visual editor — saved before publish when provided. */
   renderedHtmlOverride?: string
+  /** Webflow CMS item slug override (editable in publish dialog). */
+  slug?: string
+  /** Delivery mode selected in publish dialog. */
+  publishHtmlMode?: PublishHtmlMode
 }
 
-function parsePublishHtmlMode(params: Record<string, unknown>): PublishHtmlModeOverride {
-  const normalized = normalizePublishHtmlMode(params.publishHtmlMode)
+function parsePublishHtmlMode(raw: unknown): PublishHtmlModeOverride {
+  const normalized = normalizePublishHtmlMode(raw)
   return normalized === 'auto' ? DEFAULT_PUBLISH_DELIVERY_MODE : normalized
 }
 
@@ -72,8 +76,9 @@ async function prepareProjectHtml(
   project: NonNullable<Awaited<ReturnType<typeof prisma.contentProject.findUnique>>> & {
     template?: { templateStructure: unknown } | null
   },
+  overrides?: { slug?: string },
 ): Promise<{ payload: AutomaioContentPayload; htmlForStrategy: string }> {
-  const payload = await buildProjectPayload(project)
+  const payload = await buildProjectPayload(project, overrides)
   const params = (project.parameters as Record<string, unknown>) ?? {}
   const layoutControls = parseLayoutControls(params)
 
@@ -105,7 +110,7 @@ export async function getProjectPublishPreview(projectId: string) {
   )
 
   const params = (project.parameters as Record<string, unknown>) ?? {}
-  const publishHtmlMode = parsePublishHtmlMode(params)
+  const publishHtmlMode = parsePublishHtmlMode(params.publishHtmlMode)
   const threshold = await getHtmlLineThreshold()
   const hasRuntimeFields = collectionSupportsRemoteRuntime(collectionFields)
   const hasSplitFields = collectionSupportsSplitPlainText(collectionFields)
@@ -226,8 +231,11 @@ async function buildProjectPayload(
   project: NonNullable<Awaited<ReturnType<typeof prisma.contentProject.findUnique>>> & {
     template?: { templateStructure: unknown } | null
   },
+  overrides?: { slug?: string },
 ): Promise<AutomaioContentPayload> {
   const params = (project.parameters as Record<string, string>) ?? {}
+  const itemSlug =
+    overrides?.slug?.trim() || params.slug?.trim() || slugify(project.name ?? 'page')
   const isBlogPost = project.contentType === 'blog_post'
 
   const html = isBlogPost ? '' : (project.renderedHtml?.trim() || renderProjectHtml(project, params))
@@ -242,7 +250,7 @@ async function buildProjectPayload(
   if (isBlogPost) {
     return {
       name: displayName,
-      slug: params.slug?.trim() || slugify(displayName),
+      slug: itemSlug,
       headline: params.headline ?? project.name,
       bodyHtml: blogBody,
       templateHtml: '',
@@ -261,7 +269,7 @@ async function buildProjectPayload(
   if (!html && !params.body && !project.description) {
     return {
       name: displayName,
-      slug: params.slug?.trim() || slugify(displayName),
+      slug: itemSlug,
       headline: params.headline ?? project.name,
       bodyHtml: '',
       templateHtml: '',
@@ -282,7 +290,7 @@ async function buildProjectPayload(
 
   return {
     name: displayName,
-    slug: params.slug?.trim() || slugify(displayName),
+    slug: itemSlug,
     headline: params.headline ?? project.name,
     bodyHtml,
     templateHtml: html || '',
@@ -350,14 +358,24 @@ export async function publishContentProject(
   })
   if (!integration) throw new Error('Webflow integration not found')
 
+  const projectParams = (project.parameters as Record<string, unknown>) ?? {}
+  if (options?.publishHtmlMode) {
+    projectParams.publishHtmlMode = options.publishHtmlMode
+  }
+  if (options?.slug?.trim()) {
+    projectParams.slug = slugify(options.slug.trim())
+  }
+
   const appUrl = getAppBaseUrl()
-  const { payload, htmlForStrategy } = await prepareProjectHtml(project)
+  const { payload, htmlForStrategy } = await prepareProjectHtml(project, {
+    slug: (projectParams.slug as string) || options?.slug,
+  })
   if (!payload.templateHtml && !payload.bodyHtml) {
     throw new Error('Add content or pick a template before publishing')
   }
-
-  const projectParams = (project.parameters as Record<string, unknown>) ?? {}
-  const publishHtmlMode = parsePublishHtmlMode(projectParams)
+  const publishHtmlMode = parsePublishHtmlMode(
+    options?.publishHtmlMode ?? projectParams.publishHtmlMode,
+  )
   const threshold = await getHtmlLineThreshold()
   let collectionFields = await getCollectionFields(integration, project.cmsCollectionId)
 
@@ -367,6 +385,7 @@ export async function publishContentProject(
 
   const isHtmlPage = project.contentType !== 'blog_post' && Boolean(htmlForStrategy.trim())
   let htmlMode: PublishHtmlMode = 'remote_runtime'
+  let deliverySetupWarning = ''
   if (isHtmlPage) {
     const customCode = await checkCustomCodeAccess(
       integration.webflowApiKey,
@@ -395,6 +414,25 @@ export async function publishContentProject(
       name: f.name ?? f.slug,
       type: f.type,
     }))
+
+    const deliveryResult = await ensureCollectionDeliverySetup(integration.id, {
+      collectionId: project.cmsCollectionId,
+      mode: htmlMode,
+      publishSite: false,
+      force: true,
+    })
+
+    collectionFields = deliveryResult.fields.map((f) => ({
+      slug: f.slug,
+      name: f.name ?? f.slug,
+      type: f.type,
+    }))
+
+    if (!deliveryResult.success) {
+      deliverySetupWarning =
+        deliveryResult.error ??
+        'CMS fields configured; reconnect Webflow via OAuth (custom_code) to install the collection template script.'
+    }
   }
 
   let pageSchema
@@ -502,6 +540,8 @@ export async function publishContentProject(
   const previousHtmlMode = projectParams.lastPublishedHtmlMode as PublishHtmlMode | undefined
   const htmlModeChanged = Boolean(previousHtmlMode && previousHtmlMode !== plan.htmlMode)
 
+  const slugToPersist = payload.slug ?? slugify(project.name)
+
   await prisma.contentProject.update({
     where: { id: projectId },
     data: {
@@ -510,57 +550,39 @@ export async function publishContentProject(
       status: 'published',
       parameters: {
         ...schemaParams,
+        slug: slugToPersist,
+        publishHtmlMode: plan.htmlMode,
         lastPublishedHtmlMode: plan.htmlMode,
         htmlModeChangedAt: htmlModeChanged ? new Date().toISOString() : projectParams.htmlModeChangedAt,
       } as object,
     },
   })
 
-  let embedAutoConfigured = false
-  let embedNeedsReconnect = false
-  let embedMessage = ''
-  let runtimeAutoConfigured = false
-  let runtimeNeedsReconnect = false
   const usedSplitPlainText = plan.htmlMode === 'split_plain_text'
   const usedRemoteRuntime = plan.htmlMode === 'remote_runtime'
   const usedIframeEmbed = plan.htmlMode === 'iframe_embed'
-  let collectionTemplateSnippet = getCollectionTemplateSnippet(plan.htmlMode, appUrl)
+  const collectionTemplateSnippet = getCollectionTemplateSnippet(plan.htmlMode, appUrl)
+  let embedAutoConfigured = isHtmlPage
+  let embedNeedsReconnect = false
+  let runtimeAutoConfigured = usedRemoteRuntime && isHtmlPage
+  let runtimeNeedsReconnect = false
+  let embedMessage = ''
 
-  if (isHtmlPage && project.cmsCollectionId) {
-    const deliveryResult = await ensureCollectionDeliverySetup(integration.id, {
-      collectionId: project.cmsCollectionId,
-      mode: plan.htmlMode,
-      publishSite: false,
-      force: htmlModeChanged,
-    })
-
-    collectionFields = deliveryResult.fields.map((f) => ({
-      slug: f.slug,
-      name: f.name ?? f.slug,
-      type: f.type,
-    }))
-    collectionTemplateSnippet = deliveryResult.collectionTemplateSnippet
-
-    if (deliveryResult.success) {
-      embedAutoConfigured = deliveryResult.templateAutoConfigured ?? false
-      runtimeAutoConfigured = usedRemoteRuntime && embedAutoConfigured
-
-      if (usedRemoteRuntime) {
-        embedMessage =
-          'Published with remote runtime. Collection template updated — Page ID + runtime.js load content from Automaio.'
-      } else if (usedSplitPlainText) {
-        embedMessage =
-          'Published with split HTML/CSS/JS fields (html, css, js). Collection template runner installed — previous delivery modes cleared from template.'
-      } else if (usedIframeEmbed) {
-        embedMessage =
-          'Published with iframe embed (iframe-url field). Collection template iframe runner installed — previous delivery modes cleared.'
-      }
-    } else if (deliveryResult.needsReconnect) {
+  if (isHtmlPage) {
+    if (usedRemoteRuntime) {
+      embedMessage =
+        'Published with remote runtime. CMS fields and collection template custom code configured automatically.'
+    } else if (usedSplitPlainText) {
+      embedMessage =
+        'Published with split HTML/CSS/JS. Fields (html, css, js) and template script added automatically.'
+    } else if (usedIframeEmbed) {
+      embedMessage =
+        'Published with iframe embed. iframe-url field and template script configured automatically.'
+    }
+    if (deliverySetupWarning) {
+      embedMessage = `${embedMessage} ${deliverySetupWarning}`.trim()
       embedNeedsReconnect = true
       runtimeNeedsReconnect = usedRemoteRuntime
-      embedMessage =
-        deliveryResult.error ??
-        'Reconnect Webflow in Settings (custom_code permission) to auto-configure the collection template, or paste the template snippet manually.'
     }
   }
 
