@@ -29,7 +29,7 @@ import type { TemplateTheme } from '@/lib/templates/theme'
 import type { EditorWidgetType } from '@/lib/editor/editor-widgets'
 import { cn } from '@/lib/utils'
 
-export function StudioRightSidebar(props: StudioRightSidebarProps) {
+export function StudioRightSidebar(props: any) {
   const {
     project, projectId, isLandingPage, editViewport, editorTheme,
     publishedLiveUrl, selectedElement, sectionSelection, styleTarget,
@@ -55,14 +55,26 @@ export function StudioRightSidebar(props: StudioRightSidebarProps) {
           <TabsList className="grid w-full grid-cols-2 h-9 bg-zinc-900/50 border border-zinc-800/50 p-1 rounded-lg">
             <TabsTrigger
               value="page"
-              className="text-[11px] font-semibold transition-all data-[state=active]:bg-zinc-800 data-[state=active]:text-violet-400 data-[state=active]:shadow-inner"
+              className="
+  text-[11px] font-semibold transition-all
+  text-zinc-400 hover:text-zinc-200
+  data-[state=active]:bg-zinc-800
+  data-[state=active]:text-violet-400
+  data-[state=active]:shadow-inner
+"
             >
               <Settings2 className="h-3.5 w-3.5 mr-2" />
               Project
             </TabsTrigger>
             <TabsTrigger
               value="element"
-              className="text-[11px] font-semibold transition-all data-[state=active]:bg-zinc-800 data-[state=active]:text-blue-400 data-[state=active]:shadow-inner"
+              className="
+  text-[11px] font-semibold transition-all
+  text-zinc-400 hover:text-zinc-200
+  data-[state=active]:bg-zinc-800
+  data-[state=active]:text-violet-400
+  data-[state=active]:shadow-inner
+"
             >
               <MousePointerClick className="h-3.5 w-3.5 mr-2" />
               Inspector
