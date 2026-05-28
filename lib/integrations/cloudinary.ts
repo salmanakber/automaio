@@ -21,12 +21,35 @@ function getApiSecret() {
   return secret || undefined
 }
 
-export function isCloudinaryConfigured(): boolean {
+export type CloudinaryUploadMode = 'signed' | 'unsigned-preset' | 'not-configured'
+
+/** Which upload path the server will use (for debugging). */
+export function getCloudinaryUploadMode(): CloudinaryUploadMode {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME
-  const preset = process.env.CLOUDINARY_UPLOAD_PRESET?.trim()
   const apiKey = process.env.CLOUDINARY_API_KEY?.trim()
   const apiSecret = getApiSecret()
-  return Boolean(cloudName && (preset || (apiKey && apiSecret)))
+  const preset = process.env.CLOUDINARY_UPLOAD_PRESET?.trim()
+  if (!cloudName) return 'not-configured'
+  if (apiKey && apiSecret) return 'signed'
+  if (preset) return 'unsigned-preset'
+  return 'not-configured'
+}
+
+export function getCloudinaryDiagnostics() {
+  const mode = getCloudinaryUploadMode()
+  return {
+    mode,
+    hasCloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+    hasApiKey: Boolean(process.env.CLOUDINARY_API_KEY?.trim()),
+    hasApiSecret: Boolean(getApiSecret()),
+    hasUploadPreset: Boolean(process.env.CLOUDINARY_UPLOAD_PRESET?.trim()),
+    /** When mode is signed, upload_preset is never sent to Cloudinary. */
+    uploadPresetIgnored: mode === 'signed',
+  }
+}
+
+export function isCloudinaryConfigured(): boolean {
+  return getCloudinaryUploadMode() !== 'not-configured'
 }
 
 function formatCloudinaryError(data: Record<string, unknown>): string {
@@ -57,9 +80,9 @@ export async function uploadImageBuffer(
   options: { folder: string; filename?: string },
 ): Promise<CloudinaryUploadResult> {
   const cloudName = getCloudName()
-  const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET?.trim()
   const apiKey = process.env.CLOUDINARY_API_KEY?.trim()
   const apiSecret = getApiSecret()
+  const mode = getCloudinaryUploadMode()
   const filename = options.filename ?? 'upload.jpg'
   const mime = guessMimeType(filename)
 
@@ -67,13 +90,8 @@ export async function uploadImageBuffer(
   const bytes = new Uint8Array(buffer)
   form.append('file', new File([bytes], filename, { type: mime }))
 
-  if (uploadPreset) {
-    form.append('upload_preset', uploadPreset)
-    // Unsigned presets often lock folder in dashboard — only send folder when signed upload is used
-    if (apiSecret && apiKey) {
-      form.append('folder', options.folder)
-    }
-  } else if (apiKey && apiSecret) {
+  // Signed server upload — never send upload_preset (mixing them causes whitelist errors)
+  if (mode === 'signed' && apiKey && apiSecret) {
     const timestamp = Math.round(Date.now() / 1000)
     const params: Record<string, string> = {
       folder: options.folder,
@@ -88,9 +106,16 @@ export async function uploadImageBuffer(
     form.append('api_key', apiKey)
     form.append('timestamp', String(timestamp))
     form.append('signature', signature)
+  } else if (mode === 'unsigned-preset') {
+    const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET?.trim()
+    if (!uploadPreset) {
+      throw new Error('CLOUDINARY_UPLOAD_PRESET is not configured')
+    }
+    // Unsigned: file + preset only (no folder, api_key, or signature)
+    form.append('upload_preset', uploadPreset)
   } else {
     throw new Error(
-      'Cloudinary not configured — set CLOUDINARY_UPLOAD_PRESET (unsigned) or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET',
+      'Cloudinary not configured — set CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET, or CLOUDINARY_UPLOAD_PRESET (unsigned)',
     )
   }
 
@@ -104,7 +129,12 @@ export async function uploadImageBuffer(
     const message = formatCloudinaryError(data)
     if (message.toLowerCase().includes('preset not found')) {
       throw new Error(
-        `${message}. Create an unsigned upload preset named "${uploadPreset}" in your Cloudinary dashboard, or set CLOUDINARY_API_SECRET for signed uploads.`,
+        `${message}. Create an unsigned upload preset in the Cloudinary dashboard, or set CLOUDINARY_API_SECRET for signed uploads.`,
+      )
+    }
+    if (message.toLowerCase().includes('whitelisted for unsigned')) {
+      throw new Error(
+        `${message}. Your server is mixing signed credentials with upload_preset — restart \`npm run dev\` after .env changes, comment out CLOUDINARY_UPLOAD_PRESET when using API secret, and confirm the media API reports mode "signed".`,
       )
     }
     throw new Error(message)

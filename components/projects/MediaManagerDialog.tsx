@@ -81,6 +81,7 @@ export function MediaManagerDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [cloudinaryConfigured, setCloudinaryConfigured] = useState(true)
+  const [cloudinaryMode, setCloudinaryMode] = useState<string>('')
   const [selectedUrl, setSelectedUrl] = useState('')
   const [manualUrl, setManualUrl] = useState('')
   const [jobs, setJobs] = useState<UploadJob[]>([])
@@ -95,11 +96,18 @@ export function MediaManagerDialog({
       const data = await parseJsonResponse<{
         items?: MediaLibraryItem[]
         cloudinaryConfigured?: boolean
+        cloudinary?: { mode?: string; hasApiSecret?: boolean }
         error?: string
       }>(res)
       if (!res.ok) throw new Error(data.error ?? 'Failed to load media')
       setItems(data.items ?? [])
       setCloudinaryConfigured(data.cloudinaryConfigured !== false)
+      setCloudinaryMode(data.cloudinary?.mode ?? '')
+      if (data.cloudinary?.mode === 'unsigned-preset' && !data.cloudinary?.hasApiSecret) {
+        setError(
+          'Cloudinary is using unsigned preset mode. Add CLOUDINARY_API_SECRET to .env for signed uploads, then restart the dev server.',
+        )
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load media')
     } finally {
@@ -203,9 +211,12 @@ export function MediaManagerDialog({
             {anyUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Upload images
           </Button>
+          {cloudinaryConfigured && cloudinaryMode && (
+            <span className="text-[10px] text-zinc-500">Upload mode: {cloudinaryMode}</span>
+          )}
           {!cloudinaryConfigured && (
             <span className="text-[10px] text-amber-400">
-              Set CLOUDINARY_CLOUD_NAME + upload preset or API secret in .env
+              Set CLOUDINARY_CLOUD_NAME + API secret in .env
             </span>
           )}
         </div>

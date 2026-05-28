@@ -3,6 +3,7 @@ import { validateSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAccessByUserId } from '@/lib/api/org-access'
 import {
+  getCloudinaryDiagnostics,
   isCloudinaryConfigured,
   readMediaLibrary,
   uploadImageBuffer,
@@ -42,6 +43,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       items,
       cloudinaryConfigured: isCloudinaryConfigured(),
+      cloudinary: getCloudinaryDiagnostics(),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load media'
@@ -146,6 +148,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       uploaded: uploadedItems,
       item: uploadedItems[0],
       errors: errors.length ? errors : undefined,
+      cloudinary: getCloudinaryDiagnostics(),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Upload failed'
