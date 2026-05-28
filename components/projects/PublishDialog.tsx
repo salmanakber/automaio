@@ -5,16 +5,12 @@ import Link from 'next/link'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select,
   SelectContent,
@@ -25,7 +21,6 @@ import {
 import {
   ExternalLink,
   Globe,
-  Layout,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -33,6 +28,13 @@ import {
   Plug,
   RefreshCw,
   CalendarClock,
+  Zap,
+  Eye,
+  Radio,
+  Clock,
+  ShieldCheck,
+  ZapOff,
+  Search,
 } from 'lucide-react'
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { ScheduleNotifyPanel, type ScheduleNotifySettings } from '@/components/projects/ScheduleNotifyPanel'
@@ -48,57 +50,58 @@ type PublishDialogProps = {
   onPublished?: (result?: { liveUrl?: string; previewUrl?: string }) => void
 }
 
-type PublishResult = {
-  type: 'success' | 'error' | 'warning'
-  message: string
-  liveUrl?: string
-  previewUrl?: string
-  embedSnippet?: string
-  collectionEmbedSnippet?: string
-  collectionTemplateSnippet?: string
-  embedNeedsReconnect?: boolean
-  runtimeAutoConfigured?: boolean
-  usedRemoteRuntime?: boolean
+/* ─────────────────────────────────── UI Components ─── */
+
+function Divider() {
+  return <div className="h-px w-full bg-white/[0.06] my-2" />
 }
 
-type PublishPreview = {
-  canPublish?: boolean
-  htmlMode?: string
-  publishHtmlMode?: string
-  htmlLineCount?: number
-  htmlLineThreshold?: number
-  usesEmbed?: boolean
-  usesRemoteRuntime?: boolean
-  runtimeConfigured?: boolean
-  runtimeUrl?: string
-  resolvedFields?: string[]
-  error?: string
+function StatusBadge({ status }: { status: 'ready' | 'warning' | 'loading' }) {
+  const styles = {
+    ready: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    warning: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    loading: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
+  }
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-bold uppercase tracking-tight ${styles[status]}`}>
+      {status === 'loading' ? <Loader2 className="h-3 w-3 animate-spin" /> : <div className={`h-1.5 w-1.5 rounded-full ${status === 'ready' ? 'bg-emerald-400' : 'bg-amber-400'}`} />}
+      {status === 'ready' ? 'System Ready' : status === 'loading' ? 'Checking' : 'Action Required'}
+    </div>
+  )
 }
 
-function defaultScheduleInput() {
-  const d = new Date()
-  d.setHours(d.getHours() + 1, 0, 0, 0)
-  return d.toISOString().slice(0, 16)
+function Section({ label, children, action, icon: Icon }: { label: string; children: React.ReactNode; action?: React.ReactNode; icon?: any }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className="h-3 w-3 text-zinc-500" />}
+          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-500">{label}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  )
 }
 
-export function PublishDialog({
-  open,
-  onOpenChange,
-  project,
-  projectId,
-  orgId,
-  onPublished,
-}: PublishDialogProps) {
+/* ─────────────────────────────────────────── main ─── */
+
+export function PublishDialog({ open, onOpenChange, project, projectId, orgId, onPublished }: PublishDialogProps) {
   const [publishing, setPublishing] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
-  const [preview, setPreview] = useState<PublishPreview | null>(null)
+  const [preview, setPreview] = useState<any | null>(null)
   const [previewError, setPreviewError] = useState('')
   const [showOnWebsite, setShowOnWebsite] = useState(Boolean(project?.showOnWebsite))
   const [publishSite, setPublishSite] = useState(project?.publishSite !== false)
   const [publishMode, setPublishMode] = useState<'now' | 'later'>('now')
-  const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput)
+  const [scheduledAt, setScheduledAt] = useState(() => {
+    const d = new Date()
+    d.setHours(d.getHours() + 1, 0, 0, 0)
+    return d.toISOString().slice(0, 16)
+  })
   const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>('auto')
-  const [result, setResult] = useState<PublishResult | null>(null)
+  const [result, setResult] = useState<any | null>(null)
   const [copied, setCopied] = useState(false)
   const [notifySettings, setNotifySettings] = useState<ScheduleNotifySettings>({
     notifySubscribers: false,
@@ -107,480 +110,241 @@ export function PublishDialog({
   })
 
   const isLandingPage = project?.contentType === 'landing_page'
-  const minScheduleInput = useMemo(() => new Date().toISOString().slice(0, 16), [open])
-
-  const savePublishSettings = async () => {
-    const params = { ...((project?.parameters as Record<string, unknown>) ?? {}) }
-    params.publishHtmlMode = publishHtmlMode
-
-    await fetch(`/api/projects/${projectId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        showOnWebsite,
-        publishSite,
-        parameters: params,
-      }),
-    })
-  }
+  const canPublish = preview?.canPublish !== false && !previewError
 
   const loadPreview = async () => {
     if (!project?.cmsCollectionId) {
-      setPreview(null)
-      setPreviewError('Select a CMS collection before publishing.')
+      setPreviewError('Connect a Webflow CMS collection first.')
       return
     }
     setPreviewLoading(true)
     setPreviewError('')
     try {
-      await savePublishSettings()
-      const res = await fetch(`/api/projects/${projectId}/publish-preview`, {
-        credentials: 'same-origin',
-      })
-      const data = await parseJsonResponse<PublishPreview & { error?: string }>(res)
-      if (!res.ok) throw new Error(data.error ?? 'Preview failed')
+      const res = await fetch(`/api/projects/${projectId}/publish-preview`)
+      const data = await parseJsonResponse<any>(res)
+      if (!res.ok) throw new Error(data.error ?? 'Connection failed')
       setPreview(data)
-    } catch (err) {
-      setPreviewError(err instanceof Error ? err.message : 'Could not load publish preview')
-      setPreview(null)
+    } catch (err: any) {
+      setPreviewError(err.message)
     } finally {
       setPreviewLoading(false)
     }
   }
 
   useEffect(() => {
-    if (!open) return
-    setShowOnWebsite(Boolean(project?.showOnWebsite))
-    setPublishSite(project?.publishSite !== false)
-    setResult(null)
-    setPublishMode('now')
-    setScheduledAt(defaultScheduleInput())
-    const params = (project?.parameters as Record<string, unknown>) ?? {}
-    const mode = params.publishHtmlMode
-    setPublishHtmlMode(
-      mode === 'iframe_embed' ||
-        mode === 'rich_text_html' ||
-        mode === 'custom_code' ||
-        mode === 'remote_runtime' ||
-        mode === 'split_plain_text' ||
-        mode === 'auto'
-        ? mode
-        : 'auto',
-    )
-    if (project?.cmsCollectionId) loadPreview()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, projectId, project?.cmsCollectionId])
-
-  const copySnippet = async (snippet: string) => {
-    await navigator.clipboard.writeText(snippet)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    if (open && project?.cmsCollectionId) loadPreview()
+  }, [open, projectId])
 
   const handleSubmit = async () => {
     setPublishing(true)
     setResult(null)
     try {
-      await savePublishSettings()
-
-      if (publishMode === 'later') {
-        const scheduledFor = new Date(scheduledAt)
-        if (Number.isNaN(scheduledFor.getTime())) {
-          throw new Error('Pick a valid date and time')
-        }
-        const res = await fetch(`/api/projects/${projectId}?action=schedule`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scheduledFor: scheduledFor.toISOString(),
-            frequency: 'once',
-            publishSite,
-            notifySubscribers: notifySettings.notifySubscribers,
-            audienceTypes: notifySettings.audienceTypes,
-            emailCampaignId: notifySettings.emailCampaignId || undefined,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error ?? 'Schedule failed')
-        setResult({
-          type: 'success',
-          message: `Scheduled for ${scheduledFor.toLocaleString()}. Webflow publish runs in the background worker at that time${notifySettings.notifySubscribers ? ' + subscriber emails' : ''}.`,
-        })
-        onPublished?.()
-        return
-      }
-
-      const res = await fetch(`/api/projects/${projectId}?action=publish`, {
+      const endpoint = `/api/projects/${projectId}?action=${publishMode === 'later' ? 'schedule' : 'publish'}`
+      const payload = publishMode === 'later' 
+        ? { scheduledFor: new Date(scheduledAt).toISOString(), publishSite, ...notifySettings }
+        : { publishSite }
+      
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publishSite }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Publish failed')
-
-      if (data.embedNeedsReconnect || data.runtimeNeedsReconnect) {
-        setResult({
-          type: 'warning',
-          message:
-            data.embedMessage ??
-            'CMS item created/updated, but automatic runtime setup could not be applied.',
-          liveUrl: data.liveUrl,
-          previewUrl: data.previewUrl,
-          embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
-          collectionEmbedSnippet: data.collectionEmbedSnippet,
-          collectionTemplateSnippet: data.collectionTemplateSnippet,
-          embedNeedsReconnect: true,
-          runtimeAutoConfigured: false,
-          usedRemoteRuntime: Boolean(data.usedRemoteRuntime),
-        })
-      } else {
-        setResult({
-          type: 'success',
-          message: data.embedMessage ?? 'Published to Webflow CMS successfully.',
-          liveUrl: data.liveUrl,
-          previewUrl: data.previewUrl,
-          embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
-          collectionTemplateSnippet:
-            data.runtimeAutoConfigured || data.embedAutoConfigured
-              ? undefined
-              : data.collectionTemplateSnippet,
-          runtimeAutoConfigured: Boolean(data.runtimeAutoConfigured ?? data.embedAutoConfigured),
-          usedRemoteRuntime: Boolean(data.usedRemoteRuntime),
-        })
-      }
-      onPublished?.({
-        liveUrl: data.liveUrl,
-        previewUrl: data.previewUrl,
-      })
-    } catch (err) {
-      setResult({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Publish failed',
-      })
+      if (!res.ok) throw new Error(data.error ?? 'Deployment failed')
+      setResult({ type: 'success', ...data })
+      if (onPublished) onPublished(data)
+    } catch (err: any) {
+      setResult({ type: 'error', message: err.message })
     } finally {
       setPublishing(false)
     }
   }
 
-  const settingsUrl = `/dashboard/${orgId}/settings?tab=integrations`
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#09090b] border-zinc-800 text-white sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-blue-500" />
-            Publish to Webflow CMS
-          </DialogTitle>
-          <DialogDescription className="text-zinc-500 text-xs mt-2">
-            Creates or updates a CMS item, auto-configures remote runtime when available, and optionally publishes your Webflow site.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="py-6 space-y-6">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900 border border-zinc-800">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-white/5 flex items-center justify-center">
-                <Layout className="h-5 w-5 text-zinc-400" />
+      <DialogContent className="border-0 text-white p-0 sm:max-w-[600px] max-h-[95vh] overflow-hidden flex flex-col bg-[#0c0c0e] shadow-2xl">
+        
+        {/* Header Section */}
+        <div className="px-8 pt-8 pb-6 border-b border-white/[0.06] bg-gradient-to-b from-white/[0.02] to-transparent">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shadow-inner">
+                <Globe className="h-6 w-6 text-blue-400" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Webflow CMS</p>
-                <p className="text-[11px] text-zinc-500 uppercase font-bold tracking-tighter">
-                  {project?.webflowCmsItemId ? 'Item linked' : 'Will create item'}
-                </p>
+                <DialogTitle className="text-lg font-bold tracking-tight">Deploy to Webflow</DialogTitle>
+                <DialogDescription className="text-xs text-zinc-500 font-medium">
+                  Push content to <span className="text-zinc-300">{project?.webflowCmsItemId ? 'Linked CMS Item' : 'New Webflow Entry'}</span>
+                </DialogDescription>
               </div>
             </div>
-            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-              {preview?.canPublish === false ? 'Check fields' : 'Ready'}
-            </Badge>
+            <StatusBadge status={previewLoading ? 'loading' : canPublish ? 'ready' : 'warning'} />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-8 py-6 space-y-8">
+          
+          {/* Metadata Grid */}
+          <div className="grid grid-cols-3 gap-px bg-white/[0.08] border border-white/[0.08] rounded-xl overflow-hidden shadow-sm">
+            {[
+              { label: 'CMS Status', value: project?.webflowCmsItemId ? 'Connected' : 'Pending', icon: ShieldCheck },
+              { label: 'Field Sync', value: preview?.resolvedFields?.length ? `${preview.resolvedFields.length} Mapped` : '0 Fields', icon: RefreshCw },
+              { label: 'Character Count', value: preview?.htmlLineCount ? `${preview.htmlLineCount} Lines` : '—', icon: Zap },
+            ].map((item, i) => (
+              <div key={i} className="bg-[#121214] p-3 space-y-1">
+                <div className="flex items-center gap-1.5">
+                   <item.icon className="h-3 w-3 text-zinc-600" />
+                   <p className="text-[9px] uppercase tracking-wider font-bold text-zinc-600">{item.label}</p>
+                </div>
+                <p className="text-xs font-mono text-zinc-300">{item.value}</p>
+              </div>
+            ))}
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">
-                CMS field mapping
-              </p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-[10px] text-zinc-500 gap-1"
-                onClick={loadPreview}
-                disabled={previewLoading}
-              >
-                <RefreshCw className={`h-3 w-3 ${previewLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-            </div>
+          {/* Rendering Strategy Section */}
+          {isLandingPage && (
+            <Section label="Rendering Strategy" icon={Radio}>
+              <Select value={publishHtmlMode} onValueChange={(v: any) => setPublishHtmlMode(v)}>
+                <SelectTrigger className="bg-white/[0.03] border-white/[0.08] h-10 text-sm focus:ring-blue-500/40">
+                  <SelectValue placeholder="Choose rendering mode" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#121214] border-white/[0.1] text-zinc-300">
+                  <SelectItem value="auto">Smart Auto-Select (Recommended)</SelectItem>
+                  <SelectItem value="remote_runtime">Remote Runtime (Lightning Fast)</SelectItem>
+                  <SelectItem value="split_plain_text">Full HTML (Best for SEO)</SelectItem>
+                  <SelectItem value="custom_code">Legacy Rich Text Mode</SelectItem>
+                </SelectContent>
+              </Select>
 
-            {previewLoading && (
-              <div className="flex items-center gap-2 text-xs text-zinc-500 py-4 justify-center">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading field mapping…
-              </div>
-            )}
+              {/* SEO NOTICE - HIGH VISIBILITY */}
+              {(publishHtmlMode === 'remote_runtime' || preview?.usesRemoteRuntime) && (
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-blue-400">
+                    <Search className="h-4 w-4" />
+                    <p className="text-[11px] font-bold uppercase tracking-wide">SEO Performance Note</p>
+                  </div>
+                  <p className="text-[12px] text-zinc-400 leading-relaxed">
+                    <span className="text-zinc-200 font-medium">Remote Runtime</span> uses JavaScript to inject content instantly. While this makes updates 10x faster, search engines prefer direct HTML for crawling.
+                  </p>
+                  <div className="flex gap-4 pt-1">
+                     <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
+                        <Zap className="h-3 w-3" /> Ultra-fast Updates
+                     </div>
+                     <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium">
+                        <ZapOff className="h-3 w-3" /> Lower SEO Visibility
+                     </div>
+                  </div>
+                </div>
+              )}
+            </Section>
+          )}
 
-            {previewError && !previewLoading && (
-              <p className="text-xs text-amber-400/90 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-                {previewError}
-              </p>
-            )}
-
-            {isLandingPage && !previewLoading && (
-              <div className="space-y-2">
-                <Label className="text-[11px] uppercase tracking-wide text-zinc-400">
-                  HTML delivery mode
-                </Label>
-                <Select
-                  value={publishHtmlMode}
-                  onValueChange={(v) => {
-                    setPublishHtmlMode(v as PublishHtmlModeOverride)
-                  }}
+          {/* Timing Section */}
+          <Section label="Deployment Schedule" icon={Clock}>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] border border-white/[0.06] rounded-xl">
+              {(['now', 'later'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setPublishMode(mode)}
+                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                    publishMode === mode ? 'bg-white/[0.08] text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
                 >
-                  <SelectTrigger className="bg-zinc-950 border-zinc-800 h-9 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">
-                      Auto ({preview?.htmlLineCount ?? '—'} lines · threshold{' '}
-                      {preview?.htmlLineThreshold ?? 4000})
-                    </SelectItem>
-                    <SelectItem value="remote_runtime">
-                      Remote runtime (recommended — auto-configured, no embed paste)
-                    </SelectItem>
-                    <SelectItem value="split_plain_text">
-                      Legacy: split HTML / CSS / JS in CMS fields
-                    </SelectItem>
-                    <SelectItem value="custom_code">Full HTML in CMS body (legacy Rich Text)</SelectItem>
-                    <SelectItem value="iframe_embed">Legacy: iframe embed in CMS body</SelectItem>
-                    <SelectItem value="rich_text_html">Full HTML in Rich Text (force)</SelectItem>
-                  </SelectContent>
-                </Select>
-                {preview?.htmlMode && (
-                  <p className="text-[10px] text-zinc-600">
-                    Resolved: {preview.htmlMode.replace(/_/g, ' ')}
-                    {preview.usesRemoteRuntime
-                      ? preview.runtimeConfigured
-                        ? ' · runtime bootstrap active'
-                        : ' · runtime bootstrap on publish'
-                      : preview.usesEmbed
-                        ? ' · legacy collection embed.js'
-                        : ''}
-                    {preview.resolvedFields?.length
-                      ? ` · ${preview.resolvedFields.length} CMS fields`
-                      : ''}
-                  </p>
-                )}
-                {preview?.usesRemoteRuntime && (
-                  <>
-                    <p className="text-[10px] text-emerald-600/80 leading-relaxed">
-                      Webflow stores Page ID + SEO only. Content renders from Automaio via runtime.js — no manual embed paste when OAuth custom_code is connected.
-                    </p>
-                    <p className="text-[10px] text-amber-500/90 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
-                      <strong className="font-medium">Note:</strong> Remote runtime loads very fast and keeps CMS HTML tiny, but content is injected by JavaScript after page load — not ideal for SEO crawlers that do not execute JS. Use legacy split HTML or Rich Text modes if search indexing of full page content is critical.
-                    </p>
-                  </>
-                )}
-                {(publishHtmlMode === 'remote_runtime' ||
-                  preview?.htmlMode === 'remote_runtime') && !preview?.usesRemoteRuntime && (
-                  <p className="text-[10px] text-amber-500/90 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
-                    Remote runtime is fast to update but renders via JavaScript — consider split HTML or Rich Text for stronger SEO.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <Label className="text-[11px] uppercase tracking-wide text-zinc-400">When to publish</Label>
-            <RadioGroup
-              value={publishMode}
-              onValueChange={(v) => setPublishMode(v as 'now' | 'later')}
-              className="flex flex-col gap-2 sm:flex-row sm:gap-6"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="now" id="publish-now" />
-                <Label htmlFor="publish-now" className="font-normal cursor-pointer text-sm text-zinc-300">
-                  Publish now
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="later" id="publish-later" />
-                <Label htmlFor="publish-later" className="font-normal cursor-pointer text-sm text-zinc-300">
-                  Schedule for later
-                </Label>
-              </div>
-            </RadioGroup>
+                  {mode === 'now' ? <Zap className="h-3.5 w-3.5" /> : <CalendarClock className="h-3.5 w-3.5" />}
+                  {mode === 'now' ? 'Instant Deploy' : 'Schedule for Later'}
+                </button>
+              ))}
+            </div>
 
             {publishMode === 'later' && (
-              <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
-                <Label htmlFor="schedule-at" className="text-xs text-zinc-400">
-                  Date & time
-                </Label>
+              <div className="p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] animate-in fade-in slide-in-from-top-2">
+                <Label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2 block">Select Timezone Date/Time</Label>
                 <input
-                  id="schedule-at"
                   type="datetime-local"
-                  min={minScheduleInput}
                   value={scheduledAt}
                   onChange={(e) => setScheduledAt(e.target.value)}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
+                  className="w-full bg-black/40 border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-blue-500/50"
                 />
-                <p className="text-[10px] text-zinc-500">
-                  Queued in Redis — Webflow API runs only when the worker fires at this time (not now).
-                </p>
+                <ScheduleNotifyPanel orgId={orgId} value={notifySettings} onChange={setNotifySettings} />
               </div>
             )}
+          </Section>
 
-            {publishMode === 'later' && (
-              <ScheduleNotifyPanel orgId={orgId} value={notifySettings} onChange={setNotifySettings} />
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between px-1">
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold text-zinc-300 uppercase tracking-wide">Show on website</p>
-                <p className="text-[11px] text-zinc-500 leading-snug">Live CMS item (not draft).</p>
-              </div>
-              <Switch checked={showOnWebsite} onCheckedChange={setShowOnWebsite} />
-            </div>
-            <div className="flex items-center justify-between px-1">
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold text-zinc-300 uppercase tracking-wide">Publish Webflow site</p>
-                <p className="text-[11px] text-zinc-500 leading-snug">Push site changes live after CMS update.</p>
-              </div>
-              <Switch checked={publishSite} onCheckedChange={setPublishSite} />
-            </div>
-          </div>
-
-          {result && (
-            <div className="space-y-3">
-              <div
-                className={`flex items-start gap-2 p-3 rounded-lg text-xs ${
-                  result.type === 'success'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                    : result.type === 'warning'
-                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                      : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                }`}
-              >
-                {result.type === 'success' ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                )}
-                <div className="space-y-2 min-w-0">
-                  <p>{result.message}</p>
-                  {result.embedNeedsReconnect && (
-                    <p className="text-[11px] opacity-90 leading-relaxed">
-                      Reconnect Webflow via OAuth with <code className="text-amber-200">custom_code</code> scopes to enable automatic runtime setup. You can use the manual embed below as a fallback.
-                    </p>
-                  )}
-                  {result.runtimeAutoConfigured && result.usedRemoteRuntime && (
-                    <p className="text-[11px] opacity-90 leading-relaxed">
-                      Runtime bootstrap applied to your collection template automatically. Future content updates deploy without republishing CMS HTML.
-                    </p>
-                  )}
-                  {result.liveUrl && (
-                    <a
-                      href={result.liveUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline inline-flex items-center gap-1"
-                    >
-                      View live page <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              {(result.type === 'success' || result.type === 'warning') && result.previewUrl && (
-                <ProjectUrlsCard
-                  projectId={projectId}
-                  liveUrl={result.liveUrl}
-                  embedSnippet={result.embedSnippet}
-                  compact
-                />
-              )}
-
-              {(result.type === 'success' || result.type === 'warning') &&
-                result.collectionTemplateSnippet && (
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold">
-                      Manual fallback — collection template embed (only if auto-setup failed)
-                    </p>
-                    <pre className="text-[10px] font-mono text-zinc-300 bg-black/40 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
-                      {result.collectionTemplateSnippet}
-                    </pre>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full h-8 border-zinc-700 text-xs gap-2"
-                      onClick={() => copySnippet(result.collectionTemplateSnippet!)}
-                    >
-                      <Copy className="h-3 w-3" />
-                      {copied ? 'Copied!' : 'Copy collection template embed'}
-                    </Button>
+          {/* Options Section */}
+          <Section label="Site Settings" icon={Eye}>
+            <div className="space-y-1">
+              {[
+                { 
+                  id: 'live', 
+                  label: 'Set as Live Item', 
+                  sub: 'If off, content is pushed as a Webflow draft.', 
+                  checked: showOnWebsite, 
+                  onchange: setShowOnWebsite 
+                },
+                { 
+                  id: 'site', 
+                  label: 'Auto-Publish Site', 
+                  sub: 'Automatically trigger a full Webflow site publish.', 
+                  checked: publishSite, 
+                  onchange: setPublishSite 
+                },
+              ].map((opt) => (
+                <div key={opt.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-white/[0.02] transition-colors border border-transparent hover:border-white/[0.06]">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-zinc-200">{opt.label}</p>
+                    <p className="text-[11px] text-zinc-500">{opt.sub}</p>
                   </div>
-                )}
-
-              {result.embedNeedsReconnect && (
-                <div className="space-y-3">
-                  <Button asChild className="w-full bg-blue-600 hover:bg-blue-500 gap-2 h-9">
-                    <Link href={settingsUrl}>
-                      <Plug className="h-4 w-4" />
-                      Reconnect Webflow in Settings
-                    </Link>
-                  </Button>
-
-                  {result.collectionEmbedSnippet && (
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
-                      <pre className="text-[10px] font-mono text-zinc-300 bg-black/40 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
-                        {result.collectionEmbedSnippet}
-                      </pre>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-full h-8 border-zinc-700 text-xs gap-2"
-                        onClick={() => copySnippet(result.collectionEmbedSnippet!)}
-                      >
-                        <Copy className="h-3 w-3" />
-                        {copied ? 'Copied!' : 'Copy embed code'}
-                      </Button>
-                    </div>
-                  )}
+                  <Switch checked={opt.checked} onCheckedChange={opt.onchange} className="data-[state=checked]:bg-blue-600" />
                 </div>
-              )}
+              ))}
             </div>
+          </Section>
+
+          {/* Results Feedback */}
+          {result && (
+             <div className={`p-4 rounded-xl border animate-in zoom-in-95 duration-200 ${
+                result.type === 'success' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'
+             }`}>
+                <div className="flex gap-3">
+                   {result.type === 'success' ? <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" /> : <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />}
+                   <div className="space-y-3 flex-1 overflow-hidden">
+                      <p className={`text-sm font-medium ${result.type === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>{result.message}</p>
+                      {result.liveUrl && (
+                        <Button asChild variant="outline" size="sm" className="bg-transparent border-white/[0.1] h-8 text-xs hover:bg-white/[0.05]">
+                           <a href={result.liveUrl} target="_blank">View Live Page <ExternalLink className="ml-2 h-3 w-3" /></a>
+                        </Button>
+                      )}
+                   </div>
+                </div>
+             </div>
           )}
         </div>
 
-        <DialogFooter className="flex gap-3 mt-4">
+        {/* Footer */}
+        <div className="p-6 bg-black/40 border-t border-white/[0.06] flex gap-3">
           <Button
-            variant="outline"
-            className="flex-1 bg-transparent border-zinc-800 text-zinc-400 hover:text-white"
+            variant="ghost"
             onClick={() => onOpenChange(false)}
+            className="flex-1 text-zinc-500 hover:text-white hover:bg-white/[0.05]"
             disabled={publishing}
           >
-            Close
+            Cancel
           </Button>
           <Button
-            className="flex-1 bg-blue-600 hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] gap-2"
             onClick={handleSubmit}
-            disabled={publishing || (preview !== null && preview.canPublish === false)}
+            disabled={publishing || !canPublish}
+            className="flex-[1.5] bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-[0_0_20px_rgba(37,99,235,0.25)] transition-all active:scale-[0.98]"
           >
             {publishing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : publishMode === 'later' ? (
-              <CalendarClock className="h-4 w-4" />
+              <CalendarClock className="h-4 w-4 mr-2" />
             ) : (
-              <ExternalLink className="h-4 w-4" />
+              <Zap className="h-4 w-4 mr-2" />
             )}
-            {publishMode === 'later' ? 'Schedule' : 'Publish now'}
+            {publishing ? 'Processing...' : publishMode === 'later' ? 'Confirm Schedule' : 'Deploy to Webflow'}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
