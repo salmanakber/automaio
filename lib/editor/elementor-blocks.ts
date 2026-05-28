@@ -1,13 +1,12 @@
 /** Elementor-style block HTML — class prefix `am-elt-block` for polished defaults. */
 const S = {
-  section: 'padding:72px 24px;max-width:1200px;margin:0 auto;',
-  h1: 'font-size:clamp(2rem,5vw,3.25rem);font-weight:800;line-height:1.1;margin:0 0 16px;letter-spacing:-0.02em;',
-  h2: 'font-size:clamp(1.5rem,3vw,2.25rem);font-weight:700;line-height:1.2;margin:0 0 12px;',
-  lead: 'font-size:1.125rem;line-height:1.7;color:#64748b;margin:0 0 24px;max-width:56ch;',
-  btn: 'display:inline-flex;align-items:center;justify-content:center;padding:14px 28px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;',
-  btnOutline:
-    'display:inline-flex;padding:14px 28px;background:transparent;color:#0f172a;text-decoration:none;border-radius:10px;font-weight:600;border:2px solid #e2e8f0;',
-  card: 'padding:28px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.04);',
+  section: 'padding:80px 24px; max-width:1200px; margin:0 auto; font-family: sans-serif;',
+  h1: 'font-size:clamp(2.5rem, 6vw, 4rem); font-weight:850; line-height:1.05; margin:0 0 20px; letter-spacing:-0.04em; color:#0f172a;',
+  h2: 'font-size:clamp(1.75rem, 4vw, 2.5rem); font-weight:800; line-height:1.2; margin:0 0 16px; letter-spacing:-0.02em; color:#0f172a;',
+  lead: 'font-size:1.25rem; line-height:1.6; color:#475569; margin:0 0 32px; max-width:60ch;',
+  btn: 'display:inline-flex; align-items:center; justify-content:center; padding:14px 32px; background:#6366f1; color:#ffffff; text-decoration:none; border-radius:12px; font-weight:600; font-size:16px; transition: all 0.2s;',
+  btnOutline: 'display:inline-flex; padding:14px 32px; background:#ffffff; color:#0f172a; text-decoration:none; border-radius:12px; font-weight:600; border:1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.05);',
+  card: 'padding:32px; border:1px solid #f1f5f9; border-radius:24px; background:#ffffff; box-shadow:0 10px 15px -3px rgba(0,0,0,0.02);',
 }
 
 export type ElementorBlockType =

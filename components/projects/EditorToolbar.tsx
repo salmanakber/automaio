@@ -15,6 +15,18 @@ import {
   Layers,
   Box,
   Sparkles,
+  Columns,
+  Square,
+  Minus,
+  Navigation,
+  CreditCard,
+  MessageSquare,
+  Users,
+  Mail,
+  Quote,
+  List,
+  Play,
+  PlayCircle,
 } from 'lucide-react'
 import {
   EDITOR_WIDGETS,
@@ -28,6 +40,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import { cn } from '@/lib/utils'
 
 type EditorToolbarProps = {
   canUndo?: boolean
@@ -40,10 +53,31 @@ type EditorToolbarProps = {
 }
 
 const CATEGORY_ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  structure: Layers,
+  structure: LayoutGrid,
   basic: Type,
   media: ImageIcon,
   blocks: Box,
+}
+
+// Logic-less Icon Mapper for a cleaner WidgetButton
+const WIDGET_SPECIFIC_ICONS: Record<string, any> = {
+  header: Navigation,
+  footer: Square,
+  section: Layers,
+  columns2: Columns,
+  columns3: Columns,
+  heading: Type,
+  paragraph: List,
+  button: MousePointer2,
+  image: ImageIcon,
+  video: PlayCircle,
+  pricing: CreditCard,
+  faq: MessageSquare,
+  team: Users,
+  newsletter: Mail,
+  quote: Quote,
+  hero: Sparkles,
+  divider: Minus,
 }
 
 function WidgetButton({
@@ -60,6 +94,7 @@ function WidgetButton({
   compact?: boolean
 }) {
   const html = buildWidgetHtml(type)
+  const Icon = WIDGET_SPECIFIC_ICONS[type] || Plus
 
   return (
     <button
@@ -72,26 +107,21 @@ function WidgetButton({
         e.dataTransfer.effectAllowed = 'copy'
       }}
       onClick={() => onInsert(type)}
-      className={
-        compact
-          ? 'group relative flex flex-col items-center justify-center gap-0.5 h-14 rounded-lg border border-zinc-700/80 bg-zinc-900/80 hover:border-violet-500/60 hover:bg-violet-950/30 transition-all cursor-grab active:cursor-grabbing'
-          : 'group relative flex flex-col items-center justify-center gap-1 h-16 w-[calc(50%-4px)] rounded-lg border border-zinc-700/80 bg-zinc-900/80 hover:border-violet-500/60 hover:bg-violet-950/30 transition-all cursor-grab active:cursor-grabbing'
-      }
+      className={cn(
+        "group relative flex flex-col items-center justify-center gap-1.5 rounded-xl transition-all duration-200",
+        "border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-800/60 hover:border-violet-500/50 hover:shadow-[0_0_15px_rgba(139,92,246,0.1)]",
+        "active:scale-95 cursor-grab active:cursor-grabbing",
+        compact ? "h-16 w-full" : "h-20 w-[calc(50%-4px)]"
+      )}
       title={`Drag onto canvas or click to insert · ${label}`}
     >
-      <GripVertical className="absolute top-1 right-1 h-2.5 w-2.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-      {category === 'basic' && type === 'heading' ? (
-        <Type className="h-4 w-4 text-violet-400" />
-      ) : category === 'media' && type === 'image' ? (
-        <ImageIcon className="h-4 w-4 text-violet-400" />
-      ) : category === 'structure' ? (
-        <LayoutGrid className="h-4 w-4 text-violet-400" />
-      ) : category === 'blocks' ? (
-        <Sparkles className="h-4 w-4 text-violet-400" />
-      ) : (
-        <Plus className="h-4 w-4 text-violet-400" />
-      )}
-      <span className="text-[9px] font-medium text-zinc-400 group-hover:text-zinc-200 text-center leading-tight px-1">
+      <GripVertical className="absolute top-1.5 right-1.5 h-3 w-3 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity" />
+      
+      <div className="p-2 rounded-lg bg-zinc-950/50 group-hover:bg-violet-500/10 transition-colors">
+        <Icon className="h-4 w-4 text-zinc-400 group-hover:text-violet-400 transition-colors" />
+      </div>
+
+      <span className="text-[10px] font-medium text-zinc-500 group-hover:text-zinc-200 text-center leading-tight px-1 truncate w-full">
         {label}
       </span>
     </button>
@@ -117,71 +147,67 @@ export function EditorToolbar({
   )
 
   const categories = Object.keys(EDITOR_CATEGORY_LABELS) as Array<keyof typeof EDITOR_CATEGORY_LABELS>
-
   const isSidebar = layout === 'sidebar'
 
   return (
-    <div
-      className={
-        isSidebar
-          ? 'flex flex-col h-full bg-[#09090b]'
-          : 'border-t border-zinc-800 bg-[#09090b] shrink-0 max-h-[42vh] flex flex-col'
-      }
-    >
-      <div
-        className={
-          isSidebar
-            ? 'flex items-center gap-1 px-3 py-2.5 border-b border-zinc-800 shrink-0'
-            : 'flex items-center gap-1 px-3 py-2 border-b border-zinc-800/80 shrink-0'
-        }
-      >
-        <MousePointer2 className="h-3.5 w-3.5 text-violet-400 mr-1 shrink-0" />
-        <span className="text-[10px] text-zinc-500 leading-tight">
-          {isSidebar ? 'Drag or click to add blocks' : 'Drag blocks onto canvas · reorder by dragging'}
-        </span>
-        <div className="flex-1" />
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!canUndo} onClick={onUndo} title="Undo (Ctrl+Z)">
-          <Undo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!canRedo} onClick={onRedo} title="Redo">
-          <Redo2 className="h-3.5 w-3.5" />
-        </Button>
-        {!isSidebar && (
-          <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px] gap-1" onClick={onDuplicate} title="Duplicate selected">
-            <Copy className="h-3 w-3" /> Dup
-          </Button>
-        )}
-      </div>
+    <div className={cn(
+      "flex flex-col bg-[#09090b] text-zinc-400",
+      isSidebar ? "h-full border-r border-zinc-800 w-64" : "border-t border-zinc-800 w-full max-h-[42vh]"
+    )}>
+      {/* Top Bar / Actions */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800/50 bg-zinc-950/20">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-500/10">
+             <MousePointer2 className="h-3 w-3 text-violet-400" />
+          </div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            {isSidebar ? 'Library' : 'Editor Tools'}
+          </span>
+        </div>
 
-      {isSidebar && (
-        <div className="px-3 py-2 border-b border-zinc-800/80 shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full h-8 text-[10px] gap-1.5 border-zinc-700"
-            onClick={onDuplicate}
-          >
-            <Copy className="h-3 w-3" /> Duplicate selected
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-zinc-800" disabled={!canUndo} onClick={onUndo}>
+            <Undo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-zinc-800" disabled={!canRedo} onClick={onRedo}>
+            <Redo2 className="h-3.5 w-3.5" />
+          </Button>
+          <div className="w-px h-4 bg-zinc-800 mx-1" />
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] gap-1.5" onClick={onDuplicate}>
+            <Copy className="h-3 w-3" /> {!isSidebar && "Duplicate"}
           </Button>
         </div>
-      )}
+      </div>
 
-      <div className="overflow-y-auto custom-scrollbar flex-1 min-h-0">
-        <Accordion type="multiple" defaultValue={['structure', 'blocks']} className="px-2 pb-2">
+      {/* Widget Search Placeholder (Visual only) */}
+      <div className="px-3 py-2 border-b border-zinc-800/30">
+        <div className="flex items-center gap-2 px-2 h-8 rounded-md bg-zinc-900/50 border border-zinc-800 text-[11px] text-zinc-600">
+          <Plus className="h-3 w-3" /> Search blocks...
+        </div>
+      </div>
+
+      {/* Scrollable Content */}
+      <div className="overflow-y-auto custom-scrollbar flex-1 p-2">
+        <Accordion type="multiple" defaultValue={['structure', 'blocks']} className="space-y-1">
           {categories.map((cat) => {
             const Icon = CATEGORY_ICONS[cat] ?? Plus
             const items = grouped[cat] ?? []
             if (!items.length) return null
+            
             return (
-              <AccordionItem key={cat} value={cat} className="border-zinc-800">
-                <AccordionTrigger className="py-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400 hover:no-underline gap-2">
-                  <Icon className="h-3 w-3 text-violet-500" />
-                  {EDITOR_CATEGORY_LABELS[cat]}
-                  <span className="text-zinc-600 font-normal normal-case">({items.length})</span>
+              <AccordionItem key={cat} value={cat} className="border-none">
+                <AccordionTrigger className="py-2 px-2 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30 rounded-md hover:no-underline transition-all">
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="h-3.5 w-3.5 text-violet-500/80" />
+                    {EDITOR_CATEGORY_LABELS[cat]}
+                    <span className="text-zinc-700 text-[10px]">({items.length})</span>
+                  </div>
                 </AccordionTrigger>
-                <AccordionContent>
-                  <div className={isSidebar ? 'grid grid-cols-2 gap-1.5 pb-2' : 'flex flex-wrap gap-2 pb-2'}>
+                <AccordionContent className="pt-2 pb-1">
+                  <div className={cn(
+                    "grid gap-2",
+                    isSidebar ? "grid-cols-2" : "flex flex-wrap"
+                  )}>
                     {items.map((w) => (
                       <WidgetButton
                         key={w.type}
@@ -198,6 +224,13 @@ export function EditorToolbar({
             )
           })}
         </Accordion>
+      </div>
+
+      {/* Instructional Footer */}
+      <div className="px-4 py-2 border-t border-zinc-800 bg-zinc-950/40">
+         <p className="text-[9px] text-zinc-600 text-center uppercase tracking-widest font-bold">
+            Drag and Drop into Canvas
+         </p>
       </div>
     </div>
   )
