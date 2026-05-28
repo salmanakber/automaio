@@ -16,7 +16,7 @@ import {
   buildProjectEmbedSnippet,
 } from '@/lib/webflow/embed-setup'
 import { ensureAutomaioEmbedForIntegration } from '@/lib/webflow/site-embed'
-import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
+import { ensureAutomaioRuntimeForIntegration, clearAutomaioSiteLevelRuntime } from '@/lib/webflow/runtime-site-embed'
 import { buildWebflowLiveUrl } from '@/lib/webflow/live-url'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
@@ -454,9 +454,25 @@ export async function publishContentProject(
   } else if (usedSplitPlainText) {
     embedMessage =
       'Landing page published to HTML/CSS/JS Plain Text CMS fields. Add the Automaio collection template embed to your Webflow Collection Template page.'
+    try {
+      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
+    } catch {
+      // Non-fatal
+    }
   } else if (usedRichTextFallback && isHtmlPage) {
     embedMessage =
       'HTML page published to CMS Rich Text field. Bind a Rich Text element to your body field on the collection template in Webflow Designer.'
+    try {
+      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
+    } catch {
+      // Non-fatal
+    }
+  } else if (!usedRemoteRuntime && isHtmlPage) {
+    try {
+      await clearAutomaioSiteLevelRuntime(integration.id, project.cmsCollectionId ?? undefined)
+    } catch {
+      // Non-fatal
+    }
   }
 
   if (html.trim() && plan.usesEmbed) {

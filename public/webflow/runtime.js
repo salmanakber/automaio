@@ -5,6 +5,33 @@
 (function (global) {
   'use strict'
 
+  var LOADER_STYLES =
+    '@keyframes automaio-spin{to{transform:rotate(360deg)}}' +
+    '.automaio-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:2.5rem 1.5rem;font-family:system-ui,sans-serif;color:#64748b}' +
+    '.automaio-loader-ring{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:automaio-spin .7s linear infinite}' +
+    '.automaio-loader-text{font-size:13px;margin:0;text-align:center}'
+
+  var LOADER_HTML =
+    '<div class="automaio-loader" data-automaio-loading="true">' +
+    '<div class="automaio-loader-ring"></div>' +
+    '<p class="automaio-loader-text">Loading page from Automaio…</p>' +
+    '</div>'
+
+  function injectLoaderStyles() {
+    if (document.getElementById('automaio-loader-css')) return
+    var style = document.createElement('style')
+    style.id = 'automaio-loader-css'
+    style.textContent = LOADER_STYLES
+    ;(document.head || document.documentElement).appendChild(style)
+  }
+
+  function showLoader(target) {
+    if (!target) return
+    injectLoaderStyles()
+    target.setAttribute('data-automaio-loading', 'true')
+    target.innerHTML = LOADER_HTML
+  }
+
   function getScriptBase() {
     var scripts = document.querySelectorAll('script[src*="runtime.js"]')
     for (var i = scripts.length - 1; i >= 0; i--) {
@@ -139,9 +166,7 @@
     }
 
     target.setAttribute('data-automaio-page-id', pageId)
-    target.setAttribute('data-automaio-loading', 'true')
-    target.innerHTML =
-      '<p style="font-family:system-ui;padding:2rem;color:#64748b;text-align:center;font-size:14px;margin:0">Loading page from Automaio…</p>'
+    showLoader(target)
 
     try {
       var schema = await fetchSchema(apiBase, pageId)
@@ -174,8 +199,9 @@
   }
 
   global.AutomaioRuntime = {
-    version: '1.0.2',
+    version: '1.0.3',
     render: render,
+    showLoader: showLoader,
   }
 
   // Auto-init when root has data-automaio-page-id (manual embed path)
@@ -184,9 +210,11 @@
     if (!root) return
     var pageId = root.getAttribute('data-automaio-page-id')
     if (!pageId || !pageId.trim() || pageId.indexOf('{{') !== -1) return
+    showLoader(root)
     render({
       pageId: pageId.trim(),
       target: root,
+      apiBase: getScriptBase() || undefined,
     })
   }
 

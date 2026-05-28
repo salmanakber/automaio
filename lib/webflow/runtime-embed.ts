@@ -7,7 +7,7 @@ export function buildWebflowRuntimeCollectionEmbed(appUrl?: string): string {
   return `<!-- Automaio Remote Runtime — bind Page ID to data attribute -->
 <div id="ai-page-root" data-automaio-page-id="{{wf {"path":"page-id","type":"PlainText"} }}"></div>
 <!-- Optional: hide Page ID / Runtime Config text rows with display:none in Webflow Designer -->
-<script src="${base}/webflow/runtime.js?v=1.0.1" defer></script>
+<script src="${base}/webflow/runtime.js?v=1.0.3" defer></script>
 <script>
 (function(){
   var el = document.getElementById('ai-page-root');

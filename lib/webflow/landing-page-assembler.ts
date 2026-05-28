@@ -22,18 +22,66 @@ export function buildScopeClass(id: string): string {
   return `ai-template-${safe || 'page'}`
 }
 
+type BlockExtractResult = { blocks: string[]; remainder: string }
+
+/**
+ * Walk HTML and extract matching tag blocks without dropping unmatched content.
+ * Unclosed tags are left in place; external script tags (src-only) stay in HTML.
+ */
+function extractTaggedBlocks(html: string, tagName: 'style' | 'script'): BlockExtractResult {
+  const blocks: string[] = []
+  const tag = tagName.toLowerCase()
+  const openRe = new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi')
+  let remainder = ''
+  let cursor = 0
+  let match: RegExpExecArray | null
+
+  while ((match = openRe.exec(html)) !== null) {
+    remainder += html.slice(cursor, match.index)
+    const openTag = match[0]
+    const contentStart = match.index + openTag.length
+    const closeRe = new RegExp(`</${tag}\\s*>`, 'gi')
+    closeRe.lastIndex = contentStart
+    const closeMatch = closeRe.exec(html)
+
+    if (!closeMatch) {
+      remainder += html.slice(match.index)
+      cursor = html.length
+      break
+    }
+
+    const fullBlock = html.slice(match.index, closeMatch.index + closeMatch[0].length)
+    const inner = html.slice(contentStart, closeMatch.index)
+
+    if (tagName === 'script') {
+      const hasSrc = /\bsrc\s*=/.test(openTag)
+      if (hasSrc && !inner.trim()) {
+        remainder += fullBlock
+      } else if (inner.trim()) {
+        blocks.push(inner)
+      } else {
+        remainder += fullBlock
+      }
+    } else if (inner.trim()) {
+      blocks.push(inner)
+    }
+
+    cursor = closeMatch.index + closeMatch[0].length
+    openRe.lastIndex = cursor
+  }
+
+  remainder += html.slice(cursor)
+  return { blocks, remainder }
+}
+
 function extractStyleBlocks(html: string): { css: string; htmlWithoutStyles: string } {
-  const styles: string[] = []
-  const without = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => {
-    styles.push(css.trim())
-    return ''
-  })
-  return { css: styles.join('\n\n'), htmlWithoutStyles: without }
+  const { blocks, remainder } = extractTaggedBlocks(html, 'style')
+  return { css: blocks.join('\n\n'), htmlWithoutStyles: remainder }
 }
 
 function extractStylesheetLinks(html: string): { urls: string[]; htmlWithoutLinks: string } {
   const urls: string[] = []
-  const without = html.replace(/<link[^>]*rel=["']stylesheet["'][^>]*>/gi, (tag) => {
+  const without = html.replace(/<link[^>]*rel=["']stylesheet["'][^>]*\/?>/gi, (tag) => {
     const href = tag.match(/href=["']([^"']+)["']/i)?.[1]
     if (href) urls.push(href)
     return ''
@@ -42,12 +90,8 @@ function extractStylesheetLinks(html: string): { urls: string[]; htmlWithoutLink
 }
 
 function extractScriptBlocks(html: string): { js: string; htmlWithoutScripts: string } {
-  const scripts: string[] = []
-  const without = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, (_, js: string) => {
-    if (js.trim()) scripts.push(js.trim())
-    return ''
-  })
-  return { js: scripts.join('\n\n'), htmlWithoutScripts: without }
+  const { blocks, remainder } = extractTaggedBlocks(html, 'script')
+  return { js: blocks.join('\n\n'), htmlWithoutScripts: remainder }
 }
 
 /** Pull @import / @font-face / @keyframes to the top — must never be prefixed or scoped. */
@@ -100,6 +144,11 @@ function wrapJsInScopeIife(js: string, scopeClass: string): string {
 })();`
 }
 
+/** Rough line count — used to detect accidental content loss during split. */
+function countNonEmptyLines(text: string): number {
+  return text.split('\n').filter((line) => line.trim()).length
+}
+
 export type AssembleLandingPageOptions = {
   scopeId: string
   cdnBase?: string
@@ -107,7 +156,7 @@ export type AssembleLandingPageOptions = {
 }
 
 /**
- * Split generated HTML for Webflow remote runtime.
+ * Split generated HTML for Webflow remote runtime or legacy CMS fields.
  * CSS is preserved exactly (no selector prefixing) so templates match the studio preview.
  * Font/stylesheet links are returned separately for head injection at runtime.
  */
@@ -117,6 +166,7 @@ export function assembleLandingPageForWebflow(
 ): AssembledLandingPage {
   const scopeClass = buildScopeClass(options.scopeId)
   let html = normalizeAssetUrls(rawHtml, options.cdnBase)
+  const inputLines = countNonEmptyLines(html)
 
   const { js: rawJs, htmlWithoutScripts } = extractScriptBlocks(html)
   const { css: inlineCss, htmlWithoutStyles } = extractStyleBlocks(htmlWithoutScripts)
@@ -133,6 +183,21 @@ export function assembleLandingPageForWebflow(
   if (options.allowJs !== false && rawJs.trim()) {
     const sanitized = sanitizeLandingPageJs(rawJs)
     jsContent = wrapJsInScopeIife(sanitized, scopeClass)
+  }
+
+  const outputLines =
+    countNonEmptyLines(htmlContent) +
+    countNonEmptyLines(cssContent) +
+    countNonEmptyLines(jsContent) +
+    stylesheetUrls.length
+
+  if (process.env.NODE_ENV === 'development' && outputLines + 5 < inputLines) {
+    console.warn(
+      '[assembleLandingPageForWebflow] Split may have dropped content — input lines:',
+      inputLines,
+      'output approx:',
+      outputLines,
+    )
   }
 
   return {

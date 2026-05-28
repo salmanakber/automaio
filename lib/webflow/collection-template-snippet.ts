@@ -3,7 +3,7 @@
  * Prefer buildWebflowRuntimeCollectionEmbed() from runtime-embed.ts for new collections.
  */
 export function buildWebflowCollectionTemplateEmbed(): string {
-  return `<!-- Automaio Legacy Renderer (deprecated — use runtime.js instead) -->
+  return `<!-- Automaio Legacy Renderer — no runtime.js / Page ID required -->
 <style>
 {{wf {"path":"css-content","type":"PlainText"} }}
 </style>

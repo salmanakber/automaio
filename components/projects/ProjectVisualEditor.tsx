@@ -615,6 +615,26 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
 
   const handleUndo = useCallback(() => postToIframe({ type: 'am-undo' }), [postToIframe])
   const handleRedo = useCallback(() => postToIframe({ type: 'am-redo' }), [postToIframe])
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null
+      if (!el) return
+      const tag = el.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable) return
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+        e.preventDefault()
+        handleRedo()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [handleUndo, handleRedo])
   const handleDuplicate = useCallback(() => postToIframe({ type: 'am-duplicate' }), [postToIframe])
   const applyThemeCss = useCallback(
     (css: string) => {

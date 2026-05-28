@@ -166,10 +166,10 @@ export function EditorToolbar({
         </div>
 
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-zinc-800" disabled={!canUndo} onClick={onUndo}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-zinc-800" disabled={!canUndo} onClick={onUndo} title="Undo (Ctrl+Z)">
             <Undo2 className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-zinc-800" disabled={!canRedo} onClick={onRedo}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-zinc-800" disabled={!canRedo} onClick={onRedo} title="Redo (Ctrl+Shift+Z)">
             <Redo2 className="h-3.5 w-3.5" />
           </Button>
           <div className="w-px h-4 bg-zinc-800 mx-1" />

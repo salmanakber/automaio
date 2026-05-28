@@ -372,8 +372,19 @@ export function PublishDialog({
                   </p>
                 )}
                 {preview?.usesRemoteRuntime && (
-                  <p className="text-[10px] text-emerald-600/80 leading-relaxed">
-                    Webflow stores Page ID + SEO only. Content renders from Automaio via runtime.js — no manual embed paste when OAuth custom_code is connected.
+                  <>
+                    <p className="text-[10px] text-emerald-600/80 leading-relaxed">
+                      Webflow stores Page ID + SEO only. Content renders from Automaio via runtime.js — no manual embed paste when OAuth custom_code is connected.
+                    </p>
+                    <p className="text-[10px] text-amber-500/90 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                      <strong className="font-medium">Note:</strong> Remote runtime loads very fast and keeps CMS HTML tiny, but content is injected by JavaScript after page load — not ideal for SEO crawlers that do not execute JS. Use legacy split HTML or Rich Text modes if search indexing of full page content is critical.
+                    </p>
+                  </>
+                )}
+                {(publishHtmlMode === 'remote_runtime' ||
+                  preview?.htmlMode === 'remote_runtime') && !preview?.usesRemoteRuntime && (
+                  <p className="text-[10px] text-amber-500/90 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                    Remote runtime is fast to update but renders via JavaScript — consider split HTML or Rich Text for stronger SEO.
                   </p>
                 )}
               </div>
