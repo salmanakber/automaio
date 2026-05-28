@@ -21,6 +21,7 @@ export type LandingPageRenderBundle = {
   htmlContent: string
   cssContent: string
   jsContent: string
+  stylesheetUrls?: string[]
 }
 
 export type LandingPageSchema = {

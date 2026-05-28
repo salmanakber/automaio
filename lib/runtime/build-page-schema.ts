@@ -100,6 +100,7 @@ export function buildLandingPageSchema(project: ProjectLike, htmlOverride?: stri
       htmlContent: assembled.htmlContent,
       cssContent: assembled.cssContent,
       jsContent: assembled.jsContent,
+      stylesheetUrls: assembled.stylesheetUrls,
     },
     updatedAt: new Date().toISOString(),
   }

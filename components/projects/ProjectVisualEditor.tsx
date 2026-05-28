@@ -156,11 +156,14 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const pendingTextRef = useRef<((els: Record<string, { text: string; tag: string }>) => void) | null>(null)
   const pendingHtmlRef = useRef<((h: string) => void) | null>(null)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoSavingRef = useRef(false)
 
   const [selected, setSelected] = useState<SelectedElement | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [autoSaving, setAutoSaving] = useState(false)
   const [elementCount, setElementCount] = useState(0)
   const [iframeReady, setIframeReady] = useState(false)
   const [truncated, setTruncated] = useState(false)
@@ -227,6 +230,61 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     [],
   )
 
+  const persistHtml = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false
+      if (autoSavingRef.current) return
+      autoSavingRef.current = true
+      if (silent) setAutoSaving(true)
+      else setSaving(true)
+
+      try {
+        const cleanHtml = await new Promise<string>((resolve) => {
+          pendingHtmlRef.current = resolve
+          postToIframe({ type: 'am-get-html' })
+          setTimeout(() => {
+            if (pendingHtmlRef.current) {
+              pendingHtmlRef.current = null
+              resolve(html)
+            }
+          }, 3000)
+        })
+
+        const res = await fetch(`/api/projects/${projectId}/html`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ renderedHtml: cleanHtml }),
+          credentials: 'same-origin',
+        })
+        const data = await parseJsonResponse<{ error?: string }>(res)
+        if (!res.ok) throw new Error(data.error ?? 'Save failed')
+
+        setHasChanges(false)
+        setSaved(true)
+        onSave?.(cleanHtml)
+        setTimeout(() => setSaved(false), silent ? 1500 : 3000)
+      } finally {
+        autoSavingRef.current = false
+        if (silent) setAutoSaving(false)
+        else setSaving(false)
+      }
+    },
+    [html, onSave, postToIframe, projectId],
+  )
+
+  const scheduleAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => {
+      void persistHtml({ silent: true })
+    }, 1200)
+  }, [persistHtml])
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    }
+  }, [])
+
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
       const d = e.data
@@ -258,10 +316,12 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
           setHasChanges(true)
           setSelected(null)
           onSelectElement?.(null)
+          scheduleAutoSave()
           break
         case 'am-updated':
         case 'am-changed':
           setHasChanges(true)
+          scheduleAutoSave()
           if (selected && d.id === selected.id) {
             const next: SelectedElement = {
               id: d.id,
@@ -327,13 +387,14 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
           break
         case 'am-bulk-done':
           setHasChanges(true)
+          scheduleAutoSave()
           break
       }
     }
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [selected?.id, onSelectElement, onFocusRect, isStudio])
+  }, [selected?.id, onSelectElement, onFocusRect, isStudio, scheduleAutoSave])
 
   const handleElementAi = async () => {
     if (!selected || !aiPrompt.trim()) return
@@ -359,6 +420,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       setAiOpen(false)
       setAiPrompt('')
       setHasChanges(true)
+      scheduleAutoSave()
     } catch (err) {
       setAiError(err instanceof Error ? err.message : 'AI generation failed')
     } finally {
@@ -399,6 +461,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       setBulkOpen(false)
       setBulkPrompt('')
       setHasChanges(true)
+      scheduleAutoSave()
     } catch (err) {
       setBulkError(err instanceof Error ? err.message : 'AI generation failed')
     } finally {
@@ -428,34 +491,10 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
   }
 
   const handleSave = async () => {
-    setSaving(true)
     try {
-      const cleanHtml = await new Promise<string>((resolve) => {
-        pendingHtmlRef.current = resolve
-        postToIframe({ type: 'am-get-html' })
-        setTimeout(() => {
-          if (pendingHtmlRef.current) {
-            pendingHtmlRef.current = null
-            resolve(html)
-          }
-        }, 3000)
-      })
-
-      const res = await fetch(`/api/projects/${projectId}/html`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ renderedHtml: cleanHtml }),
-        credentials: 'same-origin',
-      })
-      const data = await parseJsonResponse<{ error?: string }>(res)
-      if (!res.ok) throw new Error(data.error ?? 'Save failed')
-
-      setHasChanges(false)
-      setSaved(true)
-      onSave?.(cleanHtml)
-      setTimeout(() => setSaved(false), 3000)
-    } finally {
-      setSaving(false)
+      await persistHtml()
+    } catch {
+      // saving state handled in persistHtml
     }
   }
 
@@ -538,7 +577,12 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
               Unsaved changes
             </Badge>
           )}
-          {saved && (
+          {autoSaving && (
+            <span className="ml-2 text-zinc-500 flex items-center gap-1 text-xs">
+              <Loader2 className="size-3 animate-spin" /> Saving…
+            </span>
+          )}
+          {saved && !autoSaving && (
             <span className="ml-2 text-emerald-600 flex items-center gap-1 text-xs font-medium">
               <CheckCircle2 className="size-3.5" /> Saved
             </span>

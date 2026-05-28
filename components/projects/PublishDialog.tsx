@@ -34,11 +34,8 @@ import {
   RefreshCw,
   CalendarClock,
 } from 'lucide-react'
-import { PublishLayoutControls } from '@/components/projects/PublishLayoutControls'
 import { ProjectUrlsCard } from '@/components/projects/ProjectUrlsCard'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
-import { parseLayoutControls } from '@/lib/webflow/layout-controls'
-import type { LayoutControls } from '@/lib/ai/business-context-types'
 import type { PublishHtmlModeOverride } from '@/lib/content/rendering-strategy'
 
 type PublishDialogProps = {
@@ -100,9 +97,6 @@ export function PublishDialog({
   const [publishMode, setPublishMode] = useState<'now' | 'later'>('now')
   const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput)
   const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>('auto')
-  const [layoutControls, setLayoutControls] = useState<LayoutControls>(() =>
-    parseLayoutControls((project?.parameters as Record<string, unknown>) ?? {}),
-  )
   const [result, setResult] = useState<PublishResult | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -111,7 +105,6 @@ export function PublishDialog({
 
   const savePublishSettings = async () => {
     const params = { ...((project?.parameters as Record<string, unknown>) ?? {}) }
-    params.layoutControls = JSON.stringify(layoutControls)
     params.publishHtmlMode = publishHtmlMode
 
     await fetch(`/api/projects/${projectId}`, {
@@ -157,7 +150,6 @@ export function PublishDialog({
     setPublishMode('now')
     setScheduledAt(defaultScheduleInput())
     const params = (project?.parameters as Record<string, unknown>) ?? {}
-    setLayoutControls(parseLayoutControls(params))
     const mode = params.publishHtmlMode
     setPublishHtmlMode(
       mode === 'iframe_embed' ||
@@ -378,14 +370,6 @@ export function PublishDialog({
               </div>
             )}
           </div>
-
-          {isLandingPage && (
-            <PublishLayoutControls
-              parameters={{ layoutControls: JSON.stringify(layoutControls) }}
-              onChange={setLayoutControls}
-              compact
-            />
-          )}
 
           <div className="space-y-3">
             <Label className="text-[11px] uppercase tracking-wide text-zinc-400">When to publish</Label>

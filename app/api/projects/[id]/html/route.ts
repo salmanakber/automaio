@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAccessByUserId } from '@/lib/api/org-access'
+import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -13,7 +14,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
-    const project = await prisma.contentProject.findUnique({ where: { id } })
+    const project = await prisma.contentProject.findUnique({
+      where: { id },
+      include: { template: { select: { name: true, templateStructure: true } } },
+    })
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     await requireOrgAccessByUserId(user.id, project.organizationId)
 
@@ -23,9 +27,19 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'renderedHtml is required' }, { status: 400 })
     }
 
+    const existingParams = (project.parameters as Record<string, unknown>) ?? {}
+    const pageSchema = buildLandingPageSchema({ ...project, renderedHtml }, renderedHtml)
+
     const updated = await prisma.contentProject.update({
       where: { id },
-      data: { renderedHtml },
+      data: {
+        renderedHtml,
+        parameters: {
+          ...existingParams,
+          pageSchema: JSON.stringify(pageSchema),
+          runtimeVersion: String(pageSchema.version),
+        } as object,
+      },
       select: { id: true, renderedHtml: true, updatedAt: true },
     })
 

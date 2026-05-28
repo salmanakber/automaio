@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
-import type { LandingPageSchema } from '@/lib/runtime/types'
 
 type RouteParams = { params: Promise<{ pageId: string }> }
 
@@ -41,26 +40,12 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     }
 
     const params_ = (project.parameters as Record<string, unknown>) ?? {}
-    let schema: LandingPageSchema
-
-    const stored = params_.pageSchema
-    if (typeof stored === 'string' && stored.trim()) {
-      try {
-        schema = JSON.parse(stored) as LandingPageSchema
-        if (!schema.render?.htmlContent) {
-          schema = buildLandingPageSchema(project)
-        }
-      } catch {
-        schema = buildLandingPageSchema(project)
-      }
-    } else {
-      schema = buildLandingPageSchema(project)
-    }
+    const schema = buildLandingPageSchema(project)
 
     return NextResponse.json(schema, {
       headers: {
         ...RUNTIME_CORS,
-        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+        'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
       },
     })
   } catch (error) {

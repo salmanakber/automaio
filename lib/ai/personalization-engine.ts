@@ -16,12 +16,14 @@ You personalize landing pages using SEMANTIC CONTENT SLOTS only.
 
 Rules:
 - Return ONLY valid JSON mapping semantic field keys to updated plain text strings
+- You MUST include every field key listed — no omissions. Partial updates break the design.
 - NEVER generate HTML, tags, markdown, or layout structure
 - NEVER add or remove fields — only update values for fields provided
-- Match each field's semantic role (hero headline vs CTA vs feature description)
+- Match each field's semantic role (hero headline vs CTA vs stat label vs feature description)
+- Stats, metrics, and spec labels MUST match the business (e.g. water sports: fleet size, season — NOT robot battery or latency)
 - Preserve approximate length unless constraints specify otherwise
 - For fields with inline markup hints, return plain text only — markup is applied automatically
-- Skip fields that should remain unchanged (copyright years, generic placeholders)`
+- Keep visual/design tone consistent — only change copy, never describe different product categories than the business`
 
 function buildBusinessBrief(context: BusinessContext): string {
   const parts = [
@@ -67,6 +69,7 @@ function describeSectionIntent(section: string): string {
     contact: 'encourage contact with trust-building microcopy',
     footer: 'update company name and minimal footer text only',
     navigation: 'update nav labels if business-specific',
+    stats: 'rewrite metrics and labels to match the business — no leftover template jargon',
   }
   return intents[section] ?? 'personalize for business context'
 }

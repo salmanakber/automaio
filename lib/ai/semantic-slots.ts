@@ -29,6 +29,7 @@ const SECTION_PATTERNS: Array<{ section: string; test: RegExp }> = [
   { section: 'cta', test: /\b(cta|call-to-action|signup|subscribe)\b/i },
   { section: 'contact', test: /\b(contact|form|get-in-touch)\b/i },
   { section: 'footer', test: /\b(footer|copyright)\b/i },
+  { section: 'stats', test: /\b(stat|metric|spec|latency|uptime|rating|score|counter|specs)\b/i },
   { section: 'navigation', test: /\b(nav|header|menu)\b/i },
 ]
 
@@ -143,7 +144,9 @@ export function autoAnnotateSemanticSlots(html: string): string {
       tagLower === 'label' ||
       tagLower === 'footer' ||
       (tagLower === 'a' && /cta|btn|button|w-button/i.test(attrs)) ||
-      (tagLower === 'span' && /badge|label|tag/i.test(attrs)) ||
+      (tagLower === 'span' && /badge|label|tag|stat|metric|value/i.test(attrs)) ||
+      (tagLower === 'strong' && /stat|metric|value|number/i.test(attrs)) ||
+      ((tagLower === 'div' || tagLower === 'span') && isLeaf && /stat|metric|spec|value/i.test(attrs)) ||
       ((tagLower === 'div' || tagLower === 'span') && isLeaf)
 
     if (!shouldTag) return match

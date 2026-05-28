@@ -10,11 +10,13 @@ export type AssembledLandingPage = {
   htmlContent: string
   cssContent: string
   jsContent: string
+  /** External stylesheets (Google Fonts, etc.) — injected into document head at runtime. */
+  stylesheetUrls: string[]
 }
 
 const FORBIDDEN_WRAPPER_PATTERN = /<!DOCTYPE|<html[\s>]|<\/html>|<head[\s>]|<\/head>|<body[\s>]|<\/body>/i
 
-/** Stable scope class from project or template id. */
+/** Stable scope class from project or template id (used for JS isolation only). */
 export function buildScopeClass(id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24)
   return `ai-template-${safe || 'page'}`
@@ -29,14 +31,14 @@ function extractStyleBlocks(html: string): { css: string; htmlWithoutStyles: str
   return { css: styles.join('\n\n'), htmlWithoutStyles: without }
 }
 
-function extractStylesheetLinks(html: string): { imports: string; htmlWithoutLinks: string } {
-  const imports: string[] = []
+function extractStylesheetLinks(html: string): { urls: string[]; htmlWithoutLinks: string } {
+  const urls: string[] = []
   const without = html.replace(/<link[^>]*rel=["']stylesheet["'][^>]*>/gi, (tag) => {
     const href = tag.match(/href=["']([^"']+)["']/i)?.[1]
-    if (href) imports.push(`@import url('${href}');`)
+    if (href) urls.push(href)
     return ''
   })
-  return { imports: imports.join('\n'), htmlWithoutLinks: without }
+  return { urls, htmlWithoutLinks: without }
 }
 
 function extractScriptBlocks(html: string): { js: string; htmlWithoutScripts: string } {
@@ -48,68 +50,29 @@ function extractScriptBlocks(html: string): { js: string; htmlWithoutScripts: st
   return { js: scripts.join('\n\n'), htmlWithoutScripts: without }
 }
 
-/**
- * Prefix CSS selectors with a scope class to avoid Webflow global style conflicts.
- * Handles simple rules, @media blocks, and preserves @keyframes/@font-face.
- */
-export function scopeCssToTemplate(css: string, scopeClass: string): string {
-  if (!css?.trim()) return ''
+/** Pull @import / @font-face / @keyframes to the top — must never be prefixed or scoped. */
+export function extractGlobalCssAtRules(css: string): { global: string; local: string } {
+  if (!css?.trim()) return { global: '', local: '' }
 
-  const scope = `.${scopeClass}`
-  const chunks = css.split(/(?=@media\s)/g)
-  const scoped: string[] = []
+  const globalParts: string[] = []
+  let local = css
 
-  for (const chunk of chunks) {
-    if (chunk.trim().startsWith('@media')) {
-      const mediaMatch = chunk.match(/^(@media[^{]+)\{([\s\S]*)\}\s*$/i)
-      if (mediaMatch) {
-        scoped.push(`${mediaMatch[1]}{${scopeCssToTemplate(mediaMatch[2], scopeClass)}}`)
-      } else {
-        scoped.push(chunk)
-      }
-      continue
-    }
+  local = local.replace(/@import[\s\S]*?;/gi, (match) => {
+    globalParts.push(match.trim())
+    return ''
+  })
 
-    scoped.push(
-      chunk.replace(/([^{}@/][^{]*)\{/g, (match, selectors: string) => {
-        const trimmed = selectors.trim()
-        if (!trimmed || trimmed.startsWith('@keyframes') || trimmed.startsWith('@font-face')) {
-          return match
-        }
-        if (trimmed.startsWith('@')) return match
+  local = local.replace(/@font-face\s*\{[\s\S]*?\}/gi, (match) => {
+    globalParts.push(match.trim())
+    return ''
+  })
 
-        const prefixed = trimmed
-          .split(',')
-          .map((sel) => {
-            const s = sel.trim()
-            if (!s) return s
-            if (s === 'html' || s === 'body' || s === ':root') return scope
-            if (s.startsWith(scope)) return s
+  local = local.replace(/@keyframes[\s\S]*?\{(?:[^{}]|\{[^{}]*\})*\}/gi, (match) => {
+    globalParts.push(match.trim())
+    return ''
+  })
 
-            const wrapperRoot =
-              /^\.ai-landing-wrap(?:per)?(?:\b|$)/.test(s) ||
-              s === '.ai-template-scope' ||
-              s.startsWith('.ai-landing-wrap ') ||
-              s.startsWith('.ai-landing-wrapper ')
-
-            if (wrapperRoot) {
-              const rest = s
-                .replace(/^\.ai-landing-wrap(?:per)?/, '')
-                .replace(/^\.ai-template-scope/, '')
-              const rootClass = `.${scopeClass}.ai-landing-wrapper`
-              return rest.trim() ? `${rootClass}${rest}` : rootClass
-            }
-
-            return `${scope} ${s}`
-          })
-          .join(', ')
-
-        return `${prefixed} {`
-      }),
-    )
-  }
-
-  return scoped.join('\n')
+  return { global: globalParts.filter(Boolean).join('\n\n'), local: local.trim() }
 }
 
 function stripDocumentWrapper(html: string): string {
@@ -128,44 +91,6 @@ function wrapWithScope(html: string, scopeClass: string): string {
   return `<div class="${scopeClass} ai-landing-wrapper ai-template-scope">\n${trimmed}\n</div>`
 }
 
-/** Base reset styles so Webflow global CSS does not break Automaio templates. */
-export function buildWebflowIsolationCss(scopeClass: string): string {
-  const scope = `.${scopeClass}.ai-landing-wrapper`
-  return `
-${scope} {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  color: var(--automaio-text, #0f172a);
-  background: var(--automaio-bg, #ffffff);
-}
-${scope} *,
-${scope} *::before,
-${scope} *::after {
-  box-sizing: border-box;
-}
-${scope} img {
-  max-width: 100%;
-  height: auto;
-}
-${scope} h1, ${scope} h2, ${scope} h3, ${scope} h4, ${scope} h5, ${scope} h6 {
-  margin: 0 0 0.5em;
-  line-height: 1.2;
-  font-weight: 700;
-}
-${scope} p {
-  margin: 0 0 1em;
-}
-${scope} a {
-  color: inherit;
-}
-`.trim()
-}
-
 function wrapJsInScopeIife(js: string, scopeClass: string): string {
   if (!js.trim()) return ''
   return `(function(){
@@ -182,10 +107,9 @@ export type AssembleLandingPageOptions = {
 }
 
 /**
- * Split generated HTML into Webflow CMS Plain Text fields:
- * - htmlContent: semantic section markup only (no document wrapper)
- * - cssContent: scoped CSS (no global pollution)
- * - jsContent: isolated, sanitized IIFE
+ * Split generated HTML for Webflow remote runtime.
+ * CSS is preserved exactly (no selector prefixing) so templates match the studio preview.
+ * Font/stylesheet links are returned separately for head injection at runtime.
  */
 export function assembleLandingPageForWebflow(
   rawHtml: string,
@@ -196,27 +120,14 @@ export function assembleLandingPageForWebflow(
 
   const { js: rawJs, htmlWithoutScripts } = extractScriptBlocks(html)
   const { css: inlineCss, htmlWithoutStyles } = extractStyleBlocks(htmlWithoutScripts)
-  const { imports, htmlWithoutLinks } = extractStylesheetLinks(htmlWithoutStyles)
+  const { urls: stylesheetUrls, htmlWithoutLinks } = extractStylesheetLinks(htmlWithoutStyles)
 
   let htmlContent = stripDocumentWrapper(htmlWithoutLinks)
   htmlContent = sanitizeLandingPageHtml(htmlContent)
   htmlContent = wrapWithScope(htmlContent, scopeClass)
 
-  const rawCss = [imports, inlineCss].filter(Boolean).join('\n\n')
-  let cssContent = [
-    buildWebflowIsolationCss(scopeClass),
-    scopeCssToTemplate(rawCss, scopeClass),
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-
-  // Fallback: if scoping produced empty output but we had CSS, scope the wrapper only
-  if (!cssContent.trim() && rawCss.trim()) {
-    cssContent = scopeCssToTemplate(
-      `.${scopeClass} { display: block; }\n${rawCss}`,
-      scopeClass,
-    )
-  }
+  const { global: globalCss, local: localCss } = extractGlobalCssAtRules(inlineCss)
+  const cssContent = [globalCss, localCss].filter(Boolean).join('\n\n')
 
   let jsContent = ''
   if (options.allowJs !== false && rawJs.trim()) {
@@ -229,6 +140,7 @@ export function assembleLandingPageForWebflow(
     htmlContent,
     cssContent,
     jsContent,
+    stylesheetUrls,
   }
 }
 
@@ -237,12 +149,17 @@ export function buildDocumentFromSplitParts(
   assembled: AssembledLandingPage,
   title = 'Landing Page',
 ): string {
+  const links = assembled.stylesheetUrls
+    .map((href) => `<link rel="stylesheet" href="${href}" />`)
+    .join('\n  ')
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
+  ${links}
   <style>${assembled.cssContent}</style>
 </head>
 <body>
@@ -250,4 +167,17 @@ export function buildDocumentFromSplitParts(
   ${assembled.jsContent ? `<script>${assembled.jsContent}<\/script>` : ''}
 </body>
 </html>`
+}
+
+/**
+ * @deprecated Aggressive scoping broke template CSS (@import, fonts). Kept for legacy callers only.
+ */
+export function scopeCssToTemplate(css: string, _scopeClass: string): string {
+  const { global, local } = extractGlobalCssAtRules(css)
+  return [global, local].filter(Boolean).join('\n\n')
+}
+
+/** @deprecated Isolation reset removed — it overrode template fonts/layout. */
+export function buildWebflowIsolationCss(_scopeClass: string): string {
+  return ''
 }

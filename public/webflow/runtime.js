@@ -49,6 +49,21 @@
     return style
   }
 
+  function injectStylesheetLinks(urls) {
+    if (!urls || !urls.length) return
+    for (var i = 0; i < urls.length; i++) {
+      var href = urls[i]
+      if (!href) continue
+      var linkId = 'automaio-stylesheet-' + i
+      if (document.getElementById(linkId)) continue
+      var link = document.createElement('link')
+      link.id = linkId
+      link.rel = 'stylesheet'
+      link.href = href
+      document.head.appendChild(link)
+    }
+  }
+
   function runIsolatedJs(js) {
     if (!js || !js.trim()) return
     try {
@@ -136,6 +151,9 @@
         throw new Error('Page has no renderable HTML yet — personalize or save HTML in Automaio first.')
       }
 
+      if (renderBundle.stylesheetUrls && renderBundle.stylesheetUrls.length) {
+        injectStylesheetLinks(renderBundle.stylesheetUrls)
+      }
       injectScopedCss(renderBundle.cssContent, 'automaio-runtime-' + pageId)
       renderSections(target, schema)
       runIsolatedJs(renderBundle.jsContent)

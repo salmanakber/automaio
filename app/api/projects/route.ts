@@ -6,7 +6,6 @@ import { renderProjectHtml } from '@/lib/content/render-project-html'
 import { extractBusinessContext, businessContextToParameters } from '@/lib/ai/business-context'
 import { personalizeProject } from '@/lib/ai/personalization-engine'
 import { enhanceBlogBody } from '@/lib/ai/blog-enhance'
-import { applyLayoutControlsToHtml, DEFAULT_LAYOUT_CONTROLS } from '@/lib/webflow/layout-controls'
 import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 import type { OnboardingInput } from '@/lib/ai/business-context-types'
 
@@ -88,7 +87,6 @@ export async function POST(req: NextRequest) {
         ...mergedParameters,
         ...businessContextToParameters(extractedContext),
         businessContext: JSON.stringify(extractedContext),
-        layoutControls: JSON.stringify(DEFAULT_LAYOUT_CONTROLS),
       }
     }
 
@@ -136,8 +134,7 @@ export async function POST(req: NextRequest) {
         })
         if (fullProject) {
           if (extractedContext) {
-            const baseHtml = applyLayoutControlsToHtml(renderedHtml, DEFAULT_LAYOUT_CONTROLS)
-            const result = await personalizeProject(fullProject, extractedContext, baseHtml)
+            const result = await personalizeProject(fullProject, extractedContext, renderedHtml)
             await prisma.contentProject.update({
               where: { id: project.id },
               data: {
@@ -145,7 +142,6 @@ export async function POST(req: NextRequest) {
                 parameters: {
                   ...result.parameters,
                   businessContext: JSON.stringify(extractedContext),
-                  layoutControls: JSON.stringify(DEFAULT_LAYOUT_CONTROLS),
                 },
               },
             })
