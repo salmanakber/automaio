@@ -47,6 +47,10 @@ import {
   publishWebflowSiteWithRetry,
   isWebflowRateLimitError,
 } from '@/lib/webflow/publish-site'
+import {
+  formatLivePageReadinessWarnings,
+  verifyWebflowLivePageReadiness,
+} from '@/lib/webflow/live-page-readiness'
 
 function slugify(value: string) {
   return value
@@ -521,7 +525,8 @@ export async function publishContentProject(
     }
   }
 
-  const shouldPublishSite = options?.publishSite ?? project.publishSite ?? true
+  const goLive = project.showOnWebsite !== false
+  const shouldPublishSite = goLive && (options?.publishSite ?? true)
 
   const html = htmlForStrategy || payload.bodyHtml || ''
 
@@ -584,14 +589,17 @@ export async function publishContentProject(
     }
   }
 
+  let sitePublishAttempted = false
+  let livePageWarning = ''
   if (shouldPublishSite) {
     try {
       await publishWebflowSiteWithRetry(client, integration.webflowSiteId)
+      sitePublishAttempted = true
     } catch (publishErr) {
       if (isWebflowRateLimitError(publishErr)) {
         embedMessage =
           embedMessage ||
-          'CMS item saved. Webflow site publish hit rate limit — wait ~60 seconds and republish from Webflow, or publish again with "Publish Webflow site" unchecked.'
+          'CMS item saved. Webflow site publish hit rate limit — wait ~60 seconds and republish from Webflow, or publish again with "Trigger Master Webflow Site Publish" enabled.'
       } else {
         throw publishErr
       }
@@ -602,12 +610,39 @@ export async function publishContentProject(
     siteShortName?: string
     collections?: Array<{ id: string; slug?: string }>
   } | null
-  const collectionMeta = collectionsJson?.collections?.find((c) => c.id === project.cmsCollectionId)
+  const itemSlug = payload.slug ?? slugify(project.name)
+
+  let collectionSlug = collectionsJson?.collections?.find((c) => c.id === project.cmsCollectionId)?.slug
+  try {
+    const collectionDetail = await client.getCollection(project.cmsCollectionId!)
+    collectionSlug = collectionDetail.slug ?? collectionSlug
+  } catch {
+    // Fall back to cached slug from integration sync.
+  }
+
   const liveUrl = buildWebflowLiveUrl({
     siteShortName: collectionsJson?.siteShortName,
-    collectionSlug: collectionMeta?.slug,
-    itemSlug: payload.slug ?? slugify(project.name),
+    collectionSlug,
+    itemSlug,
   })
+
+  if (goLive) {
+    const readiness = await verifyWebflowLivePageReadiness({
+      client,
+      siteId: integration.webflowSiteId,
+      collectionId: project.cmsCollectionId!,
+      itemSlug,
+      sitePublishAttempted,
+      goLive,
+    })
+    if (readiness.warnings.length) {
+      livePageWarning = formatLivePageReadinessWarnings(readiness.warnings)
+      embedMessage = embedMessage ? `${embedMessage} ${livePageWarning}` : livePageWarning
+      if (!readiness.templatePageFound || !readiness.liveItemFound || !sitePublishAttempted) {
+        embedNeedsReconnect = embedNeedsReconnect || !readiness.templatePageFound
+      }
+    }
+  }
 
   const previewUrl = buildProjectIframeUrl(appUrl, projectId)
 
@@ -633,6 +668,7 @@ export async function publishContentProject(
     embedAutoConfigured,
     embedNeedsReconnect,
     embedMessage,
+    livePageWarning: livePageWarning || undefined,
     runtimeAutoConfigured,
     runtimeNeedsReconnect,
     usedSplitPlainText,

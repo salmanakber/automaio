@@ -144,7 +144,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       const slug = typeof body.slug === 'string' ? body.slug.trim() : undefined
 
       const result = await publishContentProject(id, {
-        publishSite: body.publishSite ?? existing.publishSite,
+        publishSite: typeof body.publishSite === 'boolean' ? body.publishSite : undefined,
         renderedHtmlOverride,
         publishHtmlMode: publishHtmlMode as PublishHtmlMode | undefined,
         slug,

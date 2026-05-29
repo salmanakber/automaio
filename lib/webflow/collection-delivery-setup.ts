@@ -395,6 +395,11 @@ export async function ensureCollectionDeliverySetup(
         (runtimeResult.success || splitScriptId || iframeScriptId),
     )
 
+    const missingTemplatePage = !templatePage?.id
+    const templatePageWarning = missingTemplatePage
+      ? 'No Collection Template page found in Webflow for this collection. Open Webflow Designer → Pages → CMS Collection pages, open the template for this collection, then publish the site so item URLs work.'
+      : undefined
+
     return {
       success: true,
       mode,
@@ -402,7 +407,9 @@ export async function ensureCollectionDeliverySetup(
       collectionTemplateSnippet: snippet,
       templateAutoConfigured,
       needsReconnect: runtimeResult.success ? undefined : runtimeResult.needsReconnect,
-      error: runtimeResult.success ? undefined : runtimeResult.error,
+      error:
+        templatePageWarning ??
+        (runtimeResult.success ? undefined : runtimeResult.error),
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

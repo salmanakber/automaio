@@ -111,7 +111,7 @@ export function PublishDialog({
   const [preview, setPreview] = useState<PublishPreview | null>(null)
   const [previewError, setPreviewError] = useState('')
   const [showOnWebsite, setShowOnWebsite] = useState(Boolean(project?.showOnWebsite))
-  const [publishSite, setPublishSite] = useState(project?.publishSite !== false)
+  const [publishSite, setPublishSite] = useState(project?.publishSite === false ? false : true)
   const [publishMode, setPublishMode] = useState<'now' | 'later'>('now')
   const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput)
   const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>(
@@ -196,7 +196,7 @@ export function PublishDialog({
   useEffect(() => {
     if (!open) return
     setShowOnWebsite(Boolean(project?.showOnWebsite))
-    setPublishSite(project?.publishSite !== false)
+    setPublishSite(project?.publishSite === false ? false : true)
     setResult(null)
     setPublishMode('now')
     setScheduledAt(defaultScheduleInput())
@@ -265,10 +265,10 @@ export function PublishDialog({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Publish failed')
-      if (data.embedNeedsReconnect || data.runtimeNeedsReconnect) {
+      if (data.embedNeedsReconnect || data.runtimeNeedsReconnect || data.livePageWarning) {
         setResult({
           type: 'warning',
-          message: data.embedMessage ?? 'Content updated in CMS, but automatic runtime setup needs attention.',
+          message: data.embedMessage ?? data.livePageWarning ?? 'Content updated in CMS, but automatic runtime setup needs attention.',
           liveUrl: data.liveUrl,
           previewUrl: data.previewUrl,
           embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
