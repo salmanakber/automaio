@@ -12,21 +12,24 @@ import {
   collectionHasDeliveryFields,
   syncCollectionFieldsCache,
 } from '@/lib/webflow/cms-collection-schema'
-import { buildIframeInlineBootstrap, buildSplitInlineBootstrap } from '@/lib/webflow/delivery-bootstrap'
+import { buildIframeInlineBootstrap } from '@/lib/webflow/delivery-bootstrap'
 import {
   buildWebflowIframeCollectionEmbed,
   buildWebflowSplitMethodTemplateEmbed,
 } from '@/lib/webflow/template-embeds'
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
-import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 import {
   buildTemplateShellHeadBootstrap,
   TEMPLATE_SHELL_SCRIPT_NAME,
   TEMPLATE_SHELL_VERSION,
   buildCollectionTemplateBodySnippet,
 } from '@/lib/webflow/collection-template-shell'
+import {
+  buildUnifiedDeliveryBootstrap,
+  UNIFIED_DELIVERY_SCRIPT_NAME,
+  UNIFIED_DELIVERY_VERSION,
+} from '@/lib/webflow/unified-delivery-bootstrap'
 
-const SPLIT_SCRIPT_NAME = 'Automaio Split HTML Renderer'
 const IFRAME_SCRIPT_NAME = 'Automaio Iframe Embed Renderer'
 
 const SCRIPT_VERSION = '1.3.0'
@@ -41,6 +44,7 @@ type CollectionsJson = {
     splitScriptId?: string
     iframeScriptId?: string
     shellScriptId?: string
+    unifiedScriptId?: string
     configuredAt?: string
   }
 }
@@ -57,7 +61,8 @@ function isAutomaioDeliveryScript(script: { id: string; displayName?: string }) 
     name.includes('automaio split') ||
     name.includes('automaio iframe') ||
     name.includes('automaio content embed') ||
-    name.includes('automaio template shell')
+    name.includes('automaio template shell') ||
+    name.includes('automaio page delivery')
   )
 }
 
@@ -87,6 +92,9 @@ export async function collectionTemplateHasDeliveryScript(
       const delivery = collectionsJson.automaioDelivery
       return delivery?.mode === 'remote_runtime' && Boolean(delivery.scriptId && onPage.has(delivery.scriptId))
     }
+
+    const unifiedId = collectionsJson.automaioDelivery?.unifiedScriptId
+    if (unifiedId && onPage.has(unifiedId)) return true
 
     if (mode === 'split_plain_text') {
       const splitId = collectionsJson.automaioDelivery?.splitScriptId
@@ -178,19 +186,32 @@ async function registerDeliveryScript(
   displayName: string,
   sourceCode: string,
   version = SCRIPT_VERSION,
+  options?: { forceRefresh?: boolean },
 ): Promise<{ scriptId: string; version: string }> {
   const registered = await client.listRegisteredScripts(siteId)
   const existing = registered.find(
     (s) => (s.displayName ?? '').toLowerCase() === displayName.toLowerCase(),
   )
-  if (existing) {
-    const useVersion =
-      displayName === TEMPLATE_SHELL_SCRIPT_NAME ? TEMPLATE_SHELL_VERSION : version
-    return { scriptId: existing.id, version: existing.version ?? useVersion }
+
+  let scriptVersion = version
+  if (displayName === TEMPLATE_SHELL_SCRIPT_NAME) scriptVersion = TEMPLATE_SHELL_VERSION
+  if (displayName === UNIFIED_DELIVERY_SCRIPT_NAME) scriptVersion = UNIFIED_DELIVERY_VERSION
+
+  if (existing && !options?.forceRefresh) {
+    return { scriptId: existing.id, version: existing.version ?? scriptVersion }
   }
 
-  const scriptVersion =
-    displayName === TEMPLATE_SHELL_SCRIPT_NAME ? TEMPLATE_SHELL_VERSION : version
+  if (existing && options?.forceRefresh) {
+    const used = new Set(
+      registered.filter((s) => (s.displayName ?? '').toLowerCase() === displayName.toLowerCase()).map((s) => s.version),
+    )
+    const parts = scriptVersion.split('.').map((n) => Number(n) || 0)
+    let patch = parts[2] ?? 0
+    while (used.has(scriptVersion)) {
+      patch += 1
+      scriptVersion = `${parts[0]}.${parts[1]}.${patch}`
+    }
+  }
 
   const created = await client.registerInlineScript(siteId, {
     sourceCode,
@@ -199,6 +220,40 @@ async function registerDeliveryScript(
     canCopy: false,
   })
   return { scriptId: created.id, version: scriptVersion }
+}
+
+/** Write Automaio template scripts in one request, preserving non-Automaio page scripts. */
+async function syncTemplatePageCustomCode(
+  client: WebflowClient,
+  siteId: string,
+  pageId: string,
+  entries: Array<{ id: string; version: string; location: 'header' | 'footer' }>,
+) {
+  const registered = await client.listRegisteredScripts(siteId)
+  const registeredIds = new Set(registered.map((s) => s.id))
+  const automaioIds = new Set(registered.filter(isAutomaioDeliveryScript).map((s) => s.id))
+  const ourScripts = entries
+    .filter((e) => registeredIds.has(e.id))
+    .map((e) => ({ id: e.id, location: e.location, version: e.version }))
+
+  if (!ourScripts.length) return
+
+  let preserved: Array<{ id: string; location: string; version: string }> = []
+  try {
+    const current = await client.getPageCustomCode(pageId)
+    preserved = (current.scripts ?? []).filter(
+      (s) => registeredIds.has(s.id) && !automaioIds.has(s.id),
+    )
+  } catch {
+    // Page may have no custom code yet.
+  }
+
+  try {
+    await client.upsertPageCustomCode(pageId, [...preserved, ...ourScripts])
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (!isEmbedRecoverableError(message)) throw err
+  }
 }
 
 /** Create all optional delivery CMS fields (unified schema) on connect / install. */
@@ -367,29 +422,14 @@ export async function ensureCollectionDeliverySetup(
   const shouldReconfigure = options.force ?? false
 
   try {
-    const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
-      collectionId: options.collectionId,
-      publishSite: false,
-      skipIfConfigured: !shouldReconfigure,
-    })
-
-    if (!runtimeResult.success && !installAll && mode === 'remote_runtime') {
-      return {
-        success: false,
-        mode,
-        fields,
-        collectionTemplateSnippet: snippet,
-        needsReconnect: runtimeResult.needsReconnect,
-        error: runtimeResult.error,
-      }
-    }
-
     let splitScriptId = collectionsJson.automaioDelivery?.splitScriptId
     let iframeScriptId = collectionsJson.automaioDelivery?.iframeScriptId
     let shellScriptId = collectionsJson.automaioDelivery?.shellScriptId
+    let unifiedScriptId = collectionsJson.automaioDelivery?.unifiedScriptId
 
-    const needsSplitScript = installAll || mode === 'split_plain_text'
     const needsIframeScript = installAll || mode === 'iframe_embed'
+    const templateScripts: Array<{ id: string; version: string; location: 'header' | 'footer' }> =
+      []
 
     if (templatePage?.id) {
       try {
@@ -398,40 +438,25 @@ export async function ensureCollectionDeliverySetup(
           integration.webflowSiteId,
           TEMPLATE_SHELL_SCRIPT_NAME,
           buildTemplateShellHeadBootstrap(),
+          TEMPLATE_SHELL_VERSION,
+          { forceRefresh: shouldReconfigure },
         )
         shellScriptId = shell.scriptId
-        await appendScriptToTemplatePageHeader(
+        templateScripts.push({ id: shell.scriptId, version: shell.version, location: 'header' })
+
+        const unified = await registerDeliveryScript(
           client,
           integration.webflowSiteId,
-          templatePage.id,
-          { id: shell.scriptId, version: shell.version },
+          UNIFIED_DELIVERY_SCRIPT_NAME,
+          buildUnifiedDeliveryBootstrap(appUrl, integration.webflowSiteId),
+          UNIFIED_DELIVERY_VERSION,
+          { forceRefresh: shouldReconfigure },
         )
+        unifiedScriptId = unified.scriptId
+        templateScripts.push({ id: unified.scriptId, version: unified.version, location: 'footer' })
       } catch (shellErr) {
         const message = shellErr instanceof Error ? shellErr.message : String(shellErr)
         if (!isEmbedRecoverableError(message) && !isWebflowNotFoundError(shellErr)) throw shellErr
-      }
-    }
-
-    if (templatePage?.id && (needsSplitScript || needsIframeScript)) {
-      if (needsSplitScript) {
-        try {
-          const split = await registerDeliveryScript(
-            client,
-            integration.webflowSiteId,
-            SPLIT_SCRIPT_NAME,
-            buildSplitInlineBootstrap(appUrl, integration.webflowSiteId),
-          )
-          splitScriptId = split.scriptId
-          await appendScriptToTemplatePage(
-            client,
-            integration.webflowSiteId,
-            templatePage.id,
-            { id: split.scriptId, version: split.version },
-          )
-        } catch (splitErr) {
-          const message = splitErr instanceof Error ? splitErr.message : String(splitErr)
-          if (!isEmbedRecoverableError(message) && !isWebflowNotFoundError(splitErr)) throw splitErr
-        }
       }
 
       if (needsIframeScript) {
@@ -441,14 +466,11 @@ export async function ensureCollectionDeliverySetup(
             integration.webflowSiteId,
             IFRAME_SCRIPT_NAME,
             buildIframeInlineBootstrap(appUrl, integration.webflowSiteId),
+            SCRIPT_VERSION,
+            { forceRefresh: shouldReconfigure },
           )
           iframeScriptId = iframe.scriptId
-          await appendScriptToTemplatePage(
-            client,
-            integration.webflowSiteId,
-            templatePage.id,
-            { id: iframe.scriptId, version: iframe.version },
-          )
+          templateScripts.push({ id: iframe.scriptId, version: iframe.version, location: 'footer' })
         } catch (iframeErr) {
           const message = iframeErr instanceof Error ? iframeErr.message : String(iframeErr)
           if (!isEmbedRecoverableError(message) && !isWebflowNotFoundError(iframeErr)) {
@@ -456,9 +478,16 @@ export async function ensureCollectionDeliverySetup(
           }
         }
       }
-    }
 
-    const runtimeMeta = runtimeResult.success ? runtimeResult.automaioRuntime : undefined
+      if (templateScripts.length) {
+        await syncTemplatePageCustomCode(
+          client,
+          integration.webflowSiteId,
+          templatePage.id,
+          templateScripts,
+        )
+      }
+    }
 
     await prisma.webflowIntegration.update({
       where: { id: integrationId },
@@ -467,12 +496,12 @@ export async function ensureCollectionDeliverySetup(
           ...collectionsJson,
           automaioDelivery: {
             mode: installAll ? 'remote_runtime' : mode,
-            scriptId: runtimeMeta?.scriptId ?? collectionsJson.automaioDelivery?.scriptId,
-            scriptVersion:
-              runtimeMeta?.scriptVersion ?? collectionsJson.automaioDelivery?.scriptVersion,
+            scriptId: unifiedScriptId ?? collectionsJson.automaioDelivery?.scriptId,
+            scriptVersion: UNIFIED_DELIVERY_VERSION,
             splitScriptId,
             iframeScriptId,
             shellScriptId,
+            unifiedScriptId,
             configuredAt: new Date().toISOString(),
           },
         },
@@ -486,8 +515,7 @@ export async function ensureCollectionDeliverySetup(
     }
 
     const templateAutoConfigured = Boolean(
-      templatePage?.id &&
-        (runtimeResult.success || splitScriptId || iframeScriptId || shellScriptId),
+      templatePage?.id && (unifiedScriptId || iframeScriptId || shellScriptId),
     )
 
     const missingTemplatePage = !templatePage?.id
@@ -506,10 +534,7 @@ export async function ensureCollectionDeliverySetup(
       collectionTemplateBodySnippet: buildCollectionTemplateBodySnippet(),
       needsDesignerShell: Boolean(templatePage?.id),
       templateAutoConfigured,
-      needsReconnect: runtimeResult.success ? undefined : runtimeResult.needsReconnect,
-      error:
-        templatePageWarning ??
-        (runtimeResult.success ? undefined : runtimeResult.error),
+      error: templatePageWarning,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

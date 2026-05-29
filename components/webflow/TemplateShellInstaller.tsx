@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { buildCollectionTemplateBodySnippet } from '@/lib/webflow/collection-template-shell'
@@ -9,19 +9,38 @@ import { Check, Copy, Hammer, Loader2 } from 'lucide-react'
 export function TemplateShellInstaller() {
   const [installing, setInstalling] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState<'info' | 'success' | 'error'>('info')
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; result?: { ok?: boolean; error?: string } }
+      if (data?.type !== 'automaio-install-template-shell-result') return
+      setInstalling(false)
+      if (data.result?.ok) {
+        setMessageType('success')
+        setMessage(
+          'Template shell installed in Webflow. Turn ON Publish settings for this CMS template, then publish the site.',
+        )
+      } else {
+        setMessageType('error')
+        setMessage(
+          data.result?.error
+            ? `Install failed: ${data.result.error}. Select Body in the Navigator and try again, or paste the canvas snippet.`
+            : 'Install failed. Select Body in the Navigator and try again, or paste the canvas snippet.',
+        )
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   const installViaDesigner = async () => {
     setInstalling(true)
     setMessage('')
-    try {
-      window.parent.postMessage({ type: 'automaio-install-template-shell' }, '*')
-      setMessage(
-        'Install request sent to Webflow Designer. If nothing happens, select the Body element on your collection template and try again.',
-      )
-    } finally {
-      setInstalling(false)
-    }
+    setMessageType('info')
+    window.parent.postMessage({ type: 'automaio-install-template-shell' }, '*')
+    setMessage('Installing template shell in Webflow Designer…')
   }
 
   const copySnippet = async () => {
@@ -36,7 +55,8 @@ export function TemplateShellInstaller() {
         <p className="text-xs font-semibold text-amber-200">Collection template shell required</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
           Blank collection templates return 404 for CMS item URLs. Webflow needs at least one element
-          on the canvas. Install the Automaio shell once, then publish the site in Webflow Designer.
+          on the canvas — custom code alone is not enough. Install the shell once, then publish the
+          site in Webflow Designer.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -50,13 +70,22 @@ export function TemplateShellInstaller() {
         </Button>
       </div>
       {message && (
-        <Alert className="border-primary/20 bg-primary/5 py-2">
+        <Alert
+          className={
+            messageType === 'error'
+              ? 'border-destructive/30 bg-destructive/5 py-2'
+              : messageType === 'success'
+                ? 'border-emerald-500/30 bg-emerald-500/5 py-2'
+                : 'border-primary/20 bg-primary/5 py-2'
+          }
+        >
           <AlertTitle className="text-xs">Designer</AlertTitle>
           <AlertDescription className="text-[11px]">{message}</AlertDescription>
         </Alert>
       )}
       <p className="text-[10px] text-muted-foreground">
-        Also check Pages → CMS template → Settings → Publish settings is ON, then publish the site.
+        Open Pages → your CMS collection template → Settings → Publish settings ON, then publish the
+        site. Republish from Automaio afterward with site publish enabled.
       </p>
     </div>
   )
