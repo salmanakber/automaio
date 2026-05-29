@@ -54,7 +54,7 @@ export async function verifyWebflowLivePageReadiness(opts: {
 
   if (opts.goLive && !opts.sitePublishAttempted) {
     warnings.push(
-      'The Webflow site was not republished. Turn on "Trigger Master Webflow Site Publish" and publish again — CMS URLs stay 404 until the site is published.',
+      'The Webflow site was not republished. CMS items save to the CMS panel but the public URL stays 404 until you publish the site — enable "Trigger Master Webflow Site Publish" in Automaio or click Publish in Webflow Designer.',
     )
   }
 

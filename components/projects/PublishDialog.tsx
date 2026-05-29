@@ -111,7 +111,7 @@ export function PublishDialog({
   const [preview, setPreview] = useState<PublishPreview | null>(null)
   const [previewError, setPreviewError] = useState('')
   const [showOnWebsite, setShowOnWebsite] = useState(Boolean(project?.showOnWebsite))
-  const [publishSite, setPublishSite] = useState(project?.publishSite === false ? false : true)
+  const [publishSite, setPublishSite] = useState(true)
   const [publishMode, setPublishMode] = useState<'now' | 'later'>('now')
   const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput)
   const [publishHtmlMode, setPublishHtmlMode] = useState<PublishHtmlModeOverride>(
@@ -196,7 +196,7 @@ export function PublishDialog({
   useEffect(() => {
     if (!open) return
     setShowOnWebsite(Boolean(project?.showOnWebsite))
-    setPublishSite(project?.publishSite === false ? false : true)
+    setPublishSite(true)
     setResult(null)
     setPublishMode('now')
     setScheduledAt(defaultScheduleInput())
@@ -577,7 +577,8 @@ export function PublishDialog({
                     checked: publishSite,
                     onChange: setPublishSite,
                     label: 'Trigger Master Webflow Site Publish',
-                    description: 'Initiate standard domain compile sequence across staging and production.',
+                    description:
+                      'Required for live CMS URLs. Without this, items save to CMS but /landing-pages/your-slug returns 404 until you publish in Webflow Designer.',
                   },
                 ].map((item) => (
                   <div key={item.id} className="flex items-center justify-between gap-4 p-4">

@@ -16,7 +16,8 @@ import {
   buildCollectionEmbedSnippet,
   buildProjectEmbedSnippet,
 } from '@/lib/webflow/embed-setup'
-import { buildWebflowLiveUrl } from '@/lib/webflow/live-url'
+import { buildWebflowLiveUrl, buildWebflowLiveUrlForItem } from '@/lib/webflow/live-url'
+import { ensureWebflowCmsItemIsLive } from '@/lib/webflow/ensure-cms-live'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { checkCustomCodeAccess } from '@/lib/webflow/embed-permissions'
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
@@ -46,6 +47,7 @@ import { applyHtmlModeFieldCleanup } from '@/lib/webflow/html-mode-field-cleanup
 import {
   publishWebflowSiteWithRetry,
   isWebflowRateLimitError,
+  isWebflowSitePublishError,
 } from '@/lib/webflow/publish-site'
 import {
   formatLivePageReadinessWarnings,
@@ -506,6 +508,30 @@ export async function publishContentProject(
     }
   }
 
+  let liveCmsSlug = payload.slug ?? slugify(project.name)
+  if (project.showOnWebsite !== false) {
+    try {
+      const liveState = await ensureWebflowCmsItemIsLive(
+        client,
+        project.cmsCollectionId!,
+        cmsItemId!,
+        liveCmsSlug,
+        fieldData,
+      )
+      cmsItemId = liveState.itemId
+      liveCmsSlug = liveState.liveSlug || liveCmsSlug
+      if (!liveState.isLive) {
+        deliverySetupWarning =
+          deliverySetupWarning ||
+          'CMS item saved but is not live on Webflow yet. Publish again with "Visible on Live Website" and site publish enabled.'
+      }
+    } catch (liveErr) {
+      deliverySetupWarning =
+        deliverySetupWarning ||
+        formatWebflowValidationError(liveErr)
+    }
+  }
+
   if (isHtmlPage) {
     try {
       const deliveryResult = await ensureCollectionDeliverySetup(integration.id, {
@@ -530,7 +556,8 @@ export async function publishContentProject(
   }
 
   const goLive = project.showOnWebsite !== false
-  const shouldPublishSite = goLive && (options?.publishSite ?? true)
+  /** Live CMS URLs require a full Webflow site publish — default ON when going live. */
+  const shouldPublishSite = goLive && options?.publishSite !== false
 
   const html = htmlForStrategy || payload.bodyHtml || ''
 
@@ -547,7 +574,7 @@ export async function publishContentProject(
   const previousHtmlMode = projectParams.lastPublishedHtmlMode as PublishHtmlMode | undefined
   const htmlModeChanged = Boolean(previousHtmlMode && previousHtmlMode !== plan.htmlMode)
 
-  const slugToPersist = payload.slug ?? slugify(project.name)
+  const slugToPersist = liveCmsSlug
 
   await prisma.contentProject.update({
     where: { id: projectId },
@@ -597,17 +624,22 @@ export async function publishContentProject(
   let livePageWarning = ''
   if (shouldPublishSite) {
     try {
-      await publishWebflowSiteWithRetry(client, integration.webflowSiteId)
+      await publishWebflowSiteWithRetry(client, integration.webflowSiteId, {
+        waitAfterMs: 3000,
+      })
       sitePublishAttempted = true
     } catch (publishErr) {
       if (isWebflowRateLimitError(publishErr)) {
         embedMessage =
           embedMessage ||
-          'CMS item saved. Webflow site publish hit rate limit — wait ~60 seconds and republish from Webflow, or publish again with "Trigger Master Webflow Site Publish" enabled.'
-      } else if (isWebflowNotFoundError(publishErr)) {
+          'CMS item saved. Webflow site publish hit rate limit (1 per minute) — wait 60 seconds, then publish again with site publish enabled, or publish manually in Webflow Designer.'
+      } else if (isWebflowSitePublishError(publishErr)) {
         embedMessage =
           embedMessage ||
-          'CMS item saved, but Webflow site publish failed (site not found). Reconnect Webflow in Settings and sync your site, then publish again.'
+          'CMS item saved, but Webflow site publish failed. Open Webflow Designer → Publish, or reconnect Webflow in Settings (sites:write scope required). CMS URLs stay 404 until the site is published.'
+        embedNeedsReconnect = /403|forbidden|missing_scopes|not authorized/i.test(
+          publishErr instanceof Error ? publishErr.message : String(publishErr),
+        )
       } else {
         throw publishErr
       }
@@ -618,21 +650,26 @@ export async function publishContentProject(
     siteShortName?: string
     collections?: Array<{ id: string; slug?: string }>
   } | null
-  const itemSlug = payload.slug ?? slugify(project.name)
+  const itemSlug = liveCmsSlug
 
-  let collectionSlug = collectionsJson?.collections?.find((c) => c.id === project.cmsCollectionId)?.slug
+  let liveUrl: string | null = null
   try {
-    const collectionDetail = await client.getCollection(project.cmsCollectionId!)
-    collectionSlug = collectionDetail.slug ?? collectionSlug
+    liveUrl = await buildWebflowLiveUrlForItem(client, {
+      siteId: integration.webflowSiteId,
+      siteShortName: collectionsJson?.siteShortName,
+      collectionId: project.cmsCollectionId!,
+      itemSlug,
+    })
   } catch {
-    // Fall back to cached slug from integration sync.
+    const collectionSlug = collectionsJson?.collections?.find(
+      (c) => c.id === project.cmsCollectionId,
+    )?.slug
+    liveUrl = buildWebflowLiveUrl({
+      siteShortName: collectionsJson?.siteShortName,
+      collectionSlug,
+      itemSlug,
+    })
   }
-
-  const liveUrl = buildWebflowLiveUrl({
-    siteShortName: collectionsJson?.siteShortName,
-    collectionSlug,
-    itemSlug,
-  })
 
   if (goLive) {
     const readiness = await verifyWebflowLivePageReadiness({

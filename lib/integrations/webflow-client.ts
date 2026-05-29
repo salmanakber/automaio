@@ -285,11 +285,34 @@ export class WebflowClient {
     return data.items?.[0] ?? null
   }
 
-  async publishSite(siteId: string) {
+  async publishSite(
+    siteId: string,
+    options?: { publishToWebflowSubdomain?: boolean; customDomainIds?: string[] },
+  ) {
     return this.request(`/sites/${siteId}/publish`, {
       method: 'POST',
-      body: JSON.stringify({ publishToWebflowSubdomain: true }),
+      body: JSON.stringify({
+        publishToWebflowSubdomain: options?.publishToWebflowSubdomain ?? true,
+        ...(options?.customDomainIds?.length ? { customDomains: options.customDomainIds } : {}),
+      }),
     })
+  }
+
+  async listCustomDomains(siteId: string) {
+    const data = await this.request<{
+      customDomains?: Array<{ id: string; url?: string }>
+    }>(`/sites/${siteId}/custom_domains`)
+    return data.customDomains ?? []
+  }
+
+  async getPage(pageId: string) {
+    return this.request<{
+      id: string
+      slug?: string
+      title?: string
+      collectionId?: string | null
+      parentId?: string | null
+    }>(`/pages/${pageId}`)
   }
 
   async registerInlineScript(
