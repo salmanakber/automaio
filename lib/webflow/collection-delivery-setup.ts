@@ -1,6 +1,7 @@
 import { getAppBaseUrl } from '@/lib/app-url'
 import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { prisma } from '@/lib/prisma'
+import { isWebflowNotFoundError } from '@/lib/integrations/webflow-client'
 import { isCustomCodePermissionError, isEmbedRecoverableError } from '@/lib/webflow/embed-permissions'
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 import type { CollectionField } from '@/lib/webflow/field-mapper'
@@ -116,7 +117,11 @@ async function appendScriptToTemplatePage(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (isEmbedRecoverableError(message)) {
-      await client.upsertPageCustomCode(pageId, [scriptEntry])
+      try {
+        await client.upsertPageCustomCode(pageId, [scriptEntry])
+      } catch {
+        // Template page may be missing or inaccessible — non-fatal.
+      }
       return
     }
     throw err
@@ -335,37 +340,51 @@ export async function ensureCollectionDeliverySetup(
 
     if (templatePage?.id && (needsSplitScript || needsIframeScript)) {
       if (needsSplitScript) {
-        const split = await registerDeliveryScript(
-          client,
-          integration.webflowSiteId,
-          SPLIT_SCRIPT_NAME,
-          buildSplitInlineBootstrap(appUrl, integration.webflowSiteId),
-        )
-        splitScriptId = split.scriptId
-        await appendScriptToTemplatePage(
-          client,
-          integration.webflowSiteId,
-          templatePage.id,
-          { id: split.scriptId, version: split.version },
-        )
+        try {
+          const split = await registerDeliveryScript(
+            client,
+            integration.webflowSiteId,
+            SPLIT_SCRIPT_NAME,
+            buildSplitInlineBootstrap(appUrl, integration.webflowSiteId),
+          )
+          splitScriptId = split.scriptId
+          await appendScriptToTemplatePage(
+            client,
+            integration.webflowSiteId,
+            templatePage.id,
+            { id: split.scriptId, version: split.version },
+          )
+        } catch (splitErr) {
+          const message = splitErr instanceof Error ? splitErr.message : String(splitErr)
+          if (!isEmbedRecoverableError(message) && !isWebflowNotFoundError(splitErr)) throw splitErr
+        }
       }
 
       if (needsIframeScript) {
-        const iframe = await registerDeliveryScript(
-          client,
-          integration.webflowSiteId,
-          IFRAME_SCRIPT_NAME,
-          buildIframeInlineBootstrap(appUrl, integration.webflowSiteId),
-        )
-        iframeScriptId = iframe.scriptId
-        await appendScriptToTemplatePage(
-          client,
-          integration.webflowSiteId,
-          templatePage.id,
-          { id: iframe.scriptId, version: iframe.version },
-        )
+        try {
+          const iframe = await registerDeliveryScript(
+            client,
+            integration.webflowSiteId,
+            IFRAME_SCRIPT_NAME,
+            buildIframeInlineBootstrap(appUrl, integration.webflowSiteId),
+          )
+          iframeScriptId = iframe.scriptId
+          await appendScriptToTemplatePage(
+            client,
+            integration.webflowSiteId,
+            templatePage.id,
+            { id: iframe.scriptId, version: iframe.version },
+          )
+        } catch (iframeErr) {
+          const message = iframeErr instanceof Error ? iframeErr.message : String(iframeErr)
+          if (!isEmbedRecoverableError(message) && !isWebflowNotFoundError(iframeErr)) {
+            throw iframeErr
+          }
+        }
       }
     }
+
+    const runtimeMeta = runtimeResult.success ? runtimeResult.automaioRuntime : undefined
 
     await prisma.webflowIntegration.update({
       where: { id: integrationId },
@@ -374,8 +393,9 @@ export async function ensureCollectionDeliverySetup(
           ...collectionsJson,
           automaioDelivery: {
             mode: installAll ? 'remote_runtime' : mode,
-            scriptId: runtimeResult.automaioRuntime?.scriptId,
-            scriptVersion: runtimeResult.automaioRuntime?.scriptVersion,
+            scriptId: runtimeMeta?.scriptId ?? collectionsJson.automaioDelivery?.scriptId,
+            scriptVersion:
+              runtimeMeta?.scriptVersion ?? collectionsJson.automaioDelivery?.scriptVersion,
             splitScriptId,
             iframeScriptId,
             configuredAt: new Date().toISOString(),
@@ -413,14 +433,20 @@ export async function ensureCollectionDeliverySetup(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    if (isCustomCodePermissionError(message) || isEmbedRecoverableError(message)) {
+    if (
+      isCustomCodePermissionError(message) ||
+      isEmbedRecoverableError(message) ||
+      isWebflowNotFoundError(err)
+    ) {
       return {
         success: false,
         mode,
         fields,
         collectionTemplateSnippet: snippet,
         needsReconnect: true,
-        error: message,
+        error: isWebflowNotFoundError(err)
+          ? 'Webflow could not find the collection template page or site. Sync Webflow in Settings, confirm the CMS collection still exists, then publish again.'
+          : message,
       }
     }
     throw err

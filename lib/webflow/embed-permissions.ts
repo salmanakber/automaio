@@ -17,10 +17,8 @@ export function isCustomCodePermissionError(message: string) {
 export function isEmbedRecoverableError(message: string) {
   return (
     isCustomCodePermissionError(message) ||
-    (message.includes('404') &&
-      (message.includes('Custom code block not found') ||
-        message.includes('resource_not_found'))) ||
-    message.includes('Custom code block not found')
+    message.includes('Custom code block not found') ||
+    /404|not found|resource_not_found|Requested resource/i.test(message)
   )
 }
 

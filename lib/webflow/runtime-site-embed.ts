@@ -176,7 +176,11 @@ async function applyCustomCodeScripts(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (isEmbedRecoverableError(message)) {
-      await upsert([scriptEntry])
+      try {
+        await upsert([scriptEntry])
+      } catch {
+        // Template page or site custom code unavailable — non-fatal.
+      }
       return
     }
     throw err

@@ -68,8 +68,8 @@ export function formatWebflowValidationError(error: unknown): string {
 
   if (/404|not found|resource_not_found|Requested resource/i.test(msg)) {
     return (
-      'Webflow could not find the CMS collection or item (it may have been deleted). ' +
-      'Re-select your CMS collection in project settings and publish again — Automaio will create a new item.'
+      'Webflow could not find the CMS collection, item, or site (404). ' +
+      'Open Settings → Webflow, sync your connection, re-select the CMS collection on this project, then publish again.'
     )
   }
 

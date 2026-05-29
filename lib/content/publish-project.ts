@@ -417,25 +417,6 @@ export async function publishContentProject(
       name: f.name ?? f.slug,
       type: f.type,
     }))
-
-    const deliveryResult = await ensureCollectionDeliverySetup(integration.id, {
-      collectionId: project.cmsCollectionId,
-      mode: htmlMode,
-      publishSite: false,
-      force: true,
-    })
-
-    collectionFields = deliveryResult.fields.map((f) => ({
-      slug: f.slug,
-      name: f.name ?? f.slug,
-      type: f.type,
-    }))
-
-    if (!deliveryResult.success) {
-      deliverySetupWarning =
-        deliveryResult.error ??
-        'CMS fields configured; reconnect Webflow via OAuth (custom_code) to install the collection template script.'
-    }
   }
 
   let pageSchema
@@ -525,6 +506,29 @@ export async function publishContentProject(
     }
   }
 
+  if (isHtmlPage) {
+    try {
+      const deliveryResult = await ensureCollectionDeliverySetup(integration.id, {
+        collectionId: project.cmsCollectionId,
+        mode: htmlMode as DeliveryMode,
+        publishSite: false,
+        force: false,
+      })
+      collectionFields = deliveryResult.fields.map((f) => ({
+        slug: f.slug,
+        name: f.name ?? f.slug,
+        type: f.type,
+      }))
+      if (!deliveryResult.success) {
+        deliverySetupWarning =
+          deliveryResult.error ??
+          'CMS item saved. Reconnect Webflow via OAuth (custom_code scope) to install the collection template script.'
+      }
+    } catch (deliveryErr) {
+      deliverySetupWarning = formatWebflowValidationError(deliveryErr)
+    }
+  }
+
   const goLive = project.showOnWebsite !== false
   const shouldPublishSite = goLive && (options?.publishSite ?? true)
 
@@ -600,6 +604,10 @@ export async function publishContentProject(
         embedMessage =
           embedMessage ||
           'CMS item saved. Webflow site publish hit rate limit — wait ~60 seconds and republish from Webflow, or publish again with "Trigger Master Webflow Site Publish" enabled.'
+      } else if (isWebflowNotFoundError(publishErr)) {
+        embedMessage =
+          embedMessage ||
+          'CMS item saved, but Webflow site publish failed (site not found). Reconnect Webflow in Settings and sync your site, then publish again.'
       } else {
         throw publishErr
       }

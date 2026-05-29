@@ -242,8 +242,19 @@ export class WebflowClient {
     }
 
     if (goLive) {
-      const created = await this.createLiveCollectionItem(collectionId, fieldData)
-      return { id: created.id, created: true }
+      try {
+        const created = await this.createLiveCollectionItem(collectionId, fieldData)
+        return { id: created.id, created: true }
+      } catch (liveCreateErr) {
+        if (!isWebflowNotFoundError(liveCreateErr)) throw liveCreateErr
+        const created = await this.createCollectionItem(collectionId, fieldData, { isDraft: false })
+        try {
+          await this.publishCollectionItems(collectionId, [created.id])
+        } catch (pubErr) {
+          if (!isWebflowPublishNoopError(pubErr)) throw pubErr
+        }
+        return { id: created.id, created: true }
+      }
     }
 
     const created = await this.createCollectionItem(collectionId, fieldData, { isDraft: true })
