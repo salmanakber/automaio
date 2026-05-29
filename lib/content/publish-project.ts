@@ -487,11 +487,13 @@ export async function publishContentProject(
     await upsertCms(fieldData)
   } catch (err) {
     const message = formatWebflowValidationError(err)
-    if (
+    const shouldRetryFields =
       isHtmlPage &&
-      /missing these fields/i.test(message) &&
-      project.cmsCollectionId
-    ) {
+      project.cmsCollectionId &&
+      (/missing these fields/i.test(message) ||
+        /Field not described|does not match schema|validation_error/i.test(message))
+
+    if (shouldRetryFields) {
       const refreshed = await ensureCollectionFieldsForMode(
         integration.id,
         project.cmsCollectionId,

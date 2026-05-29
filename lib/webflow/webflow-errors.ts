@@ -73,6 +73,16 @@ export function formatWebflowValidationError(error: unknown): string {
     )
   }
 
+  if (/400|validation_error|does not match schema/i.test(msg)) {
+    const detail = parsed?.details?.map(formatDetailLine).join('; ')
+    if (detail) return `Webflow rejected the CMS data — ${detail}`
+    if (parsed?.message) return parsed.message
+    return (
+      'Webflow rejected the CMS data (400). Check required collection fields (Title, Slug) and try again. ' +
+      'If using split mode, sync your collection in Settings → Webflow.'
+    )
+  }
+
   return msg.replace(/^Webflow API \d+:\s*/, 'Webflow error: ')
 }
 

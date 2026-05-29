@@ -4,6 +4,20 @@ export function isWebflowNotFoundError(error: unknown): boolean {
   return /404|not found|resource_not_found|Requested resource/i.test(msg)
 }
 
+/** Publish step can 400 when the item is already live — safe to ignore after a successful update. */
+export function isWebflowPublishNoopError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return (
+    /400|already published|already live|nothing to publish|invalid item|cannot publish/i.test(msg) ||
+    isWebflowNotFoundError(error)
+  )
+}
+
+export function isWebflowValidationError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /400|validation_error|does not match schema|invalid value|Field not described/i.test(msg)
+}
+
 /**
  * Webflow Data API v2 client for CMS operations (App Marketplace SaaS pattern).
  */
@@ -129,7 +143,7 @@ export class WebflowClient {
     options?: { isDraft?: boolean },
   ) {
     return this.request<{ id: string; fieldData: Record<string, unknown> }>(
-      `/collections/${collectionId}/items`,
+      `/collections/${collectionId}/items?skipInvalidFiles=true`,
       {
         method: 'POST',
         body: JSON.stringify({
@@ -144,7 +158,7 @@ export class WebflowClient {
   /** Create + immediately publish a CMS item to the live site. */
   async createLiveCollectionItem(collectionId: string, fieldData: Record<string, unknown>) {
     return this.request<{ id: string; fieldData?: Record<string, unknown> }>(
-      `/collections/${collectionId}/items/live`,
+      `/collections/${collectionId}/items/live?skipInvalidFiles=true`,
       {
         method: 'POST',
         body: JSON.stringify({
@@ -220,7 +234,7 @@ export class WebflowClient {
           try {
             await this.publishCollectionItems(collectionId, [existingId])
           } catch (pubErr) {
-            if (!isWebflowNotFoundError(pubErr)) throw pubErr
+            if (!isWebflowPublishNoopError(pubErr)) throw pubErr
           }
         }
         return { id: existingId, created: false }

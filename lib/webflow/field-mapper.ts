@@ -388,15 +388,9 @@ export function buildWebflowFieldPlan(
     if (cssSlug && split.cssContent) result[cssSlug] = split.cssContent
     if (jsSlug && split.jsContent) result[jsSlug] = split.jsContent
 
-    assign('html', split.htmlContent)
-    assign('css', split.cssContent)
-    assign('js', split.jsContent)
-    assign('htmlContent', split.htmlContent)
-    assign('cssContent', split.cssContent)
-    assign('jsContent', split.jsContent)
-    assign('html-content', split.htmlContent)
-    assign('css-content', split.cssContent)
-    assign('js-content', split.jsContent)
+    if (payload.automaioId) {
+      assign('page-id', payload.automaioId)
+    }
     assign('preview-image', payload.previewImage)
   } else if (useIframeCms && payload.automaioId) {
     const appUrl = getAppBaseUrl()
@@ -494,11 +488,35 @@ export function sanitizeFieldDataForCollection(
   collectionFields: CollectionField[],
 ): Record<string, unknown> {
   const allowed = new Set(collectionFields.map((f) => f.slug))
+  const typeBySlug = new Map(collectionFields.map((f) => [f.slug, f.type]))
   const out: Record<string, unknown> = {}
+  const plainTextMax = 250_000
 
   for (const [key, value] of Object.entries(fieldData)) {
     if (!allowed.has(key)) continue
     if (value === undefined || value === null || value === '') continue
+    if (value === ' ') continue
+
+    const fieldType = typeBySlug.get(key)
+
+    if (fieldType === 'Image') {
+      if (typeof value === 'string') {
+        const url = value.trim()
+        if (!/^https?:\/\//i.test(url)) continue
+        out[key] = { url, alt: null }
+        continue
+      }
+      if (typeof value === 'object' && value !== null && 'url' in (value as Record<string, unknown>)) {
+        out[key] = value
+      }
+      continue
+    }
+
+    if (typeof value === 'string' && value.length > plainTextMax) {
+      out[key] = value.slice(0, plainTextMax)
+      continue
+    }
+
     out[key] = value
   }
 
