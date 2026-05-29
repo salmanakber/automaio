@@ -54,9 +54,9 @@ export function TemplateShellInstaller() {
       <div>
         <p className="text-xs font-semibold text-amber-200">Collection template shell required</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-          Blank collection templates return 404 for CMS item URLs. Webflow needs at least one element
-          on the canvas — custom code alone is not enough. Install the shell once, then publish the
-          site in Webflow Designer.
+          Blank collection templates return 404 for CMS item URLs. Install the SEO shell once — it uses
+          Webflow {'{{wf}}'} bindings so split HTML/CSS is in the page source (good for SEO). Then publish
+          the site in Webflow Designer.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

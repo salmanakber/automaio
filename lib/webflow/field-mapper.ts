@@ -253,11 +253,11 @@ export function previewFieldMapping(
   if (plan.htmlMode === 'split_plain_text') {
     rows.push({
       logicalKey: 'collection-template',
-      label: 'Template custom code',
+      label: 'Template canvas embed',
       webflowSlug: 'config-type: split_method',
-      value: 'Split renderer auto-installed on collection template',
+      value: 'Server-side {{wf}} bindings — HTML/CSS in page source for SEO',
       included: true,
-      note: 'HTML/CSS/JS injected via registered inline script — no manual Designer paste',
+      note: 'Install template shell in Designer once; republish updates CMS fields only',
     })
   }
 
@@ -388,9 +388,6 @@ export function buildWebflowFieldPlan(
     if (cssSlug && split.cssContent) result[cssSlug] = split.cssContent
     if (jsSlug && split.jsContent) result[jsSlug] = split.jsContent
 
-    if (payload.automaioId) {
-      assign('page-id', payload.automaioId)
-    }
     assign('preview-image', payload.previewImage)
   } else if (useIframeCms && payload.automaioId) {
     const appUrl = getAppBaseUrl()

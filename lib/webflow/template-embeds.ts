@@ -17,7 +17,8 @@ function wfPlainText(path: string): string {
 
 /**
  * Legacy split method — Webflow native CMS bindings (config-type: split_method).
- * Safe rendering: CSS in <style>, HTML in wrapper. JS field optional (policy-dependent).
+ * Server-side rendering: HTML/CSS appear in the initial page HTML (SEO-friendly).
+ * JS field is optional and rendered in a script tag when present.
  */
 export function buildWebflowSplitMethodTemplateEmbed(): string {
   return `<!-- Automaio Legacy Split (config-type: split_method) — bind Plain Text: htmlContent, cssContent, jsContent -->

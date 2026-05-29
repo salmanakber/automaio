@@ -1,12 +1,18 @@
 import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 import type { CollectionField } from '@/lib/webflow/field-mapper'
 import {
+  RUNTIME_FIELD_SLUGS,
+  SPLIT_FIELD_SLUGS,
+  IFRAME_FIELD_SLUGS,
   resolveRuntimeFieldSlug,
   resolveSplitFieldSlug,
   resolveIframeFieldSlug,
 } from '@/lib/webflow/cms-collection-schema'
 
-const CLEARED = ' '
+/** Webflow accepts a single space to clear optional Plain Text fields. */
+export const CMS_FIELD_CLEAR_VALUE = ' '
+
+const CLEARED = CMS_FIELD_CLEAR_VALUE
 
 function richTextBodySlugs(fields: CollectionField[]): string[] {
   const slugs = new Set<string>()
@@ -20,10 +26,20 @@ function richTextBodySlugs(fields: CollectionField[]): string[] {
   return [...slugs]
 }
 
+function addAllAliases(
+  slugsToClear: Set<string>,
+  aliases: readonly string[],
+  collectionSlugs: Set<string>,
+) {
+  for (const slug of aliases) {
+    if (collectionSlugs.has(slug)) slugsToClear.add(slug)
+  }
+}
+
 /**
  * When switching HTML delivery mode, clear CMS fields from other modes
  * so Webflow does not keep serving stale runtime IDs, split HTML, or iframe URLs.
- * Only touches slugs that exist on the collection schema.
+ * Always overwrites stale values — important when republishing the same CMS item.
  */
 export function applyHtmlModeFieldCleanup(
   fieldData: Record<string, unknown>,
@@ -39,21 +55,21 @@ export function applyHtmlModeFieldCleanup(
   }
 
   const addRuntimeSlugs = () => {
-    for (const key of ['pageId', 'runtimeConfig', 'status'] as const) {
-      addIfPresent(resolveRuntimeFieldSlug(key, collectionFields))
-    }
+    addAllAliases(slugsToClear, RUNTIME_FIELD_SLUGS.pageId, collectionSlugs)
+    addAllAliases(slugsToClear, RUNTIME_FIELD_SLUGS.runtimeConfig, collectionSlugs)
+    addIfPresent(resolveRuntimeFieldSlug('status', collectionFields))
   }
 
   const addSplitSlugs = () => {
-    for (const key of ['html', 'css', 'js'] as const) {
-      addIfPresent(resolveSplitFieldSlug(key, collectionFields))
-    }
+    addAllAliases(slugsToClear, SPLIT_FIELD_SLUGS.html, collectionSlugs)
+    addAllAliases(slugsToClear, SPLIT_FIELD_SLUGS.css, collectionSlugs)
+    addAllAliases(slugsToClear, SPLIT_FIELD_SLUGS.js, collectionSlugs)
   }
 
   const addIframeSlugs = () => {
-    addIfPresent(resolveIframeFieldSlug('iframeUrl', collectionFields))
-    addIfPresent(resolveIframeFieldSlug('iframeHeight', collectionFields))
-    addIfPresent(resolveIframeFieldSlug('iframeSandbox', collectionFields))
+    addAllAliases(slugsToClear, IFRAME_FIELD_SLUGS.iframeUrl, collectionSlugs)
+    addAllAliases(slugsToClear, IFRAME_FIELD_SLUGS.iframeHeight, collectionSlugs)
+    addAllAliases(slugsToClear, IFRAME_FIELD_SLUGS.iframeSandbox, collectionSlugs)
   }
 
   const addRichTextSlugs = () => {
@@ -77,10 +93,20 @@ export function applyHtmlModeFieldCleanup(
   }
 
   for (const slug of slugsToClear) {
-    if (!(slug in result)) {
-      result[slug] = CLEARED
-    }
+    result[slug] = CLEARED
   }
 
   return result
+}
+
+/** Re-apply intentional field clears removed by sanitizeFieldDataForCollection. */
+export function preserveClearsAfterSanitize(
+  sanitized: Record<string, unknown>,
+  beforeSanitize: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...sanitized }
+  for (const [key, value] of Object.entries(beforeSanitize)) {
+    if (value === CMS_FIELD_CLEAR_VALUE) out[key] = CMS_FIELD_CLEAR_VALUE
+  }
+  return out
 }

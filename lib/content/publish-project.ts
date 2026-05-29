@@ -43,7 +43,7 @@ import {
 import type { DeliveryMode } from '@/lib/webflow/cms-collection-schema'
 import { DEFAULT_PUBLISH_DELIVERY_MODE } from '@/lib/webflow/marketplace-policy'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
-import { applyHtmlModeFieldCleanup } from '@/lib/webflow/html-mode-field-cleanup'
+import { applyHtmlModeFieldCleanup, preserveClearsAfterSanitize } from '@/lib/webflow/html-mode-field-cleanup'
 import {
   publishWebflowSiteWithRetry,
   isWebflowRateLimitError,
@@ -440,9 +440,10 @@ export async function publishContentProject(
     project.cmsCollectionId,
     { htmlMode: isHtmlPage ? htmlMode : undefined, assembledLanding, pageSchema },
   )
-  let fieldData = sanitizeFieldDataForCollection(
-    applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields),
-    collectionFields,
+  const cleanedFieldData = applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields)
+  let fieldData = preserveClearsAfterSanitize(
+    sanitizeFieldDataForCollection(cleanedFieldData, collectionFields),
+    cleanedFieldData,
   )
 
   const client = new WebflowClient(integration.webflowApiKey)
@@ -498,9 +499,10 @@ export async function publishContentProject(
         project.cmsCollectionId,
         { htmlMode: plan.htmlMode, assembledLanding, pageSchema },
       )
-      fieldData = sanitizeFieldDataForCollection(
-        applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields),
-        collectionFields,
+      const retriedCleaned = applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields)
+      fieldData = preserveClearsAfterSanitize(
+        sanitizeFieldDataForCollection(retriedCleaned, collectionFields),
+        retriedCleaned,
       )
       await upsertCms(fieldData)
     } else {
@@ -604,11 +606,13 @@ export async function publishContentProject(
 
   if (isHtmlPage) {
     if (usedRemoteRuntime) {
-      embedMessage =
-        'Published with remote runtime. CMS fields and collection template custom code configured automatically.'
+      embedMessage = htmlModeChanged
+        ? 'Switched to remote runtime. CMS config-type and page-id updated; stale split HTML/CSS/JS fields cleared.'
+        : 'Published with remote runtime. CMS fields and collection template custom code configured automatically.'
     } else if (usedSplitPlainText) {
-      embedMessage =
-        'Published with split HTML/CSS/JS. CMS fields (html, css, js) filled and split template script installed. Live page loads content from CMS or Automaio API by slug.'
+      embedMessage = htmlModeChanged
+        ? 'Switched to split delivery. CMS config-type, htmlContent, cssContent, and jsContent updated; stale runtime fields cleared. HTML/CSS render server-side for SEO.'
+        : 'Published with split HTML/CSS/JS. Content is stored in CMS and rendered server-side via Webflow {{wf}} bindings (SEO-friendly). Republish updates CMS fields automatically.'
     } else if (usedIframeEmbed) {
       embedMessage =
         'Published with iframe embed. iframe-url field set and iframe template script installed. Live page loads the hosted Automaio page.'

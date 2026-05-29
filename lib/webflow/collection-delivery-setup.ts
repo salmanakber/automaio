@@ -23,6 +23,7 @@ import {
   TEMPLATE_SHELL_SCRIPT_NAME,
   TEMPLATE_SHELL_VERSION,
   buildCollectionTemplateBodySnippet,
+  buildSeoCollectionTemplateCanvas,
 } from '@/lib/webflow/collection-template-shell'
 import {
   buildUnifiedDeliveryBootstrap,
@@ -444,16 +445,18 @@ export async function ensureCollectionDeliverySetup(
         shellScriptId = shell.scriptId
         templateScripts.push({ id: shell.scriptId, version: shell.version, location: 'header' })
 
-        const unified = await registerDeliveryScript(
-          client,
-          integration.webflowSiteId,
-          UNIFIED_DELIVERY_SCRIPT_NAME,
-          buildUnifiedDeliveryBootstrap(appUrl, integration.webflowSiteId),
-          UNIFIED_DELIVERY_VERSION,
-          { forceRefresh: shouldReconfigure },
-        )
-        unifiedScriptId = unified.scriptId
-        templateScripts.push({ id: unified.scriptId, version: unified.version, location: 'footer' })
+        if (mode === 'remote_runtime' || installAll) {
+          const unified = await registerDeliveryScript(
+            client,
+            integration.webflowSiteId,
+            UNIFIED_DELIVERY_SCRIPT_NAME,
+            buildUnifiedDeliveryBootstrap(appUrl, integration.webflowSiteId),
+            UNIFIED_DELIVERY_VERSION,
+            { forceRefresh: shouldReconfigure },
+          )
+          unifiedScriptId = unified.scriptId
+          templateScripts.push({ id: unified.scriptId, version: unified.version, location: 'footer' })
+        }
       } catch (shellErr) {
         const message = shellErr instanceof Error ? shellErr.message : String(shellErr)
         if (!isEmbedRecoverableError(message) && !isWebflowNotFoundError(shellErr)) throw shellErr
@@ -520,7 +523,9 @@ export async function ensureCollectionDeliverySetup(
 
     const missingTemplatePage = !templatePage?.id
     const blankTemplateWarning = templatePage?.id
-      ? 'Webflow collection templates must have at least one element on the canvas or CMS item URLs may 404. Open the Automaio Designer panel → Install template shell, or add a Div/Embed with the shell snippet, then publish the site.'
+      ? mode === 'split_plain_text'
+        ? 'Split delivery needs the SEO template shell on the canvas ({{wf}} bindings). Open Automaio Designer → Install template shell, then publish the site in Webflow.'
+        : 'Webflow collection templates must have at least one element on the canvas or CMS item URLs may 404. Open the Automaio Designer panel → Install template shell, or add a Div/Embed with the shell snippet, then publish the site.'
       : undefined
     const templatePageWarning = missingTemplatePage
       ? 'No Collection Template page found in Webflow for this collection. Open Webflow Designer → Pages → CMS Collection pages, open the template for this collection, then publish the site so item URLs work.'
@@ -531,7 +536,10 @@ export async function ensureCollectionDeliverySetup(
       mode,
       fields,
       collectionTemplateSnippet: snippet,
-      collectionTemplateBodySnippet: buildCollectionTemplateBodySnippet(),
+      collectionTemplateBodySnippet:
+        mode === 'split_plain_text'
+          ? buildSeoCollectionTemplateCanvas()
+          : buildCollectionTemplateBodySnippet(),
       needsDesignerShell: Boolean(templatePage?.id),
       templateAutoConfigured,
       error: templatePageWarning,
