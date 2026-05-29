@@ -1,12 +1,21 @@
 /**
- * Webflow Collection Template snippets — paste in Designer or applied via custom code bootstrap.
- * Legacy split uses native {{wf}} bindings for safe server-side rendering (config-type: split_method).
+ * Webflow Collection Template snippets — paste in Designer or applied via Designer Extension.
+ * Direct render uses server-side {{wf}} bindings on generated-html / generated-css CMS fields.
  */
 
+import { buildSplitRenderEmbedMarkup } from '@/lib/webflow/publishing/embed-template'
+import {
+  GENERATED_CSS_SLUG,
+  GENERATED_HTML_SLUG,
+} from '@/lib/webflow/publishing/types'
+
 export const SPLIT_CMS_FIELD_PATHS = {
-  html: 'htmlContent',
-  css: 'cssContent',
-  js: 'jsContent',
+  html: GENERATED_HTML_SLUG,
+  css: GENERATED_CSS_SLUG,
+  /** Legacy aliases still supported in field mapper. */
+  legacyHtml: 'htmlContent',
+  legacyCss: 'cssContent',
+  legacyJs: 'jsContent',
 } as const
 
 export const IFRAME_CMS_FIELD_PATH = 'iframe-url'
@@ -15,26 +24,12 @@ function wfPlainText(path: string): string {
   return `{{wf {"path":"${path}","type":"PlainText"} }}`
 }
 
-/**
- * Legacy split method — Webflow native CMS bindings (config-type: split_method).
- * Server-side rendering: HTML/CSS appear in the initial page HTML (SEO-friendly).
- * JS field is optional and rendered in a script tag when present.
- */
+/** SEO direct render — Webflow server-side CMS bindings (config-type: split_method). */
 export function buildWebflowSplitMethodTemplateEmbed(): string {
-  return `<!-- Automaio Legacy Split (config-type: split_method) — bind Plain Text: htmlContent, cssContent, jsContent -->
-<div class="ai-wrapper">
-  <style>
-${wfPlainText(SPLIT_CMS_FIELD_PATHS.css)}
-  </style>
-
-${wfPlainText(SPLIT_CMS_FIELD_PATHS.html)}
-</div>
-<script>
-${wfPlainText(SPLIT_CMS_FIELD_PATHS.js)}
-</script>`
+  return buildSplitRenderEmbedMarkup()
 }
 
-/** Collection template — split HTML/CSS/JS via JS bootstrap (API fallback). */
+/** Collection template — split HTML/CSS via server-side embed. */
 export function buildWebflowSplitCollectionEmbed(): string {
   return buildWebflowSplitMethodTemplateEmbed()
 }
@@ -68,24 +63,23 @@ export function buildWebflowIframeCollectionEmbed(): string {
 <\/script>`
 }
 
-/** Registered inline script — split html / css / js from CMS (fallback when {{wf}} bindings absent). */
+/** Registered inline script — legacy DOM fallback when canvas embed is missing. */
 export function buildSplitInlineBootstrap(): string {
   return `(function(){
 if(window.__automaioSplitBoot)return;window.__automaioSplitBoot=1;
 function readConfigType(){var el=document.querySelector('[data-wf-field="config-type"],#am-config-type,[data-am-cms="config-type"]');var t=el?(el.textContent||'').trim().toLowerCase():'';return t;}
 if(readConfigType()==='remote_runtime'||readConfigType()==='iframe_embed')return;
+if(document.querySelector('[data-automaio-render-embed]'))return;
 function read(slugs){for(var i=0;i<slugs.length;i++){var s=slugs[i];
 var el=document.getElementById('am-'+s)||document.querySelector('[data-am-cms="'+s+'"]')||document.querySelector('[data-wf-field="'+s+'"]');
 if(el){var t=(el.textContent||'').trim();if(t&&t.indexOf('{{')===-1&&t.length>0)return t;}}return '';}
-var html=read(['htmlContent','html-content','html_content','html']);
-var css=read(['cssContent','css-content','css_content','css']);
-var js=read(['jsContent','js-content','js_content','js']);
-if(!html&&!css&&!js)return;
-var wrapper=document.querySelector('.ai-wrapper[data-automaio-split]');
-if(!wrapper){wrapper=document.createElement('div');wrapper.className='ai-wrapper';wrapper.setAttribute('data-automaio-split','1');(document.querySelector('main')||document.body).appendChild(wrapper);}
+var html=read(['generated-html','generated_html','htmlContent','html-content','html']);
+var css=read(['generated-css','generated_css','cssContent','css-content','css']);
+if(!html&&!css)return;
+var wrapper=document.querySelector('.automaio-render-root')||document.querySelector('.ai-wrapper');
+if(!wrapper){wrapper=document.createElement('div');wrapper.className='automaio-render-root';document.body.appendChild(wrapper);}
 if(css){var st=wrapper.querySelector('style[data-automaio-css]');if(!st){st=document.createElement('style');st.setAttribute('data-automaio-css','1');wrapper.insertBefore(st,wrapper.firstChild);}st.textContent=css;}
 if(html){var host=wrapper.querySelector('[data-automaio-html]');if(!host){host=document.createElement('div');host.setAttribute('data-automaio-html','1');wrapper.appendChild(host);}host.innerHTML=html;}
-if(js){var sc=document.createElement('script');sc.textContent=js;wrapper.appendChild(sc);}
 })();`
 }
 

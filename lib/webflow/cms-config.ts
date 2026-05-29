@@ -24,6 +24,8 @@ export const DEFAULT_CMS_FIELD_MAPPING = {
   'page-id': 'page-id',
   'runtime-config': 'runtime-config',
   'config-type': 'config-type',
+  'generated-html': 'generated-html',
+  'generated-css': 'generated-css',
   'template-config': 'template-config',
   industry: 'industry',
   status: 'status',

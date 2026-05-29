@@ -32,6 +32,8 @@ export default function WebflowDesignerPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
   const [webflowSiteId, setWebflowSiteId] = useState<string | null>(null)
+  const [webflowIntegrationId, setWebflowIntegrationId] = useState<string | null>(null)
+  const [templatesCollectionId, setTemplatesCollectionId] = useState<string | null>(null)
   const [setupStatus, setSetupStatus] = useState<OrgSetupStatus | null>(null)
   const [justInstalled, setJustInstalled] = useState(false)
   const [signedInBanner, setSignedInBanner] = useState(false)
@@ -92,6 +94,8 @@ export default function WebflowDesignerPage() {
                 .then((data) => {
                   const list = data.integrations ?? []
                   const first = Array.isArray(list) ? list[0] : null
+                  if (first?.id) setWebflowIntegrationId(first.id)
+                  if (first?.templatesCollectionId) setTemplatesCollectionId(first.templatesCollectionId)
                   if (first?.webflowSiteId && !querySiteId) {
                     setWebflowSiteId(first.webflowSiteId)
                   }
@@ -152,7 +156,11 @@ export default function WebflowDesignerPage() {
 
           {authenticated ? (
             <>
-              <TemplateShellInstaller />
+              <TemplateShellInstaller
+                integrationId={webflowIntegrationId}
+                collectionId={templatesCollectionId}
+                autoSync
+              />
               <DesignerScreensPanel siteId={webflowSiteId} />
 
               {setupStatus && !setupStatus.isFullySetup && (

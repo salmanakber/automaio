@@ -41,6 +41,7 @@ import {
   DEFAULT_PUBLISH_DELIVERY_MODE,
   DELIVERY_MODE_DESCRIPTIONS,
 } from '@/lib/webflow/marketplace-policy'
+import { WEBFLOW_DESIGNER_OPEN_STEPS } from '@/lib/webflow/designer-open-guide'
 
 type PublishDialogProps = {
   open: boolean
@@ -64,6 +65,9 @@ type PublishResult = {
   embedNeedsReconnect?: boolean
   runtimeAutoConfigured?: boolean
   usedRemoteRuntime?: boolean
+  usedSplitPlainText?: boolean
+  needsRenderEmbedInstall?: boolean
+  designerSetupMessage?: string
 }
 
 type PublishPreview = {
@@ -277,20 +281,28 @@ export function PublishDialog({
           embedNeedsReconnect: true,
           runtimeAutoConfigured: false,
           usedRemoteRuntime: Boolean(data.usedRemoteRuntime),
+          usedSplitPlainText: Boolean(data.usedSplitPlainText),
+          needsRenderEmbedInstall: Boolean(data.needsRenderEmbedInstall),
+          designerSetupMessage: data.designerSetupMessage,
         })
       } else {
         setResult({
-          type: 'success',
-          message: data.embedMessage ?? 'Successfully published to Webflow CMS.',
+          type: data.needsRenderEmbedInstall ? 'warning' : 'success',
+          message: data.needsRenderEmbedInstall
+            ? `${data.embedMessage ?? 'Published to CMS.'} ${data.designerSetupMessage ?? ''}`.trim()
+            : data.embedMessage ?? 'Successfully published to Webflow CMS.',
           liveUrl: data.liveUrl,
           previewUrl: data.previewUrl,
           embedSnippet: data.embedSnippet ?? data.projectEmbedSnippet,
           collectionTemplateSnippet:
-            data.usedRemoteRuntime && (data.runtimeAutoConfigured || data.embedAutoConfigured)
+            data.needsRenderEmbedInstall || (data.usedRemoteRuntime && (data.runtimeAutoConfigured || data.embedAutoConfigured))
               ? undefined
               : data.collectionTemplateSnippet,
           runtimeAutoConfigured: Boolean(data.runtimeAutoConfigured ?? data.embedAutoConfigured),
           usedRemoteRuntime: Boolean(data.usedRemoteRuntime),
+          usedSplitPlainText: Boolean(data.usedSplitPlainText),
+          needsRenderEmbedInstall: Boolean(data.needsRenderEmbedInstall),
+          designerSetupMessage: data.designerSetupMessage,
         })
       }
       onPublished?.({ liveUrl: data.liveUrl, previewUrl: data.previewUrl })
@@ -488,7 +500,10 @@ export function PublishDialog({
                   {(publishHtmlMode === 'split_plain_text' || preview?.usesSplitPlainText) && (
                     <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-blue-400/90 bg-blue-500/[0.02] border border-blue-500/10">
                       <CheckCircle2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                      <span>Will publish html, css, js to CMS and install the split template script.</span>
+                      <span>
+                        Saves generated-html / generated-css to CMS. Server-side SEO — no JS. One-time
+                        Designer embed, then CMS-only updates.
+                      </span>
                     </div>
                   )}
                   {(publishHtmlMode === 'iframe_embed' || preview?.usesIframeEmbed) && (
@@ -611,6 +626,20 @@ export function PublishDialog({
                   )}
                   <div className="space-y-2.5 min-w-0 flex-1">
                     <p className="font-semibold text-zinc-200">{result.message}</p>
+                    {result.needsRenderEmbedInstall && (
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                        <p className="text-[11px] font-semibold text-amber-200">One-time Designer setup</p>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                          {result.designerSetupMessage ??
+                            'Open Webflow Designer with Automaio on your CMS collection template. The SEO embed installs automatically — no copy/paste.'}
+                        </p>
+                        <ol className="text-[10px] text-zinc-500 list-decimal list-inside space-y-0.5">
+                          {WEBFLOW_DESIGNER_OPEN_STEPS.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
                     {result.embedNeedsReconnect && (
                       <p className="text-[11px] text-zinc-400">
                         Authorize Webflow API connection with{' '}
@@ -640,7 +669,9 @@ export function PublishDialog({
                   <ProjectUrlsCard projectId={projectId} liveUrl={result.liveUrl} embedSnippet={result.embedSnippet} compact />
                 )}
 
-                {(result.type === 'success' || result.type === 'warning') && result.collectionTemplateSnippet && (
+                {(result.type === 'success' || result.type === 'warning') &&
+                  result.collectionTemplateSnippet &&
+                  !result.needsRenderEmbedInstall && (
                   <div className="rounded-xl p-4 bg-zinc-950 border border-zinc-900 space-y-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                       Manual Fallback Embed

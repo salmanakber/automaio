@@ -1,22 +1,26 @@
 /**
- * Webflow Designer bridge — installs SEO canvas shell on collection templates.
- * Webflow returns 404 for CMS item URLs when the collection template canvas is empty.
+ * Webflow Designer bridge — idempotent render embed install for direct HTML/CSS mode.
  */
 ;(function () {
-  var SEO_CANVAS_SNIPPET =
-    '<!-- Automaio collection template shell -->\n' +
-    '<main class="automaio-cms-shell" style="min-height:1px;width:100%">\n' +
-    '  <div id="ai-page-root" data-automaio-root="true" style="min-height:1px"></div>\n' +
-    '  <div class="ai-wrapper">\n' +
-    '    <style>\n' +
-    '{{wf {"path":"cssContent","type":"PlainText"} }}\n' +
-    '    </style>\n' +
-    '{{wf {"path":"htmlContent","type":"PlainText"} }}\n' +
-    '  </div>\n' +
-    '</main>\n' +
-    '<script>\n' +
-    '{{wf {"path":"jsContent","type":"PlainText"} }}\n' +
-    '</script>'
+  var RENDER_MARKER = 'data-automaio-render-embed'
+  var RENDER_VERSION = 'v1'
+
+  var EMBED_MARKUP =
+    '<!-- Automaio direct render (' +
+    RENDER_MARKER +
+    '="' +
+    RENDER_VERSION +
+    '") -->\n' +
+    '<div class="automaio-render-root" ' +
+    RENDER_MARKER +
+    '="' +
+    RENDER_VERSION +
+    '">\n' +
+    '  <style>\n' +
+    '{{wf {"path":"generated-css","type":"PlainText"} }}\n' +
+    '  </style>\n\n' +
+    '{{wf {"path":"generated-html","type":"PlainText"} }}\n' +
+    '</div>'
 
   function notify(message, type) {
     try {
@@ -35,12 +39,10 @@
       }
     } catch (e) {}
 
-    var selected = null
     try {
-      selected = await webflow.getSelectedElement()
+      var selected = await webflow.getSelectedElement()
+      if (selected && selected.children) return selected
     } catch (e) {}
-
-    if (selected && selected.children) return selected
 
     try {
       var all = await webflow.getAllElements()
@@ -50,10 +52,6 @@
           if (!el || !el.children) continue
           try {
             if (el.type === 'Body') return el
-          } catch (e) {}
-          try {
-            var tag = el.getTag && (await el.getTag())
-            if (tag && String(tag).toLowerCase() === 'body') return el
           } catch (e) {}
         }
         for (var j = 0; j < all.length; j++) {
@@ -65,19 +63,43 @@
     return null
   }
 
-  async function appendSeoEmbed(target) {
+  async function embedContainsMarker(element) {
+    try {
+      if (element.getCustomAttribute && (await element.getCustomAttribute(RENDER_MARKER))) return true
+    } catch (e) {}
+    try {
+      if (element.getAttribute && (await element.getAttribute(RENDER_MARKER))) return true
+    } catch (e) {}
+    try {
+      var html = element.getInnerHTML && (await element.getInnerHTML())
+      if (html && html.indexOf(RENDER_MARKER) !== -1) return true
+    } catch (e) {}
+    try {
+      var text = element.getTextContent && (await element.getTextContent())
+      if (text && text.indexOf(RENDER_MARKER) !== -1) return true
+    } catch (e) {}
+    return false
+  }
+
+  async function findExistingRenderEmbed() {
+    try {
+      var all = await webflow.getAllElements()
+      for (var i = 0; i < (all || []).length; i++) {
+        if (await embedContainsMarker(all[i])) return all[i]
+      }
+    } catch (e) {}
+    return null
+  }
+
+  async function appendRenderEmbed(target) {
     var preset = webflow.elementPresets
 
-    if (preset && preset.Embed) {
+    if (preset && preset.Embed && webflow.elementBuilder) {
       try {
         var embed = webflow.elementBuilder(preset.Embed)
-        if (embed.setInnerHTML) {
-          await embed.setInnerHTML(SEO_CANVAS_SNIPPET)
-        } else if (embed.setHTML) {
-          await embed.setHTML(SEO_CANVAS_SNIPPET)
-        } else if (embed.setTextContent) {
-          await embed.setTextContent(SEO_CANVAS_SNIPPET)
-        }
+        if (embed.setInnerHTML) await embed.setInnerHTML(EMBED_MARKUP)
+        else if (embed.setHTML) await embed.setHTML(EMBED_MARKUP)
+        else if (embed.setTextContent) await embed.setTextContent(EMBED_MARKUP)
         await target.append(embed)
         return true
       } catch (e) {}
@@ -85,22 +107,12 @@
 
     if (preset && preset.DOM && webflow.elementBuilder) {
       try {
-        var main = webflow.elementBuilder(preset.DOM)
-        main.setTag('main')
-        main.setAttribute('class', 'automaio-cms-shell')
-        main.setAttribute('style', 'min-height:1px;width:100%')
-
-        var root = main.append(preset.DOM)
-        root.setTag('div')
-        root.setAttribute('id', 'ai-page-root')
-        root.setAttribute('data-automaio-root', 'true')
-
-        var wrap = main.append(preset.DOM)
+        var wrap = webflow.elementBuilder(preset.DOM)
         wrap.setTag('div')
-        wrap.setAttribute('class', 'ai-wrapper')
-        wrap.setAttribute('data-automaio-split', '1')
-
-        await target.append(main)
+        wrap.setAttribute('class', 'automaio-render-root')
+        wrap.setAttribute(RENDER_MARKER, RENDER_VERSION)
+        await target.append(wrap)
+        notify('Added render container — paste SEO embed from Automaio panel if bindings are missing.', 'Info')
         return true
       } catch (e) {}
     }
@@ -112,76 +124,97 @@
       } catch (e) {}
     }
 
-    if (preset && preset.DivBlock) {
-      try {
-        await target.append(preset.DivBlock)
-        return true
-      } catch (e) {}
-    }
-
     return false
   }
 
-  async function installTemplateShell() {
+  async function ensureRenderEmbed(options) {
     if (typeof webflow === 'undefined' || !webflow.ready) {
-      notify('Open Automaio inside Webflow Designer (Apps panel), not in a browser tab.', 'Error')
-      return { ok: false, error: 'webflow API unavailable' }
+      return { ok: false, error: 'webflow API unavailable', alreadyInstalled: false }
     }
 
     return webflow.ready().then(async function () {
       try {
+        var existing = await findExistingRenderEmbed()
+        if (existing) {
+          return { ok: true, alreadyInstalled: true, created: false }
+        }
+
         var page = await webflow.getCurrentPage()
         if (!page) {
-          notify('Open your CMS collection template page first (Pages → CMS Collection pages).', 'Error')
-          return { ok: false, error: 'no current page' }
+          return { ok: false, error: 'no current page', alreadyInstalled: false }
         }
 
         var target = await findAppendTarget()
         if (!target) {
-          notify('Click the Body element in the Navigator, then click Install template shell again.', 'Error')
-          return { ok: false, error: 'no append target' }
+          return { ok: false, error: 'no append target', alreadyInstalled: false }
         }
 
-        var added = await appendSeoEmbed(target)
-
+        var added = await appendRenderEmbed(target)
         if (!added) {
-          notify('Could not add elements — select Body in Navigator and retry.', 'Error')
-          return { ok: false, error: 'append failed' }
+          return { ok: false, error: 'append failed', alreadyInstalled: false }
         }
 
         notify(
-          'SEO template shell installed (server-side {{wf}} HTML/CSS). Turn Publish settings ON, then publish the site in Webflow.',
+          'Direct render embed installed. HTML/CSS update automatically from CMS on each publish.',
           'Success',
         )
-        return { ok: true }
+        return { ok: true, alreadyInstalled: false, created: true }
       } catch (err) {
         var msg = err && err.message ? err.message : String(err)
-        notify('Install failed: ' + msg, 'Error')
-        return { ok: false, error: msg }
+        return { ok: false, error: msg, alreadyInstalled: false }
       }
     })
   }
 
-  window.AutomaioDesignerBridge = { installTemplateShell: installTemplateShell }
+  async function installTemplateShell() {
+    var result = await ensureRenderEmbed({})
+    if (!result.ok) {
+      notify(
+        result.error === 'no append target'
+          ? 'Select Body in Navigator, then retry Install template shell.'
+          : 'Install failed: ' + (result.error || 'unknown'),
+        'Error',
+      )
+    }
+    return result
+  }
+
+  window.AutomaioDesignerBridge = {
+    ensureRenderEmbed: ensureRenderEmbed,
+    installTemplateShell: installTemplateShell,
+  }
+
+  function handleResult(event, result) {
+    try {
+      if (event.source && event.source.postMessage) {
+        event.source.postMessage(
+          { type: event.resultType, result: result },
+          event.origin || '*',
+        )
+      }
+    } catch (e) {}
+  }
 
   window.addEventListener('message', function (event) {
     var data = event.data
-    if (!data || data.type !== 'automaio-install-template-shell') return
-    installTemplateShell().then(function (result) {
-      try {
-        if (event.source && event.source.postMessage) {
-          event.source.postMessage(
-            { type: 'automaio-install-template-shell-result', result: result },
-            event.origin || '*',
-          )
-        }
-      } catch (e) {}
-    })
+    if (!data || !data.type) return
+
+    if (data.type === 'automaio-install-template-shell') {
+      installTemplateShell().then(function (result) {
+        handleResult({ source: event.source, origin: event.origin, resultType: 'automaio-install-template-shell-result' }, result)
+      })
+    }
+
+    if (data.type === 'automaio-sync-render-embed') {
+      ensureRenderEmbed(data).then(function (result) {
+        handleResult({ source: event.source, origin: event.origin, resultType: 'automaio-sync-render-embed-result' }, result)
+      })
+    }
   })
 
   if (typeof webflow !== 'undefined' && webflow.ready) {
     webflow.ready().then(function () {
-      console.info('[Automaio] Designer bridge ready — use Install template shell in the panel.')
+      console.info('[Automaio] Designer bridge ready — render embed sync available.')
     })
   }
 })()

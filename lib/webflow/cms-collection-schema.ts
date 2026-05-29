@@ -21,6 +21,8 @@ export const UNIFIED_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'SEO Title', slug: 'seo-title' },
   { type: 'PlainText', displayName: 'SEO Description', slug: 'seo-description' },
   { type: 'PlainText', displayName: 'Config Type', slug: 'config-type' },
+  { type: 'PlainText', displayName: 'Generated HTML', slug: 'generated-html' },
+  { type: 'PlainText', displayName: 'Generated CSS', slug: 'generated-css' },
   { type: 'PlainText', displayName: 'Page ID', slug: 'page-id' },
   { type: 'PlainText', displayName: 'Runtime Config', slug: 'runtime-config' },
   { type: 'PlainText', displayName: 'HTML', slug: 'html' },
@@ -51,6 +53,8 @@ export const RUNTIME_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'SEO Title', slug: 'seo-title' },
   { type: 'PlainText', displayName: 'SEO Description', slug: 'seo-description' },
   { type: 'PlainText', displayName: 'Config Type', slug: 'config-type' },
+  { type: 'PlainText', displayName: 'Generated HTML', slug: 'generated-html' },
+  { type: 'PlainText', displayName: 'Generated CSS', slug: 'generated-css' },
   { type: 'PlainText', displayName: 'Page ID', slug: 'page-id' },
   { type: 'PlainText', displayName: 'Runtime Config', slug: 'runtime-config' },
   { type: 'PlainText', displayName: 'Template ID', slug: 'template-id' },
@@ -66,6 +70,8 @@ export const SPLIT_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'SEO Title', slug: 'seo-title' },
   { type: 'PlainText', displayName: 'SEO Description', slug: 'seo-description' },
   { type: 'PlainText', displayName: 'Config Type', slug: 'config-type' },
+  { type: 'PlainText', displayName: 'Generated HTML', slug: 'generated-html' },
+  { type: 'PlainText', displayName: 'Generated CSS', slug: 'generated-css' },
   { type: 'PlainText', displayName: 'HTML', slug: 'html' },
   { type: 'PlainText', displayName: 'CSS', slug: 'css' },
   { type: 'PlainText', displayName: 'JS', slug: 'js' },
@@ -132,8 +138,8 @@ export const RUNTIME_FIELD_SLUGS = {
 } as const
 
 export const SPLIT_FIELD_SLUGS = {
-  html: ['htmlContent', 'html-content', 'html_content', 'html'],
-  css: ['cssContent', 'css-content', 'css_content', 'css'],
+  html: ['generated-html', 'generated_html', 'htmlContent', 'html-content', 'html_content', 'html'],
+  css: ['generated-css', 'generated_css', 'cssContent', 'css-content', 'css_content', 'css'],
   js: ['jsContent', 'js-content', 'js_content', 'js'],
   configType: [...CONFIG_TYPE_FIELD_SLUGS],
   seoTitle: ['seo-title', 'seo_title'],

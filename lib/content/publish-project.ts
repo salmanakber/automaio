@@ -44,6 +44,7 @@ import type { DeliveryMode } from '@/lib/webflow/cms-collection-schema'
 import { DEFAULT_PUBLISH_DELIVERY_MODE } from '@/lib/webflow/marketplace-policy'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
 import { applyHtmlModeFieldCleanup, preserveClearsAfterSanitize } from '@/lib/webflow/html-mode-field-cleanup'
+import { buildCmsPublishPlan } from '@/lib/webflow/publishing/cms-publish-service'
 import {
   publishWebflowSiteWithRetry,
   isWebflowRateLimitError,
@@ -53,6 +54,8 @@ import {
   formatLivePageReadinessWarnings,
   verifyWebflowLivePageReadiness,
 } from '@/lib/webflow/live-page-readiness'
+import { getRenderEmbedSyncState } from '@/lib/webflow/publishing/embed-sync-state'
+import { buildDesignerSetupMessage } from '@/lib/webflow/designer-open-guide'
 
 function slugify(value: string) {
   return value
@@ -150,24 +153,20 @@ export async function getProjectPublishPreview(projectId: string) {
   }
 
   let pageSchema
-  let assembledLanding
   if (htmlForStrategy.trim() && project.contentType !== 'blog_post') {
     pageSchema = buildLandingPageSchema(project, htmlForStrategy)
-    if (htmlMode === 'split_plain_text') {
-      assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
-        scopeId: project.id,
-        allowJs: true,
-      })
-    }
   }
 
-  const plan = buildWebflowFieldPlan(
+  const plan = buildCmsPublishPlan({
     payload,
     collectionFields,
-    integration?.cmsFieldMapping,
-    project.cmsCollectionId,
-    { htmlMode, assembledLanding, pageSchema },
-  )
+    cmsFieldMapping: integration?.cmsFieldMapping,
+    collectionId: project.cmsCollectionId,
+    htmlMode,
+    builderHtml: htmlForStrategy,
+    scopeId: projectId,
+    pageSchema,
+  })
 
   const appUrl = getAppBaseUrl()
 
@@ -422,29 +421,21 @@ export async function publishContentProject(
   }
 
   let pageSchema
-  let assembledLanding
   if (isHtmlPage) {
     pageSchema = buildLandingPageSchema(project, htmlForStrategy)
-    if (htmlMode === 'split_plain_text') {
-      assembledLanding = assembleLandingPageForWebflow(htmlForStrategy, {
-        scopeId: projectId,
-        allowJs: true,
-      })
-    }
   }
 
-  let plan = buildWebflowFieldPlan(
+  let plan = buildCmsPublishPlan({
     payload,
     collectionFields,
-    integration.cmsFieldMapping,
-    project.cmsCollectionId,
-    { htmlMode: isHtmlPage ? htmlMode : undefined, assembledLanding, pageSchema },
-  )
-  const cleanedFieldData = applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields)
-  let fieldData = preserveClearsAfterSanitize(
-    sanitizeFieldDataForCollection(cleanedFieldData, collectionFields),
-    cleanedFieldData,
-  )
+    cmsFieldMapping: integration?.cmsFieldMapping,
+    collectionId: project.cmsCollectionId,
+    htmlMode: isHtmlPage ? htmlMode : 'remote_runtime',
+    builderHtml: htmlForStrategy,
+    scopeId: projectId,
+    pageSchema,
+  })
+  let fieldData = plan.fieldData
 
   const client = new WebflowClient(integration.webflowApiKey)
   let cmsItemId = project.webflowCmsItemId ?? project.sourceCmsItemId
@@ -492,18 +483,17 @@ export async function publishContentProject(
         name: f.name ?? f.slug,
         type: f.type,
       }))
-      plan = buildWebflowFieldPlan(
+      plan = buildCmsPublishPlan({
         payload,
         collectionFields,
-        integration.cmsFieldMapping,
-        project.cmsCollectionId,
-        { htmlMode: plan.htmlMode, assembledLanding, pageSchema },
-      )
-      const retriedCleaned = applyHtmlModeFieldCleanup(plan.fieldData, plan.htmlMode, collectionFields)
-      fieldData = preserveClearsAfterSanitize(
-        sanitizeFieldDataForCollection(retriedCleaned, collectionFields),
-        retriedCleaned,
-      )
+        cmsFieldMapping: integration.cmsFieldMapping,
+        collectionId: project.cmsCollectionId,
+        htmlMode: plan.htmlMode,
+        builderHtml: htmlForStrategy,
+        scopeId: projectId,
+        pageSchema,
+      })
+      fieldData = plan.fieldData
       await upsertCms(fieldData)
     } else {
       throw new Error(message)
@@ -598,6 +588,13 @@ export async function publishContentProject(
   const usedRemoteRuntime = plan.htmlMode === 'remote_runtime'
   const usedIframeEmbed = plan.htmlMode === 'iframe_embed'
   const collectionTemplateSnippet = getCollectionTemplateSnippet(plan.htmlMode, appUrl)
+
+  let needsRenderEmbedInstall = false
+  if (usedSplitPlainText && project.cmsCollectionId) {
+    const embedState = await getRenderEmbedSyncState(integration.id, project.cmsCollectionId)
+    needsRenderEmbedInstall = !embedState.installed
+  }
+
   let embedAutoConfigured = isHtmlPage && !deliverySetupWarning
   let embedNeedsReconnect = false
   let runtimeAutoConfigured = usedRemoteRuntime && isHtmlPage
@@ -611,8 +608,10 @@ export async function publishContentProject(
         : 'Published with remote runtime. CMS fields and collection template custom code configured automatically.'
     } else if (usedSplitPlainText) {
       embedMessage = htmlModeChanged
-        ? 'Switched to split delivery. CMS config-type, htmlContent, cssContent, and jsContent updated; stale runtime fields cleared. HTML/CSS render server-side for SEO.'
-        : 'Published with split HTML/CSS/JS. Content is stored in CMS and rendered server-side via Webflow {{wf}} bindings (SEO-friendly). Republish updates CMS fields automatically.'
+        ? 'Switched to direct HTML mode. CMS config-type and generated-html/css updated; stale runtime fields cleared.'
+        : needsRenderEmbedInstall
+          ? 'Published to CMS with generated-html and generated-css. Open Webflow Designer once — Automaio installs the SEO embed automatically (no copy/paste).'
+          : 'Published with direct HTML/CSS. Content updates in CMS; Webflow renders it server-side for SEO.'
     } else if (usedIframeEmbed) {
       embedMessage =
         'Published with iframe embed. iframe-url field set and iframe template script installed. Live page loads the hosted Automaio page.'
@@ -735,6 +734,8 @@ export async function publishContentProject(
         ? buildCollectionEmbedSnippet(getAppBaseUrl(), integration.webflowSiteId)
         : null,
     projectEmbedSnippet: buildProjectEmbedSnippet(getAppBaseUrl(), projectId),
+    needsRenderEmbedInstall,
+    designerSetupMessage: buildDesignerSetupMessage(needsRenderEmbedInstall),
   }
 }
 

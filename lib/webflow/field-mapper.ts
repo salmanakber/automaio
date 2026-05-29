@@ -117,6 +117,8 @@ const FIELD_ALIASES: Record<keyof CmsFieldMapping, string[]> = {
   'page-id': ['page-id', 'page_id', 'automaio-page-id', 'automaio-id', 'automaio-campaign-id'],
   'runtime-config': ['runtime-config', 'runtime_config'],
   'config-type': ['config-type', 'config_type', 'configType'],
+  'generated-html': ['generated-html', 'generated_html', 'generatedHtml'],
+  'generated-css': ['generated-css', 'generated_css', 'generatedCss'],
   'template-config': ['template-config', 'template_config'],
   'preview-image': ['preview-image', 'preview_image', 'preview-image-url'],
   'template-id': ['template-id', 'template_id', 'automaio-template-id'],
