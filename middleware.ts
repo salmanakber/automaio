@@ -8,7 +8,8 @@ export function middleware(request: NextRequest) {
   const publicRoutes = ['/', '/auth/login', '/auth/signup', '/webflow/designer', '/webflow/install']
   const isPublicWebflowAsset =
     /^\/webflow\/(runtime|embed|form-embed)\.js$/i.test(pathname) ||
-    pathname === '/webflow/designer-extension.json'
+    pathname === '/webflow/designer-extension.json' ||
+    pathname.startsWith('/webflow/extension-shell')
 
   const isPublicRoute =
     publicRoutes.includes(pathname) ||

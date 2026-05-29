@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Automaio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg-deep:       #060608;
+        --bg-surface:    #0d0d12;
+        --bg-raised:     #13131a;
+        --bg-hover:      #1a1a24;
+        --bg-active:     #1f1f2e;
+        --border-subtle: rgba(255,255,255,0.06);
+        --border-mid:    rgba(255,255,255,0.11);
+        --border-strong: rgba(255,255,255,0.18);
+        --accent:        #6c63ff;
+        --accent-dim:    rgba(108,99,255,0.18);
+        --accent-glow:   rgba(108,99,255,0.08);
+        --text-primary:  #f0f0f5;
+        --text-secondary:#9898a8;
+        --text-muted:    #5a5a6e;
+        --ok:            #34d399;
+        --ok-dim:        rgba(52,211,153,0.14);
+        --warn:          #fbbf24;
+        --warn-dim:      rgba(251,191,36,0.12);
+        --danger:        #f87171;
+        --danger-dim:    rgba(248,113,113,0.12);
+        --radius-sm:     6px;
+        --radius-md:     10px;
+        --radius-lg:     14px;
+        --bar-h:         44px;
+        --font:          'Inter', system-ui, sans-serif;
+      }
+
+      html, body {
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg-deep);
+        font-family: var(--font);
+        color: var(--text-primary);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── Shell bar ── */
+      #automaio-shell-bar {
+        display: none;
+        align-items: center;
+        gap: 10px;
+        height: var(--bar-h);
+        padding: 0 14px;
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border-subtle);
+        position: relative;
+        z-index: 10;
+      }
+      #automaio-shell-bar.visible { display: flex; }
+
+      /* Logo mark */
+      .am-logo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .am-logo-icon {
+        width: 26px; height: 26px;
+        background: linear-gradient(135deg, #6c63ff 0%, #a78bfa 100%);
+        border-radius: var(--radius-sm);
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+      }
+      .am-logo-icon svg { width: 14px; height: 14px; fill: #fff; }
+      .am-logo-name {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.2px;
+        color: var(--text-primary);
+      }
+
+      /* Divider */
+      .am-sep {
+        width: 1px;
+        height: 20px;
+        background: var(--border-subtle);
+        flex-shrink: 0;
+      }
+
+      /* Status pill */
+      .am-status {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .am-dot {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--text-muted);
+        transition: background 0.3s;
+      }
+      .am-dot.ok    { background: var(--ok);     box-shadow: 0 0 0 2px var(--ok-dim); }
+      .am-dot.bad   { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-dim); }
+      .am-dot.warn  { background: var(--warn);   box-shadow: 0 0 0 2px var(--warn-dim); }
+      .am-status-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.4;
+      }
+      .am-status-text .hi { color: var(--text-primary); font-weight: 500; }
+
+      /* Origin badge */
+      .am-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 20px;
+        background: var(--bg-raised);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-muted);
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        flex-shrink: 0;
+      }
+
+      /* Install button */
+      #automaio-shell-install {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        font-family: var(--font);
+        padding: 6px 14px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-mid);
+        background: var(--bg-raised);
+        color: var(--text-primary);
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+        outline: none;
+      }
+      #automaio-shell-install:hover:not(:disabled) {
+        background: var(--bg-hover);
+        border-color: var(--border-strong);
+      }
+      #automaio-shell-install:active:not(:disabled) {
+        transform: scale(0.97);
+        background: var(--accent-dim);
+        border-color: var(--accent);
+        color: #a78bfa;
+      }
+      #automaio-shell-install:disabled {
+        opacity: 0.38;
+        cursor: not-allowed;
+      }
+      #automaio-shell-install svg {
+        width: 13px; height: 13px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
+      }
+
+      /* ── Frame area ── */
+      #automaio-frame-wrap {
+        height: 100%;
+        position: relative;
+      }
+      #automaio-shell-bar.visible + #automaio-frame-wrap {
+        height: calc(100% - var(--bar-h));
+      }
+      #automaio-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+      }
+
+      /* ── Fallback screen ── */
+      #automaio-fallback {
+        display: none;
+        position: absolute;
+        inset: 0;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-deep);
+        padding: 2rem;
+      }
+      #automaio-fallback.show { display: flex; }
+
+      .am-fallback-card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+      }
+      .am-fallback-icon {
+        width: 44px; height: 44px;
+        background: var(--danger-dim);
+        border: 1px solid rgba(248,113,113,0.2);
+        border-radius: var(--radius-md);
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 1.25rem;
+      }
+      .am-fallback-icon svg {
+        width: 20px; height: 20px;
+        stroke: var(--danger);
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .am-fallback-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+        letter-spacing: -0.2px;
+      }
+      #automaio-fallback-reason {
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        margin-bottom: 1.25rem;
+      }
+      .am-fallback-hint {
+        background: var(--bg-raised);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 14px 16px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+      }
+      .am-fallback-hint strong { color: var(--text-primary); font-weight: 500; }
+      .am-fallback-hint code {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 11px;
+        color: #a78bfa;
+        background: var(--accent-dim);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+
+      /* Loading skeleton overlay */
+      #am-loading {
+        position: absolute;
+        inset: 0;
+        background: var(--bg-deep);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        pointer-events: none;
+        transition: opacity 0.4s;
+        z-index: 5;
+      }
+      #am-loading.hidden { opacity: 0; pointer-events: none; }
+      .am-spinner {
+        width: 32px; height: 32px;
+        border: 2px solid var(--border-subtle);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.75s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .am-loading-text {
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: 0.3px;
+      }
+    </style>
+  </head>
+  <body>
+
+    <div id="automaio-shell-bar">
+      <!-- Logo -->
+      <div class="am-logo">
+        <div class="am-logo-icon">
+          <svg viewBox="0 0 16 16"><path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" opacity=".9"/><circle cx="8" cy="8" r="2.5" fill="rgba(255,255,255,0.3)"/></svg>
+        </div>
+        <span class="am-logo-name">Automaio</span>
+      </div>
+
+      <div class="am-sep"></div>
+
+      <!-- Status -->
+      <div class="am-status" id="am-status-wrap">
+        <div class="am-dot" id="am-dot"></div>
+        <span class="am-status-text" id="automaio-api-status">Connecting to Webflow…</span>
+      </div>
+
+      <!-- Origin badge (populated by JS) -->
+      <span class="am-badge" id="am-origin-badge" style="display:none"></span>
+
+      <!-- Install button -->
+      <button id="automaio-shell-install" type="button" disabled>
+        <svg viewBox="0 0 24 24"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+        Install embed
+      </button>
+    </div>
+
+    <div id="automaio-frame-wrap">
+      <div id="am-loading">
+        <div class="am-spinner"></div>
+        <span class="am-loading-text">Loading Automaio…</span>
+      </div>
+      <iframe id="automaio-frame" title="Automaio"></iframe>
+    </div>
+
+    <div id="automaio-fallback">
+      <div class="am-fallback-card">
+        <div class="am-fallback-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="am-fallback-title">Unable to load extension</div>
+        <p id="automaio-fallback-reason"></p>
+        <div class="am-fallback-hint">
+          <strong>Webflow setup</strong><br/>
+          In your app settings set <strong>Development URL</strong> to this page:
+          <code>https://automaio.kilo1app.com/webflow/extension-shell/</code><br/><br/>
+          Then in Designer use <strong>Launch development app</strong> (not webflow-ext.com directly).
+        </div>
+      </div>
+    </div>
+
+    <script src="./designer-bridge.js"></script>
+    <script>
+      ;(function () {
+        // Hosted on the same origin as the Automaio app (HTTPS).
+        var params = new URLSearchParams(window.location.search)
+        var fromQuery = params.get('appUrl')
+        var AUTOMAIO_APP_URL = (fromQuery || window.location.origin).replace(/\/$/, '')
+
+        var frame        = document.getElementById('automaio-frame')
+        var fallback     = document.getElementById('automaio-fallback')
+        var fallbackReason = document.getElementById('automaio-fallback-reason')
+        var shellBar     = document.getElementById('automaio-shell-bar')
+        var apiStatus    = document.getElementById('automaio-api-status')
+        var dot          = document.getElementById('am-dot')
+        var originBadge  = document.getElementById('am-origin-badge')
+        var shellInstall = document.getElementById('automaio-shell-install')
+        var loading      = document.getElementById('am-loading')
+
+        function setDot(state) {
+          dot.className = 'am-dot ' + (state || '')
+        }
+
+        function isBlockedDevAppUrl(url) {
+          if (!url) return true
+          return url.indexOf('localhost') !== -1 || url.indexOf('127.0.0.1') !== -1
+        }
+
+        function isInsecureDevShell() {
+          return window.location.protocol === 'http:' && window.location.hostname !== 'localhost'
+        }
+
+        function updateShellStatus() {
+          var bridge = window.AutomaioDesignerBridge
+          if (!bridge || !bridge.getBridgeStatus) return
+
+          bridge.getBridgeStatus().then(function (status) {
+            shellBar.classList.add('visible')
+
+            if (status.webflowAvailable) {
+              setDot('ok')
+              apiStatus.innerHTML = '<span class="hi">Webflow API ready</span>'
+              if (status.shellOrigin) {
+                originBadge.textContent = status.shellOrigin
+                originBadge.style.display = 'inline-flex'
+              }
+              shellInstall.disabled = false
+              return
+            }
+
+            var hint = status.hint || 'Webflow API unavailable in this frame.'
+            setDot('bad')
+            apiStatus.textContent = hint
+
+            if (status.insecureDevShell) {
+              apiStatus.textContent = 'Serve over HTTPS — use Launch App or local CLI HTTPS dev.'
+              setDot('warn')
+            } else if (!status.inDesignerContext) {
+              apiStatus.textContent = 'Open from Webflow Designer → Apps → Automaio.'
+              setDot('warn')
+            }
+
+            shellInstall.disabled = true
+          })
+        }
+
+        shellInstall.addEventListener('click', function () {
+          if (!window.AutomaioDesignerBridge) return
+          shellInstall.disabled = true
+          shellInstall.innerHTML = '<svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;animation:spin .75s linear infinite"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Installing…'
+
+          window.AutomaioDesignerBridge.installTemplateShell().then(function (result) {
+            if (result.ok) {
+              shellInstall.innerHTML = '<svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg> Installed'
+              setDot('ok')
+            } else {
+              shellInstall.textContent = 'Install failed'
+              shellInstall.disabled = false
+            }
+            updateShellStatus()
+            if (frame.contentWindow) {
+              frame.contentWindow.postMessage({ type: 'automaio-shell-install-result', result: result }, '*')
+            }
+          })
+        })
+
+        if (isBlockedDevAppUrl(AUTOMAIO_APP_URL)) {
+          frame.style.display = 'none'
+          fallback.classList.add('show')
+          loading.classList.add('hidden')
+          fallbackReason.textContent =
+            'App URL points to localhost. This hosted shell must iframe the same HTTPS origin (' +
+            window.location.origin +
+            '), not localhost.'
+          return
+        }
+
+        if (isInsecureDevShell()) {
+          fallback.classList.add('show')
+          loading.classList.add('hidden')
+          fallbackReason.textContent =
+            'This shell is served over plain HTTP at ' + window.location.host +
+            '. Webflow Designer requires HTTPS for API injection.'
+        }
+
+        var qs = new URLSearchParams()
+        qs.set('embedded', '1')
+        if (params.get('installed') === '1') qs.set('installed', '1')
+        if (params.get('siteId')) qs.set('siteId', params.get('siteId'))
+        frame.src = AUTOMAIO_APP_URL + '/webflow/designer?' + qs.toString()
+
+        frame.onload = function () {
+          loading.classList.add('hidden')
+          updateShellStatus()
+        }
+
+        window.addEventListener('message', function (event) {
+          if (!event.data || event.data.type !== 'automaio-bridge-status-request') return
+          updateShellStatus()
+          if (!window.AutomaioDesignerBridge || !window.AutomaioDesignerBridge.getBridgeStatus) return
+          window.AutomaioDesignerBridge.getBridgeStatus().then(function (status) {
+            if (event.source && event.source.postMessage) {
+              event.source.postMessage(
+                { type: 'automaio-bridge-status-result', status: status },
+                event.origin || '*',
+              )
+            }
+          })
+        })
+
+        setTimeout(updateShellStatus, 500)
+        setTimeout(updateShellStatus, 3000)
+        setInterval(updateShellStatus, 8000)
+      })()
+    </script>
+  </body>
+</html>
