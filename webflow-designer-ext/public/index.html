@@ -57,9 +57,11 @@
         }
 
         var installed = params.get('installed') === '1'
+        var siteId = params.get('siteId') || ''
         var qs = new URLSearchParams()
         qs.set('embedded', '1')
         if (installed) qs.set('installed', '1')
+        if (siteId) qs.set('siteId', siteId)
         frame.src = base + '/webflow/designer?' + qs.toString()
         frame.onerror = function () {
           frame.style.display = 'none'

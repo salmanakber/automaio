@@ -66,6 +66,13 @@ export function formatWebflowValidationError(error: unknown): string {
     return 'Webflow rejected unknown CMS fields. Sync your collection in Settings and try again.'
   }
 
+  if (/404|not found|resource_not_found|Requested resource/i.test(msg)) {
+    return (
+      'Webflow could not find the CMS collection or item (it may have been deleted). ' +
+      'Re-select your CMS collection in project settings and publish again — Automaio will create a new item.'
+    )
+  }
+
   return msg.replace(/^Webflow API \d+:\s*/, 'Webflow error: ')
 }
 

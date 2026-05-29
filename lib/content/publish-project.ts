@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { WebflowClient } from '@/lib/integrations/webflow-client'
+import { WebflowClient, isWebflowNotFoundError } from '@/lib/integrations/webflow-client'
 import {
   buildWebflowFieldData,
   buildWebflowFieldPlan,
@@ -44,7 +44,6 @@ import { DEFAULT_PUBLISH_DELIVERY_MODE } from '@/lib/webflow/marketplace-policy'
 import { buildLandingPageSchema } from '@/lib/runtime/build-page-schema'
 import { applyHtmlModeFieldCleanup } from '@/lib/webflow/html-mode-field-cleanup'
 import {
-  publishWebflowCmsItems,
   publishWebflowSiteWithRetry,
   isWebflowRateLimitError,
 } from '@/lib/webflow/publish-site'
@@ -462,29 +461,26 @@ export async function publishContentProject(
   const client = new WebflowClient(integration.webflowApiKey)
   let cmsItemId = project.webflowCmsItemId ?? project.sourceCmsItemId
 
+  try {
+    await client.getCollection(project.cmsCollectionId!)
+  } catch (err) {
+    if (isWebflowNotFoundError(err)) {
+      throw new Error(
+        'Webflow collection not found. Open project settings, re-select your CMS collection, then publish again.',
+      )
+    }
+    throw err
+  }
+
   const upsertCms = async (data: Record<string, unknown>) => {
     const goLive = project.showOnWebsite !== false
-
-    if (cmsItemId) {
-      await client.updateCollectionItem(project.cmsCollectionId!, cmsItemId, data)
-      if (goLive) {
-        await publishWebflowCmsItems(client, project.cmsCollectionId!, [cmsItemId])
-      }
-      return
-    }
-
-    if (goLive) {
-      const created = await client.createLiveCollectionItem(project.cmsCollectionId!, data)
-      cmsItemId = created.id
-      return
-    }
-
-    const created = await client.createCollectionItem(
+    const result = await client.upsertCollectionItem(
       project.cmsCollectionId!,
+      cmsItemId,
       data,
-      { isDraft: true },
+      { goLive },
     )
-    cmsItemId = created.id
+    cmsItemId = result.id
   }
 
   try {

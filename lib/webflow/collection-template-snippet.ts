@@ -6,19 +6,19 @@ export function buildWebflowCollectionTemplateEmbed(): string {
   return `<!-- Automaio Legacy Split Renderer (config-type: split_method) -->
 <div class="ai-wrapper">
   <style>
-{{wf {"path":"css","type":"PlainText"} }}
+{{wf {"path":"cssContent","type":"PlainText"} }}
   </style>
 
-{{wf {"path":"html","type":"PlainText"} }}
+{{wf {"path":"htmlContent","type":"PlainText"} }}
 </div>
 <script>
-{{wf {"path":"js","type":"PlainText"} }}
+{{wf {"path":"jsContent","type":"PlainText"} }}
 </script>`
 }
 
 export const WEBFLOW_COLLECTION_TEMPLATE_SETUP = [
   'Remote runtime (config-type: remote_runtime) uses runtime.js — recommended for new collections.',
-  'Legacy split (config-type: split_method) uses html, css, js Plain Text fields with {{wf}} bindings above.',
+  'Legacy split (config-type: split_method) uses htmlContent, cssContent, jsContent Plain Text fields.',
   'Iframe embed (config-type: iframe_embed) uses iframe-url Plain Text field.',
 ] as const
 

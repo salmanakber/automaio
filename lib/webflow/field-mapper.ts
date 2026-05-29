@@ -104,12 +104,15 @@ const FIELD_ALIASES: Record<keyof CmsFieldMapping, string[]> = {
     'code-embed',
     'automaio-html',
   ],
-  html: ['html', 'html-content', 'html_content'],
-  css: ['css', 'css-content', 'css_content'],
-  js: ['js', 'js-content', 'js_content'],
-  'html-content': ['html-content', 'html_content', 'html'],
-  'css-content': ['css-content', 'css_content', 'css'],
-  'js-content': ['js-content', 'js_content', 'js'],
+  html: ['html', 'htmlContent', 'html-content', 'html_content'],
+  css: ['css', 'cssContent', 'css-content', 'css_content'],
+  js: ['js', 'jsContent', 'js-content', 'js_content'],
+  htmlContent: ['htmlContent', 'html-content', 'html_content', 'html'],
+  cssContent: ['cssContent', 'css-content', 'css_content', 'css'],
+  jsContent: ['jsContent', 'js-content', 'js_content', 'js'],
+  'html-content': ['html-content', 'htmlContent', 'html_content', 'html'],
+  'css-content': ['css-content', 'cssContent', 'css_content', 'css'],
+  'js-content': ['js-content', 'jsContent', 'js_content', 'js'],
   'iframe-url': ['iframe-url', 'iframe_url', 'embed-url', 'page-url'],
   'page-id': ['page-id', 'page_id', 'automaio-page-id', 'automaio-id', 'automaio-campaign-id'],
   'runtime-config': ['runtime-config', 'runtime_config'],
@@ -388,6 +391,9 @@ export function buildWebflowFieldPlan(
     assign('html', split.htmlContent)
     assign('css', split.cssContent)
     assign('js', split.jsContent)
+    assign('htmlContent', split.htmlContent)
+    assign('cssContent', split.cssContent)
+    assign('jsContent', split.jsContent)
     assign('html-content', split.htmlContent)
     assign('css-content', split.cssContent)
     assign('js-content', split.jsContent)

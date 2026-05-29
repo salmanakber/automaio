@@ -86,14 +86,14 @@ var API="${base}";
 var SITE="${site}";
 ${readConfigTypeFromDom()}
 ${readSlugFromPath()}
-${readCmsFromDom(['html', 'html-content', 'html_content', 'css', 'css-content', 'css_content', 'js', 'js-content', 'js_content'])}
+${readCmsFromDom(['htmlContent', 'html-content', 'html_content', 'html', 'cssContent', 'css-content', 'css_content', 'css', 'jsContent', 'js-content', 'js_content', 'js'])}
 ${injectSplitMethod()}
 ${splitShouldRun()}
 function fromDom(){
   if(!splitShouldRun())return false;
-  var html=readCms(["html","html-content","html_content"]);
-  var css=readCms(["css","css-content","css_content"]);
-  var js=readCms(["js","js-content","js_content"]);
+  var html=readCms(["htmlContent","html-content","html_content","html"]);
+  var css=readCms(["cssContent","css-content","css_content","css"]);
+  var js=readCms(["jsContent","js-content","js_content","js"]);
   if(html||css||js){injectSplitMethod(html,css,js);return true;}
   return false;
 }

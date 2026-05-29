@@ -1,3 +1,9 @@
+/** True when Webflow returns 404 / resource_not_found (stale CMS item, missing collection, etc.). */
+export function isWebflowNotFoundError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /404|not found|resource_not_found|Requested resource/i.test(msg)
+}
+
 /**
  * Webflow Data API v2 client for CMS operations (App Marketplace SaaS pattern).
  */
@@ -123,7 +129,7 @@ export class WebflowClient {
     options?: { isDraft?: boolean },
   ) {
     return this.request<{ id: string; fieldData: Record<string, unknown> }>(
-      `/collections/${collectionId}/items${options?.isDraft ? '?cmsLocaleId' : ''}`,
+      `/collections/${collectionId}/items`,
       {
         method: 'POST',
         body: JSON.stringify({
@@ -170,6 +176,64 @@ export class WebflowClient {
       method: 'PATCH',
       body: JSON.stringify({ fieldData }),
     })
+  }
+
+  /** Update a live (published) CMS item. */
+  async updateLiveCollectionItem(
+    collectionId: string,
+    itemId: string,
+    fieldData: Record<string, unknown>,
+  ) {
+    return this.request<{ id: string }>(`/collections/${collectionId}/items/live/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fieldData }),
+    })
+  }
+
+  /**
+   * Create or update a CMS item. Recovers from stale item IDs (404) by creating a new item.
+   */
+  async upsertCollectionItem(
+    collectionId: string,
+    itemId: string | null | undefined,
+    fieldData: Record<string, unknown>,
+    options?: { goLive?: boolean },
+  ): Promise<{ id: string; created: boolean }> {
+    const goLive = options?.goLive !== false
+    let existingId = itemId?.trim() || null
+
+    if (existingId) {
+      try {
+        await this.updateCollectionItem(collectionId, existingId, fieldData)
+      } catch (updateErr) {
+        if (!isWebflowNotFoundError(updateErr)) throw updateErr
+        try {
+          await this.updateLiveCollectionItem(collectionId, existingId, fieldData)
+        } catch (liveErr) {
+          if (!isWebflowNotFoundError(liveErr)) throw liveErr
+          existingId = null
+        }
+      }
+
+      if (existingId) {
+        if (goLive) {
+          try {
+            await this.publishCollectionItems(collectionId, [existingId])
+          } catch (pubErr) {
+            if (!isWebflowNotFoundError(pubErr)) throw pubErr
+          }
+        }
+        return { id: existingId, created: false }
+      }
+    }
+
+    if (goLive) {
+      const created = await this.createLiveCollectionItem(collectionId, fieldData)
+      return { id: created.id, created: true }
+    }
+
+    const created = await this.createCollectionItem(collectionId, fieldData, { isDraft: true })
+    return { id: created.id, created: true }
   }
 
   async deleteCollectionItem(collectionId: string, itemId: string) {

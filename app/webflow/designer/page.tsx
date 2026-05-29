@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { WebflowSetupNotice } from '@/components/webflow/WebflowSetupNotice'
 import { DesignerAuthOnboarding } from '@/components/webflow/DesignerAuthOnboarding'
+import { DesignerScreensPanel } from '@/components/webflow/DesignerScreensPanel'
 import type { OrgSetupStatus } from '@/lib/organizations/setup-status'
 
 export default function WebflowDesignerPage() {
@@ -29,6 +30,7 @@ export default function WebflowDesignerPage() {
   const [checking, setChecking] = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
+  const [webflowSiteId, setWebflowSiteId] = useState<string | null>(null)
   const [setupStatus, setSetupStatus] = useState<OrgSetupStatus | null>(null)
   const [justInstalled, setJustInstalled] = useState(false)
   const [signedInBanner, setSignedInBanner] = useState(false)
@@ -37,7 +39,6 @@ export default function WebflowDesignerPage() {
     setChecking(true)
     return fetch('/api/auth/me', {
       credentials: 'include',
-      
     })
       .then((r) => r.json())
       .then((d) => {
@@ -56,27 +57,44 @@ export default function WebflowDesignerPage() {
   }, [])
 
   useEffect(() => {
+    let siteFromQuery = ''
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       setJustInstalled(params.get('installed') === '1')
+      siteFromQuery = params.get('siteId')?.trim() ?? ''
+      if (siteFromQuery) setWebflowSiteId(siteFromQuery)
       if (params.get('signedIn') === '1') {
         setSignedInBanner(true)
-        window.history.replaceState({}, '', '/webflow/designer')
+        const next = new URLSearchParams(params)
+        next.delete('signedIn')
+        const qs = next.toString()
+        window.history.replaceState({}, '', `/webflow/designer${qs ? `?${qs}` : ''}`)
       }
     }
+    const querySiteId = siteFromQuery
     checkAuth().then((ok) => {
       if (ok) {
-        fetch('/api/organizations', {  })
+        fetch('/api/organizations', { credentials: 'include' })
           .then((r) => r.json())
           .then((d) => {
             const id = d.organizations?.[0]?.id
             if (id) {
               setOrgId(id)
-              fetch(`/api/organizations/${id}/setup-status`, {
-                
-              })
+              fetch(`/api/organizations/${id}/setup-status`, { credentials: 'include' })
                 .then((r) => r.json())
                 .then(setSetupStatus)
+                .catch(() => {})
+              fetch(`/api/integrations/webflow?orgId=${encodeURIComponent(id)}`, {
+                credentials: 'include',
+              })
+                .then((r) => r.json())
+                .then((data) => {
+                  const list = data.integrations ?? []
+                  const first = Array.isArray(list) ? list[0] : null
+                  if (first?.webflowSiteId && !querySiteId) {
+                    setWebflowSiteId(first.webflowSiteId)
+                  }
+                })
                 .catch(() => {})
             }
           })
@@ -117,6 +135,11 @@ export default function WebflowDesignerPage() {
               <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
             ) : null}
           </div>
+          {webflowSiteId ? (
+            <Badge variant="outline" className="text-[9px] font-mono mt-1">
+              site: {webflowSiteId.slice(0, 12)}…
+            </Badge>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-3 px-3 pb-3">
           {signedInBanner && !authenticated ? (
@@ -128,6 +151,8 @@ export default function WebflowDesignerPage() {
 
           {authenticated ? (
             <>
+              <DesignerScreensPanel siteId={webflowSiteId} />
+
               {setupStatus && !setupStatus.isFullySetup && (
                 <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
                   <div className="flex items-center justify-between">
@@ -181,7 +206,6 @@ export default function WebflowDesignerPage() {
                   await fetch('/api/auth/logout', {
                     method: 'POST',
                     credentials: 'include',
-                    
                   })
                   setAuthenticated(false)
                   setUserEmail(null)

@@ -29,6 +29,9 @@ export const UNIFIED_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'HTML Content', slug: 'html-content' },
   { type: 'PlainText', displayName: 'CSS Content', slug: 'css-content' },
   { type: 'PlainText', displayName: 'JS Content', slug: 'js-content' },
+  { type: 'PlainText', displayName: 'HTML Content (camelCase)', slug: 'htmlContent' },
+  { type: 'PlainText', displayName: 'CSS Content (camelCase)', slug: 'cssContent' },
+  { type: 'PlainText', displayName: 'JS Content (camelCase)', slug: 'jsContent' },
   { type: 'PlainText', displayName: 'Iframe URL', slug: 'iframe-url' },
   { type: 'PlainText', displayName: 'Iframe Height', slug: 'iframe-height' },
   { type: 'PlainText', displayName: 'Iframe Sandbox', slug: 'iframe-sandbox' },
@@ -69,6 +72,9 @@ export const SPLIT_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'HTML Content', slug: 'html-content' },
   { type: 'PlainText', displayName: 'CSS Content', slug: 'css-content' },
   { type: 'PlainText', displayName: 'JS Content', slug: 'js-content' },
+  { type: 'PlainText', displayName: 'HTML Content (camelCase)', slug: 'htmlContent' },
+  { type: 'PlainText', displayName: 'CSS Content (camelCase)', slug: 'cssContent' },
+  { type: 'PlainText', displayName: 'JS Content (camelCase)', slug: 'jsContent' },
   { type: 'Image', displayName: 'Preview Image', slug: 'preview-image' },
   { type: 'PlainText', displayName: 'Template ID', slug: 'template-id' },
   { type: 'PlainText', displayName: 'Template Config', slug: 'template-config' },
@@ -126,9 +132,9 @@ export const RUNTIME_FIELD_SLUGS = {
 } as const
 
 export const SPLIT_FIELD_SLUGS = {
-  html: ['html', 'html-content', 'html_content'],
-  css: ['css', 'css-content', 'css_content'],
-  js: ['js', 'js-content', 'js_content'],
+  html: ['htmlContent', 'html-content', 'html_content', 'html'],
+  css: ['cssContent', 'css-content', 'css_content', 'css'],
+  js: ['jsContent', 'js-content', 'js_content', 'js'],
   configType: [...CONFIG_TYPE_FIELD_SLUGS],
   seoTitle: ['seo-title', 'seo_title'],
   seoDescription: ['seo-description', 'seo_description'],
