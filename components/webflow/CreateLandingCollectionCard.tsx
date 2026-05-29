@@ -65,9 +65,9 @@ export function CreateLandingCollectionCard({
       }
 
       setSuccess(
-        data.runtimeAutoConfigured
-          ? `Created "${name}" with ${data.fieldCount ?? 9} fields. Runtime bootstrap auto-installed on your collection template — no manual embed paste needed.`
-          : `Created "${name}" with ${data.fieldCount ?? 9} fields. Runtime will auto-configure on first publish (or reconnect Webflow for immediate setup).`,
+        data.templateAutoConfigured || data.runtimeAutoConfigured
+          ? `Created "${name}" with ${data.fieldCount ?? 20} fields. Delivery scripts (runtime, split, iframe) auto-installed on your collection template custom code — no manual Designer paste.`
+          : `Created "${name}" with ${data.fieldCount ?? 20} fields. Template scripts will auto-configure on first publish (or reconnect Webflow for immediate setup).`,
       )
       onCreated?.(data.collection)
     } catch (err) {

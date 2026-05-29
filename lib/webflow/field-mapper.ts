@@ -250,11 +250,11 @@ export function previewFieldMapping(
   if (plan.htmlMode === 'split_plain_text') {
     rows.push({
       logicalKey: 'collection-template',
-      label: 'Webflow collection template',
+      label: 'Template custom code',
       webflowSlug: 'config-type: split_method',
-      value: 'Paste {{wf}} snippet — html + css + js Plain Text fields',
+      value: 'Split renderer auto-installed on collection template',
       included: true,
-      note: 'Legacy split — safe server-side rendering via Webflow CMS bindings',
+      note: 'HTML/CSS/JS injected via registered inline script — no manual Designer paste',
     })
   }
 

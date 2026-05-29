@@ -1,7 +1,7 @@
 /**
  * Registered inline scripts for split / iframe delivery.
- * Reads CMS-bound DOM when present; falls back to Automaio API by site + slug.
- * Respects config-type — split_method pages use native {{wf}} bindings instead.
+ * Auto-installed on collection template custom code (footer) — no manual Designer paste.
+ * Reads CMS fields from DOM or Automaio API; routes by config-type.
  */
 
 function escapeForJsString(value: string): string {
@@ -26,19 +26,37 @@ function readConfigTypeFromDom(): string {
 }`
 }
 
-function injectSplitContent(): string {
-  return `function injectSplit(html,css,js){
+/** Mirrors legacy {{wf}} split template: ai-wrapper > style + html + script */
+function injectSplitMethod(): string {
+  return `function injectSplitMethod(html,css,js){
   if(!html&&!css&&!js)return;
-  var root=document.getElementById("page-root")||document.body.appendChild(Object.assign(document.createElement("div"),{id:"page-root",className:"ai-wrapper"}));
-  var styleEl=document.getElementById("page-style")||(function(){var s=document.createElement("style");s.id="page-style";document.head.appendChild(s);return s;})();
-  if(html)root.innerHTML=html;
-  if(css)styleEl.textContent=css;
-  if(js){var t=document.createElement("script");t.textContent=js;root.appendChild(t);}
+  var wrapper=document.querySelector(".ai-wrapper[data-automaio-split]");
+  if(!wrapper){
+    wrapper=document.createElement("div");
+    wrapper.className="ai-wrapper";
+    wrapper.setAttribute("data-automaio-split","1");
+    var main=document.querySelector("main")||document.querySelector("[role=main]")||document.body;
+    main.appendChild(wrapper);
+  }
+  if(css){
+    var st=wrapper.querySelector("style[data-automaio-css]");
+    if(!st){st=document.createElement("style");st.setAttribute("data-automaio-css","1");wrapper.insertBefore(st,wrapper.firstChild);}
+    st.textContent=css;
+  }
+  if(html){
+    var host=wrapper.querySelector("[data-automaio-html]");
+    if(!host){host=document.createElement("div");host.setAttribute("data-automaio-html","1");wrapper.appendChild(host);}
+    host.innerHTML=html;
+  }
+  if(js){
+    var sc=document.createElement("script");
+    sc.textContent=js;
+    wrapper.appendChild(sc);
+  }
 }`
 }
 
 function readCmsFromDom(slugs: string[]): string {
-  const slugJson = JSON.stringify(slugs)
   return `function readCms(slugs){
   for(var i=0;i<slugs.length;i++){
     var s=slugs[i];
@@ -46,6 +64,15 @@ function readCmsFromDom(slugs: string[]): string {
     if(el){var t=(el.textContent||"").trim();if(t&&t.indexOf("{{")===-1&&t.length>0)return t;}
   }
   return "";
+}`
+}
+
+function splitShouldRun(): string {
+  return `function splitShouldRun(){
+  var cfg=readConfigType();
+  if(cfg==="remote_runtime"||cfg==="iframe_embed")return false;
+  if(cfg==="split_method")return true;
+  return true;
 }`
 }
 
@@ -60,27 +87,36 @@ var SITE="${site}";
 ${readConfigTypeFromDom()}
 ${readSlugFromPath()}
 ${readCmsFromDom(['html', 'html-content', 'html_content', 'css', 'css-content', 'css_content', 'js', 'js-content', 'js_content'])}
-${injectSplitContent()}
+${injectSplitMethod()}
+${splitShouldRun()}
 function fromDom(){
-  var cfg=readConfigType();
-  if(cfg==="remote_runtime"||cfg==="iframe_embed")return false;
-  if(document.querySelector(".ai-wrapper,.ai-landing-wrapper,.ai-template-scope"))return false;
+  if(!splitShouldRun())return false;
   var html=readCms(["html","html-content","html_content"]);
   var css=readCms(["css","css-content","css_content"]);
   var js=readCms(["js","js-content","js_content"]);
-  if(html||css||js){injectSplit(html,css,js);return true;}
+  if(html||css||js){injectSplitMethod(html,css,js);return true;}
   return false;
 }
 function fromApi(){
+  if(!splitShouldRun())return;
   var slug=readSlug();
   if(!slug||!SITE)return;
   fetch(API+"/api/webflow/delivery/split?siteId="+encodeURIComponent(SITE)+"&slug="+encodeURIComponent(slug))
     .then(function(r){return r.ok?r.json():null;})
-    .then(function(d){if(d&&(d.html||d.css||d.js))injectSplit(d.html||"",d.css||"",d.js||"");})
+    .then(function(d){if(d&&(d.html||d.css||d.js))injectSplitMethod(d.html||"",d.css||"",d.js||"");})
     .catch(function(){});
 }
 if(!fromDom())fromApi();
 })();`
+}
+
+function iframeShouldRun(): string {
+  return `function iframeShouldRun(){
+  var cfg=readConfigType();
+  if(cfg==="remote_runtime"||cfg==="split_method")return false;
+  if(cfg==="iframe_embed")return true;
+  return true;
+}`
 }
 
 export function buildIframeInlineBootstrap(appUrl: string, webflowSiteId: string): string {
@@ -94,6 +130,7 @@ var SITE="${site}";
 ${readConfigTypeFromDom()}
 ${readSlugFromPath()}
 ${readCmsFromDom(['iframe-url', 'iframe_url', 'embed-url', 'page-url'])}
+${iframeShouldRun()}
 function mountIframe(src){
   if(!src||src.indexOf("http")!==0)return;
   var host=document.getElementById("automaio-iframe-host")||document.body.appendChild(Object.assign(document.createElement("div"),{id:"automaio-iframe-host"}));
@@ -111,13 +148,13 @@ function mountIframe(src){
   });
 }
 function fromDom(){
-  var cfg=readConfigType();
-  if(cfg==="remote_runtime"||cfg==="split_method")return false;
+  if(!iframeShouldRun())return false;
   var src=readCms(["iframe-url","iframe_url","embed-url","page-url"]);
   if(src){mountIframe(src);return true;}
   return false;
 }
 function fromApi(){
+  if(!iframeShouldRun())return;
   var slug=readSlug();
   if(!slug||!SITE)return;
   fetch(API+"/api/webflow/delivery/iframe?siteId="+encodeURIComponent(SITE)+"&slug="+encodeURIComponent(slug))

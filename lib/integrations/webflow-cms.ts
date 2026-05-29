@@ -10,7 +10,7 @@ import {
   formatWebflowValidationError,
   type AutomaioContentPayload,
 } from '@/lib/webflow/field-mapper'
-import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
+import { ensureAutomaioTemplateDeliverySetup } from '@/lib/webflow/collection-delivery-setup'
 
 function slugify(value: string) {
   return value
@@ -101,22 +101,22 @@ export async function syncWebflowIntegrationV2(organizationId: string, integrati
     },
   })
 
-  let embedSetup: Awaited<ReturnType<typeof ensureAutomaioRuntimeForIntegration>> | null = null
+  let embedSetup: Awaited<ReturnType<typeof ensureAutomaioTemplateDeliverySetup>> | null = null
   try {
-    embedSetup = await ensureAutomaioRuntimeForIntegration(integrationId, {
+    embedSetup = await ensureAutomaioTemplateDeliverySetup(integrationId, {
       collectionId: integration.templatesCollectionId ?? undefined,
       publishSite: false,
     })
   } catch (embedErr) {
-    console.warn('[Automaio] Runtime auto-setup skipped:', embedErr)
+    console.warn('[Automaio] Template delivery auto-setup skipped:', embedErr)
   }
 
   return {
     collections: collectionDetails.length,
     siteName: site.displayName,
-    embedAutoConfigured: embedSetup?.success === true,
+    embedAutoConfigured: embedSetup?.templateAutoConfigured === true,
     embedNeedsReconnect: embedSetup?.success === false && embedSetup.needsReconnect,
-    runtimeAutoConfigured: embedSetup?.success === true,
+    runtimeAutoConfigured: embedSetup?.templateAutoConfigured === true,
   }
 }
 

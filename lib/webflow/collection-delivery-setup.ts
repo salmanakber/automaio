@@ -11,7 +11,7 @@ import {
   collectionHasDeliveryFields,
   syncCollectionFieldsCache,
 } from '@/lib/webflow/cms-collection-schema'
-import { buildIframeInlineBootstrap } from '@/lib/webflow/delivery-bootstrap'
+import { buildIframeInlineBootstrap, buildSplitInlineBootstrap } from '@/lib/webflow/delivery-bootstrap'
 import {
   buildWebflowIframeCollectionEmbed,
   buildWebflowSplitMethodTemplateEmbed,
@@ -19,9 +19,10 @@ import {
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
 import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 
+const SPLIT_SCRIPT_NAME = 'Automaio Split HTML Renderer'
 const IFRAME_SCRIPT_NAME = 'Automaio Iframe Embed Renderer'
 
-const SCRIPT_VERSION = '1.1.0'
+const SCRIPT_VERSION = '1.2.0'
 
 type CollectionsJson = {
   collections?: Array<{ id: string; fields?: Array<{ slug: string; name: string; type: string }> }>
@@ -30,6 +31,8 @@ type CollectionsJson = {
     mode?: DeliveryMode
     scriptId?: string
     scriptVersion?: string
+    splitScriptId?: string
+    iframeScriptId?: string
     configuredAt?: string
   }
 }
@@ -76,67 +79,47 @@ export async function collectionTemplateHasDeliveryScript(
       return delivery?.mode === 'remote_runtime' && Boolean(delivery.scriptId && onPage.has(delivery.scriptId))
     }
 
-    const delivery = collectionsJson.automaioDelivery
+    if (mode === 'split_plain_text') {
+      const splitId = collectionsJson.automaioDelivery?.splitScriptId
+      return Boolean(splitId && onPage.has(splitId))
+    }
+
+    const iframeId = collectionsJson.automaioDelivery?.iframeScriptId ?? collectionsJson.automaioDelivery?.scriptId
     return Boolean(
-      delivery?.mode === mode && delivery.scriptId && onPage.has(delivery.scriptId),
+      collectionsJson.automaioDelivery?.mode === mode && iframeId && onPage.has(iframeId),
     )
   } catch {
     return false
   }
 }
 
-async function removeScriptsFromTemplatePage(
-  client: WebflowClient,
-  siteId: string,
-  pageId: string,
-  scriptIdsToRemove: Set<string>,
-) {
-  try {
-    const current = await client.getPageCustomCode(pageId)
-    const scripts = (current.scripts ?? []).filter((s) => !scriptIdsToRemove.has(s.id))
-    await client.upsertPageCustomCode(pageId, scripts)
-  } catch {
-    // Template page may have no custom code yet
-  }
-}
-
-async function applyScriptToTemplatePage(
+/** Merge a registered script onto the collection template footer without removing other Automaio scripts. */
+async function appendScriptToTemplatePage(
   client: WebflowClient,
   siteId: string,
   pageId: string,
   entry: { id: string; version: string },
-  stripIds: Set<string>,
 ) {
+  const registered = await client.listRegisteredScripts(siteId)
+  const registeredIds = new Set(registered.map((s) => s.id))
+  if (!registeredIds.has(entry.id)) return
+
+  const scriptEntry = { id: entry.id, location: 'footer' as const, version: entry.version }
+
   try {
     const current = await client.getPageCustomCode(pageId)
-    const scripts = (current.scripts ?? []).filter((s) => !stripIds.has(s.id))
-    scripts.push({ id: entry.id, location: 'footer', version: entry.version })
+    const scripts = (current.scripts ?? []).filter(
+      (s) => registeredIds.has(s.id) && s.id !== entry.id,
+    )
+    scripts.push(scriptEntry)
     await client.upsertPageCustomCode(pageId, scripts)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (isEmbedRecoverableError(message)) {
-      await client.upsertPageCustomCode(pageId, [
-        { id: entry.id, location: 'footer', version: entry.version },
-      ])
+      await client.upsertPageCustomCode(pageId, [scriptEntry])
       return
     }
     throw err
-  }
-
-  await removeScriptsFromSite(client, siteId, stripIds)
-}
-
-async function removeScriptsFromSite(
-  client: WebflowClient,
-  siteId: string,
-  scriptIds: Set<string>,
-) {
-  try {
-    const current = await client.getSiteCustomCode(siteId)
-    const scripts = (current.scripts ?? []).filter((s) => !scriptIds.has(s.id))
-    await client.upsertSiteCustomCode(siteId, scripts)
-  } catch {
-    // ignore
   }
 }
 
@@ -244,18 +227,60 @@ export type EnsureDeliverySetupResult = {
 }
 
 /**
- * Switch collection template delivery: clear conflicting runners, ensure fields, apply mode script.
+ * Auto-install all delivery scripts on the collection template custom code (footer).
+ * Called on OAuth connect, collection create, and publish — zero manual Designer steps.
  */
-export async function ensureCollectionDeliverySetup(
+export async function ensureAutomaioTemplateDeliverySetup(
   integrationId: string,
-  options: {
-    collectionId: string
-    mode: PublishHtmlMode
+  options?: {
+    collectionId?: string
     publishSite?: boolean
     force?: boolean
   },
 ): Promise<EnsureDeliverySetupResult> {
+  const integration = await prisma.webflowIntegration.findUnique({
+    where: { id: integrationId },
+  })
+  if (!integration) throw new Error('Integration not found')
+
+  const collectionId = options?.collectionId ?? integration.templatesCollectionId ?? undefined
+  if (!collectionId) {
+    return {
+      success: false,
+      mode: 'remote_runtime',
+      fields: [],
+      collectionTemplateSnippet: buildWebflowRuntimeCollectionEmbed(getAppBaseUrl()),
+      error: 'No pages collection configured yet.',
+    }
+  }
+
+  return ensureCollectionDeliverySetup(integrationId, {
+    collectionId,
+    mode: 'remote_runtime',
+    publishSite: options?.publishSite,
+    force: options?.force ?? true,
+    installAllScripts: true,
+  })
+}
+
+type EnsureCollectionDeliveryOptions = {
+  collectionId: string
+  mode: PublishHtmlMode
+  publishSite?: boolean
+  force?: boolean
+  /** When true, install runtime + split + iframe scripts on template (default on install). */
+  installAllScripts?: boolean
+}
+
+/**
+ * Ensure CMS fields + auto-install delivery scripts on collection template custom code.
+ */
+export async function ensureCollectionDeliverySetup(
+  integrationId: string,
+  options: EnsureCollectionDeliveryOptions,
+): Promise<EnsureDeliverySetupResult> {
   const mode = options.mode as DeliveryMode
+  const installAll = options.installAllScripts ?? true
   const integration = await prisma.webflowIntegration.findUnique({
     where: { id: integrationId },
   })
@@ -264,10 +289,8 @@ export async function ensureCollectionDeliverySetup(
   const client = new WebflowClient(integration.webflowApiKey)
   const appUrl = getAppBaseUrl()
   const collectionsJson = readCollectionsJson(integration.collections)
-  const previousMode = collectionsJson.automaioDelivery?.mode
 
   let fields = await ensureDeliveryCmsFields(client, options.collectionId, mode)
-
   if (!collectionHasDeliveryFields(fields, mode)) {
     fields = await ensureDeliveryCmsFields(client, options.collectionId, mode)
   }
@@ -279,158 +302,69 @@ export async function ensureCollectionDeliverySetup(
         ? buildWebflowSplitMethodTemplateEmbed()
         : buildWebflowIframeCollectionEmbed()
 
-  const modeChanged = Boolean(previousMode && previousMode !== mode)
-  const hasTemplateScript = await collectionTemplateHasDeliveryScript(
-    client,
-    integration.webflowSiteId,
-    options.collectionId,
-    mode,
-    collectionsJson,
-  )
-  const shouldReconfigure =
-    options.force || modeChanged || !hasTemplateScript || collectionsJson.automaioDelivery?.mode !== mode
-
-  if (mode === 'remote_runtime') {
-    try {
-      if (shouldReconfigure) {
-        const templatePage = await client.findCollectionTemplatePage(
-          integration.webflowSiteId,
-          options.collectionId,
-        )
-        if (templatePage?.id) {
-          const automaioIds = new Set(
-            await listAutomaioScriptIds(client, integration.webflowSiteId),
-          )
-          if (automaioIds.size > 0) {
-            await removeScriptsFromTemplatePage(
-              client,
-              integration.webflowSiteId,
-              templatePage.id,
-              automaioIds,
-            )
-          }
-        }
-      }
-
-      const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
-        collectionId: options.collectionId,
-        publishSite: options.publishSite ?? false,
-        skipIfConfigured: !shouldReconfigure,
-      })
-
-      if (!runtimeResult.success) {
-        return {
-          success: false,
-          mode,
-          fields,
-          collectionTemplateSnippet: snippet,
-          needsReconnect: runtimeResult.needsReconnect,
-          error: runtimeResult.error,
-        }
-      }
-
-      await prisma.webflowIntegration.update({
-        where: { id: integrationId },
-        data: {
-          collections: {
-            ...collectionsJson,
-            automaioDelivery: {
-              mode,
-              scriptId: runtimeResult.automaioRuntime?.scriptId,
-              scriptVersion: runtimeResult.automaioRuntime?.scriptVersion,
-              configuredAt: new Date().toISOString(),
-            },
-          } as object,
-        },
-      })
-
-      await syncCollectionFieldsCache(integrationId, options.collectionId, fields)
-
-      return {
-        success: true,
-        mode,
-        fields,
-        collectionTemplateSnippet: snippet,
-        templateAutoConfigured: true,
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (isCustomCodePermissionError(message) || isEmbedRecoverableError(message)) {
-        return {
-          success: false,
-          mode,
-          fields,
-          collectionTemplateSnippet: snippet,
-          needsReconnect: true,
-          error: message,
-        }
-      }
-      throw err
-    }
-  }
-
-  // Split or iframe — runtime bootstrap stays optional (config-type gated); mode-specific runner when needed
-  try {
-    await ensureAutomaioRuntimeForIntegration(integrationId, {
-      collectionId: options.collectionId,
-      publishSite: options.publishSite ?? false,
-      skipIfConfigured: !shouldReconfigure,
-    })
-  } catch {
-    // non-fatal — runtime is optional per config-type
-  }
-
   const templatePage = await client.findCollectionTemplatePage(
     integration.webflowSiteId,
     options.collectionId,
   )
 
-  const automaioIds = new Set(await listAutomaioScriptIds(client, integration.webflowSiteId))
-
-  if (mode === 'split_plain_text') {
-    await prisma.webflowIntegration.update({
-      where: { id: integrationId },
-      data: {
-        collections: {
-          ...collectionsJson,
-          automaioDelivery: {
-            mode,
-            configuredAt: new Date().toISOString(),
-          },
-        },
-      } as object,
-    })
-
-    await syncCollectionFieldsCache(integrationId, options.collectionId, fields)
-
-    return {
-      success: true,
-      mode,
-      fields,
-      collectionTemplateSnippet: snippet,
-      templateAutoConfigured: false,
-    }
-  }
-
-  const scriptName = IFRAME_SCRIPT_NAME
-  const sourceCode = buildIframeInlineBootstrap(appUrl, integration.webflowSiteId)
+  const shouldReconfigure = options.force ?? false
 
   try {
-    const { scriptId, version } = await registerDeliveryScript(
-      client,
-      integration.webflowSiteId,
-      scriptName,
-      sourceCode,
-    )
+    const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
+      collectionId: options.collectionId,
+      publishSite: false,
+      skipIfConfigured: !shouldReconfigure,
+    })
 
-    if (templatePage?.id && shouldReconfigure) {
-      await applyScriptToTemplatePage(
-        client,
-        integration.webflowSiteId,
-        templatePage.id,
-        { id: scriptId, version },
-        automaioIds,
-      )
+    if (!runtimeResult.success && !installAll && mode === 'remote_runtime') {
+      return {
+        success: false,
+        mode,
+        fields,
+        collectionTemplateSnippet: snippet,
+        needsReconnect: runtimeResult.needsReconnect,
+        error: runtimeResult.error,
+      }
+    }
+
+    let splitScriptId = collectionsJson.automaioDelivery?.splitScriptId
+    let iframeScriptId = collectionsJson.automaioDelivery?.iframeScriptId
+
+    const needsSplitScript = installAll || mode === 'split_plain_text'
+    const needsIframeScript = installAll || mode === 'iframe_embed'
+
+    if (templatePage?.id && (needsSplitScript || needsIframeScript)) {
+      if (needsSplitScript) {
+        const split = await registerDeliveryScript(
+          client,
+          integration.webflowSiteId,
+          SPLIT_SCRIPT_NAME,
+          buildSplitInlineBootstrap(appUrl, integration.webflowSiteId),
+        )
+        splitScriptId = split.scriptId
+        await appendScriptToTemplatePage(
+          client,
+          integration.webflowSiteId,
+          templatePage.id,
+          split,
+        )
+      }
+
+      if (needsIframeScript) {
+        const iframe = await registerDeliveryScript(
+          client,
+          integration.webflowSiteId,
+          IFRAME_SCRIPT_NAME,
+          buildIframeInlineBootstrap(appUrl, integration.webflowSiteId),
+        )
+        iframeScriptId = iframe.scriptId
+        await appendScriptToTemplatePage(
+          client,
+          integration.webflowSiteId,
+          templatePage.id,
+          iframe,
+        )
+      }
     }
 
     await prisma.webflowIntegration.update({
@@ -439,9 +373,11 @@ export async function ensureCollectionDeliverySetup(
         collections: {
           ...collectionsJson,
           automaioDelivery: {
-            mode,
-            scriptId,
-            scriptVersion: version,
+            mode: installAll ? 'remote_runtime' : mode,
+            scriptId: runtimeResult.automaioRuntime?.scriptId,
+            scriptVersion: runtimeResult.automaioRuntime?.scriptVersion,
+            splitScriptId,
+            iframeScriptId,
             configuredAt: new Date().toISOString(),
           },
         },
@@ -454,12 +390,19 @@ export async function ensureCollectionDeliverySetup(
       await client.publishSite(integration.webflowSiteId)
     }
 
+    const templateAutoConfigured = Boolean(
+      templatePage?.id &&
+        (runtimeResult.success || splitScriptId || iframeScriptId),
+    )
+
     return {
       success: true,
       mode,
       fields,
       collectionTemplateSnippet: snippet,
-      templateAutoConfigured: Boolean(templatePage?.id && shouldReconfigure),
+      templateAutoConfigured,
+      needsReconnect: runtimeResult.success ? undefined : runtimeResult.needsReconnect,
+      error: runtimeResult.success ? undefined : runtimeResult.error,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

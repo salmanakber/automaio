@@ -65,7 +65,11 @@ export async function GET(
       collectionsJson.automaioRuntime?.scriptId ||
         (deliveryMode === 'remote_runtime' && collectionsJson.automaioDelivery?.scriptId),
     )
-    const deliveryConfigured = Boolean(collectionsJson.automaioDelivery?.scriptId)
+    const deliveryConfigured = Boolean(
+      collectionsJson.automaioDelivery?.scriptId ||
+        collectionsJson.automaioDelivery?.splitScriptId ||
+        collectionsJson.automaioDelivery?.iframeScriptId,
+    )
     const legacyEmbedConfigured = Boolean(collectionsJson.automaioEmbed?.scriptId)
     const embedConfigured = runtimeConfigured || deliveryConfigured || legacyEmbedConfigured
 
@@ -73,7 +77,10 @@ export async function GET(
       ? 'Custom code access is available.'
       : access.message
     if (access.ok) {
-      if (deliveryMode === 'split_plain_text' && deliveryConfigured) {
+      if (collectionsJson.automaioDelivery?.splitScriptId) {
+        message =
+          'Split HTML delivery is active — collection template custom code auto-renders html, css, and js from CMS fields (config-type: split_method).'
+      } else if (deliveryMode === 'split_plain_text' && deliveryConfigured) {
         message =
           'Split HTML delivery is active — collection template loads html, css, and js from CMS Plain Text fields.'
       } else if (deliveryMode === 'iframe_embed' && deliveryConfigured) {

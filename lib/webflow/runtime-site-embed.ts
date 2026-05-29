@@ -40,7 +40,7 @@ var nodes=document.querySelectorAll("script[type='application/json'],pre,code,p,
 for(var j=0;j<nodes.length;j++){var t=(nodes[j].textContent||"").trim();if(!t)continue;if(t.indexOf("pageId")>-1){var pid2=parsePageIdFromJson(t);if(isValidPageId(pid2))return pid2;}
 if(isValidPageId(t)&&t.length>=20)return t;}
 return null;}
-function isLegacySplitPage(){if(document.querySelector("[data-automaio-page-id],[data-automaio-config],#ai-page-root[data-automaio-page-id]"))return false;return!!document.querySelector(".ai-wrapper,.ai-landing-wrapper,.ai-template-scope");}
+function isLegacySplitPage(){if(document.querySelector("[data-automaio-page-id],[data-automaio-config],#ai-page-root[data-automaio-page-id]"))return false;return!!document.querySelector(".ai-wrapper[data-automaio-split],[data-automaio-split='1'],.ai-landing-wrapper,.ai-template-scope");}
 function readConfigType(){var el=document.querySelector('[data-wf-field="config-type"],#am-config-type,[data-am-cms="config-type"]');var t=el?(el.textContent||"").trim().toLowerCase():"";if(t==="split_method"||t==="splitmethod")return"split_method";if(t==="iframe_embed"||t==="iframe")return"iframe_embed";if(t==="remote_runtime"||t==="runtime")return"remote_runtime";return"";}
 function shouldSkipRuntime(){var cfg=readConfigType();if(cfg==="split_method"||cfg==="iframe_embed")return true;return isLegacySplitPage();}
 function hasRuntimeMarkers(){if(document.getElementById("ai-page-root"))return true;if(document.querySelector("[data-automaio-page-id],[data-automaio-config],[data-page-id]"))return true;

@@ -9,7 +9,7 @@ import {
   getUnifiedLandingCollectionFields,
   type DeliveryMode,
 } from '@/lib/webflow/cms-collection-schema'
-import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
+import { ensureAutomaioTemplateDeliverySetup } from '@/lib/webflow/collection-delivery-setup'
 import {
   formatWebflowCollectionCreateError,
   isDuplicateCollectionError,
@@ -130,15 +130,15 @@ export async function POST(req: NextRequest) {
       // Collection was created — sync can be retried from settings
     }
 
-    let runtimeAutoConfigured = false
+    let templateAutoConfigured = false
     try {
-      const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
+      const deliveryResult = await ensureAutomaioTemplateDeliverySetup(integrationId, {
         collectionId: collection.id,
         publishSite: false,
       })
-      runtimeAutoConfigured = runtimeResult.success === true
+      templateAutoConfigured = deliveryResult.templateAutoConfigured === true
     } catch {
-      // Runtime auto-setup can be retried on first publish
+      // Template auto-setup can be retried on first publish
     }
 
     return NextResponse.json(
@@ -147,7 +147,8 @@ export async function POST(req: NextRequest) {
         fieldCount: collectionFields.length,
         includesSectionFields: includeSectionFields,
         setAsPagesCollection,
-        runtimeAutoConfigured,
+        runtimeAutoConfigured: templateAutoConfigured,
+        templateAutoConfigured,
         deliveryMode: mode,
       },
       { status: 201 },
