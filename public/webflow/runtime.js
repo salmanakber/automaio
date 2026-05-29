@@ -199,7 +199,7 @@
   }
 
   global.AutomaioRuntime = {
-    version: '1.0.3',
+    version: '1.0.4',
     render: render,
     showLoader: showLoader,
   }

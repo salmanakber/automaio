@@ -3,7 +3,7 @@ import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { prisma } from '@/lib/prisma'
 import { isCustomCodePermissionError, isEmbedRecoverableError } from '@/lib/webflow/embed-permissions'
 
-const RUNTIME_SCRIPT_VERSION = '1.0.3'
+const RUNTIME_SCRIPT_VERSION = '1.0.4'
 const RUNTIME_SCRIPT_DISPLAY_NAME = 'Automaio Runtime Bootstrap'
 
 export type AutomaioRuntimeMeta = {
@@ -54,7 +54,17 @@ if(!hasRuntimeMarkers())return;
 var root=ensureRoot();showLoader(root);
 var sl=location.pathname.split("/").filter(Boolean).pop();
 if(!sl){showStatus("Automaio: Page ID not found. Bind <strong>Page ID</strong> or <strong>Runtime Config</strong> on your collection template, or add the #ai-page-root embed.",true);return;}
-fetch(u+"/api/runtime/resolve?siteId="+encodeURIComponent(s)+"&slug="+encodeURIComponent(sl)).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});}).then(function(res){if(res.d&&res.d.pageId){render(res.d.pageId);return;}showStatus("Automaio: no page for slug \\""+sl+"\\". Publish from Automaio and ensure CMS slug matches.",true);}).catch(function(){showStatus("Automaio: could not resolve page. Bind Page ID / Runtime Config on your collection template.",true);});})();`
+fetch(u+"/api/runtime/resolve?siteId="+encodeURIComponent(s)+"&slug="+encodeURIComponent(sl)).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});}).then(function(res){if(res.d&&res.d.pageId){render(res.d.pageId);return;}showStatus("Automaio: no page for slug \\""+sl+"\\". Publish from Automaio and ensure CMS slug matches.",true);}).catch(function(){showStatus("Automaio: could not resolve page. Bind Page ID / Runtime Config on your collection template.",true);});
+window.AutomaioRuntimeDebug=function(){
+  console.group("[Automaio runtime debug]");
+  console.log("booted",!!window.__automaioBootstrap);
+  console.log("config-type",readConfigType());
+  console.log("shouldSkipRuntime",shouldSkipRuntime());
+  console.log("pageId from DOM",findPageId());
+  console.log("slug",location.pathname.split("/").filter(Boolean).pop());
+  console.log("ai-page-root",document.getElementById("ai-page-root"));
+  console.groupEnd();
+};})();`
 }
 
 function readCollectionsJson(raw: unknown): CollectionsJson {

@@ -8,6 +8,15 @@ function escapeForJsString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
+function debugBootstrap(): string {
+  return `function amDebug(){
+  if(typeof window==="undefined")return;
+  var on=/[?&]automaio_debug=1/i.test(location.search||"")||window.localStorage&&window.localStorage.getItem("automaioDebug")==="1";
+  if(!on)return function(){};
+  return function(tag,data){try{console.log("[Automaio:"+tag+"]",data);}catch(e){}};
+}`
+}
+
 function readSlugFromPath(): string {
   return `function readSlug(){
   var parts=location.pathname.split("/").filter(Boolean);
@@ -26,10 +35,20 @@ function readConfigTypeFromDom(): string {
 }`
 }
 
+function readCmsField(slug: string): string {
+  return `function readField(slug){
+  var el=document.getElementById("am-"+slug)||document.querySelector('[data-am-cms="'+slug+'"]')||document.querySelector('[data-wf-field="'+slug+'"]');
+  if(!el)return"";
+  var t=(el.textContent||"").trim();
+  if(!t||t.indexOf("{{")!==-1)return"";
+  return t;
+}`
+}
+
 /** Mirrors legacy {{wf}} split template: ai-wrapper > style + html + script */
 function injectSplitMethod(): string {
   return `function injectSplitMethod(html,css,js){
-  if(!html&&!css&&!js)return;
+  if(!html&&!css&&!js)return false;
   var wrapper=document.querySelector(".ai-wrapper[data-automaio-split]");
   if(!wrapper){
     wrapper=document.createElement("div");
@@ -53,6 +72,7 @@ function injectSplitMethod(): string {
     sc.textContent=js;
     wrapper.appendChild(sc);
   }
+  return true;
 }`
 }
 
@@ -60,8 +80,8 @@ function readCmsFromDom(slugs: string[]): string {
   return `function readCms(slugs){
   for(var i=0;i<slugs.length;i++){
     var s=slugs[i];
-    var el=document.getElementById("am-"+s)||document.querySelector('[data-am-cms="'+s+'"]')||document.querySelector('[data-wf-field="'+s+'"]');
-    if(el){var t=(el.textContent||"").trim();if(t&&t.indexOf("{{")===-1&&t.length>0)return t;}
+    var v=readField(s);
+    if(v)return v;
   }
   return "";
 }`
@@ -84,29 +104,54 @@ export function buildSplitInlineBootstrap(appUrl: string, webflowSiteId: string)
 if(window.__automaioSplitBoot)return;window.__automaioSplitBoot=1;
 var API="${base}";
 var SITE="${site}";
+${debugBootstrap()}
+var log=amDebug();
 ${readConfigTypeFromDom()}
 ${readSlugFromPath()}
+${readCmsField('config-type')}
 ${readCmsFromDom(['htmlContent', 'html-content', 'html_content', 'html', 'cssContent', 'css-content', 'css_content', 'css', 'jsContent', 'js-content', 'js_content', 'js'])}
 ${injectSplitMethod()}
 ${splitShouldRun()}
 function fromDom(){
-  if(!splitShouldRun())return false;
+  if(!splitShouldRun()){log("split","skipped — config-type="+readConfigType());return false;}
   var html=readCms(["htmlContent","html-content","html_content","html"]);
   var css=readCms(["cssContent","css-content","css_content","css"]);
   var js=readCms(["jsContent","js-content","js_content","js"]);
-  if(html||css||js){injectSplitMethod(html,css,js);return true;}
+  log("split-dom",{configType:readConfigType(),templateId:readField("template-id"),pageId:readField("page-id"),htmlLen:(html||"").length,cssLen:(css||"").length,jsLen:(js||"").length});
+  if(html||css||js){injectSplitMethod(html,css,js);log("split","injected from DOM");return true;}
   return false;
 }
 function fromApi(){
   if(!splitShouldRun())return;
   var slug=readSlug();
-  if(!slug||!SITE)return;
-  fetch(API+"/api/webflow/delivery/split?siteId="+encodeURIComponent(SITE)+"&slug="+encodeURIComponent(slug))
-    .then(function(r){return r.ok?r.json():null;})
-    .then(function(d){if(d&&(d.html||d.css||d.js))injectSplitMethod(d.html||"",d.css||"",d.js||"");})
-    .catch(function(){});
+  if(!slug||!SITE){log("split-api","missing slug or siteId");return;}
+  var url=API+"/api/webflow/delivery/split?siteId="+encodeURIComponent(SITE)+"&slug="+encodeURIComponent(slug);
+  log("split-api",{url:url,slug:slug});
+  fetch(url)
+    .then(function(r){return r.json().then(function(d){return {ok:r.ok,status:r.status,d:d};});})
+    .then(function(res){
+      if(!res.ok){log("split-api","failed",{status:res.status,error:res.d&&res.d.error});console.warn("[Automaio split] API "+res.status+":",(res.d&&res.d.error)||"unknown");return;}
+      if(res.d&&(res.d.html||res.d.css||res.d.js)){
+        injectSplitMethod(res.d.html||"",res.d.css||"",res.d.js||"");
+        log("split","injected from API",{projectId:res.d.projectId});
+      }else{log("split-api","empty payload");console.warn("[Automaio split] API returned no html/css/js for slug",slug);}
+    })
+    .catch(function(err){log("split-api","network error",err);console.warn("[Automaio split] fetch failed",err);});
 }
 if(!fromDom())fromApi();
+window.AutomaioSplitDebug=function(){
+  console.group("[Automaio split debug]");
+  console.log("booted",!!window.__automaioSplitBoot);
+  console.log("config-type",readConfigType());
+  console.log("template-id",readField("template-id"));
+  console.log("page-id",readField("page-id"));
+  console.log("slug",readSlug());
+  console.log("htmlContent chars",readCms(["htmlContent","html-content","html_content","html"]).length);
+  console.log("cssContent chars",readCms(["cssContent","css-content","css_content","css"]).length);
+  console.log("jsContent chars",readCms(["jsContent","js-content","js_content","js"]).length);
+  console.log("wrapper",document.querySelector(".ai-wrapper[data-automaio-split]"));
+  console.groupEnd();
+};
 })();`
 }
 
@@ -127,12 +172,15 @@ export function buildIframeInlineBootstrap(appUrl: string, webflowSiteId: string
 if(window.__automaioIframeBoot)return;window.__automaioIframeBoot=1;
 var API="${base}";
 var SITE="${site}";
+${debugBootstrap()}
+var log=amDebug();
 ${readConfigTypeFromDom()}
 ${readSlugFromPath()}
+${readCmsField('config-type')}
 ${readCmsFromDom(['iframe-url', 'iframe_url', 'embed-url', 'page-url'])}
 ${iframeShouldRun()}
 function mountIframe(src){
-  if(!src||src.indexOf("http")!==0)return;
+  if(!src||src.indexOf("http")!==0)return false;
   var host=document.getElementById("automaio-iframe-host")||document.body.appendChild(Object.assign(document.createElement("div"),{id:"automaio-iframe-host"}));
   host.replaceChildren();
   var f=document.createElement("iframe");
@@ -146,6 +194,8 @@ function mountIframe(src){
       f.style.height=Math.max(320,e.data.height)+"px";
     }
   });
+  log("iframe","mounted",src);
+  return true;
 }
 function fromDom(){
   if(!iframeShouldRun())return false;
@@ -160,7 +210,7 @@ function fromApi(){
   fetch(API+"/api/webflow/delivery/iframe?siteId="+encodeURIComponent(SITE)+"&slug="+encodeURIComponent(slug))
     .then(function(r){return r.ok?r.json():null;})
     .then(function(d){if(d&&d.url)mountIframe(d.url);})
-    .catch(function(){});
+    .catch(function(err){console.warn("[Automaio iframe] fetch failed",err);});
 }
 if(!fromDom())fromApi();
 })();`

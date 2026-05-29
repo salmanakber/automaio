@@ -22,7 +22,7 @@ import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-
 const SPLIT_SCRIPT_NAME = 'Automaio Split HTML Renderer'
 const IFRAME_SCRIPT_NAME = 'Automaio Iframe Embed Renderer'
 
-const SCRIPT_VERSION = '1.2.0'
+const SCRIPT_VERSION = '1.3.0'
 
 type CollectionsJson = {
   collections?: Array<{ id: string; fields?: Array<{ slug: string; name: string; type: string }> }>
@@ -346,7 +346,7 @@ export async function ensureCollectionDeliverySetup(
           client,
           integration.webflowSiteId,
           templatePage.id,
-          split,
+          { id: split.scriptId, version: split.version },
         )
       }
 
@@ -362,7 +362,7 @@ export async function ensureCollectionDeliverySetup(
           client,
           integration.webflowSiteId,
           templatePage.id,
-          iframe,
+          { id: iframe.scriptId, version: iframe.version },
         )
       }
     }
