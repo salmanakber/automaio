@@ -19,6 +19,12 @@ import {
 } from '@/lib/webflow/template-embeds'
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
 import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
+import {
+  buildTemplateShellHeadBootstrap,
+  TEMPLATE_SHELL_SCRIPT_NAME,
+  TEMPLATE_SHELL_VERSION,
+  buildCollectionTemplateBodySnippet,
+} from '@/lib/webflow/collection-template-shell'
 
 const SPLIT_SCRIPT_NAME = 'Automaio Split HTML Renderer'
 const IFRAME_SCRIPT_NAME = 'Automaio Iframe Embed Renderer'
@@ -34,6 +40,7 @@ type CollectionsJson = {
     scriptVersion?: string
     splitScriptId?: string
     iframeScriptId?: string
+    shellScriptId?: string
     configuredAt?: string
   }
 }
@@ -49,7 +56,8 @@ function isAutomaioDeliveryScript(script: { id: string; displayName?: string }) 
     name.includes('automaio runtime') ||
     name.includes('automaio split') ||
     name.includes('automaio iframe') ||
-    name.includes('automaio content embed')
+    name.includes('automaio content embed') ||
+    name.includes('automaio template shell')
   )
 }
 
@@ -128,27 +136,69 @@ async function appendScriptToTemplatePage(
   }
 }
 
+/** Attach script to collection template header (runs before body render). */
+async function appendScriptToTemplatePageHeader(
+  client: WebflowClient,
+  siteId: string,
+  pageId: string,
+  entry: { id: string; version: string },
+) {
+  const registered = await client.listRegisteredScripts(siteId)
+  const registeredIds = new Set(registered.map((s) => s.id))
+  if (!registeredIds.has(entry.id)) return
+
+  const scriptEntry = { id: entry.id, location: 'header' as const, version: entry.version }
+
+  try {
+    const current = await client.getPageCustomCode(pageId)
+    const scripts = (current.scripts ?? []).filter(
+      (s) => registeredIds.has(s.id) && s.id !== entry.id,
+    )
+    scripts.push(scriptEntry)
+    await client.upsertPageCustomCode(pageId, scripts)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (isEmbedRecoverableError(message)) {
+      try {
+        await client.upsertPageCustomCode(pageId, [scriptEntry])
+      } catch {
+        // Non-fatal
+      }
+    }
+  }
+}
+
+function isAutomaioShellScript(script: { displayName?: string }) {
+  return (script.displayName ?? '').toLowerCase().includes('automaio template shell')
+}
+
 async function registerDeliveryScript(
   client: WebflowClient,
   siteId: string,
   displayName: string,
   sourceCode: string,
+  version = SCRIPT_VERSION,
 ): Promise<{ scriptId: string; version: string }> {
   const registered = await client.listRegisteredScripts(siteId)
   const existing = registered.find(
     (s) => (s.displayName ?? '').toLowerCase() === displayName.toLowerCase(),
   )
   if (existing) {
-    return { scriptId: existing.id, version: existing.version ?? SCRIPT_VERSION }
+    const useVersion =
+      displayName === TEMPLATE_SHELL_SCRIPT_NAME ? TEMPLATE_SHELL_VERSION : version
+    return { scriptId: existing.id, version: existing.version ?? useVersion }
   }
+
+  const scriptVersion =
+    displayName === TEMPLATE_SHELL_SCRIPT_NAME ? TEMPLATE_SHELL_VERSION : version
 
   const created = await client.registerInlineScript(siteId, {
     sourceCode,
     displayName,
-    version: SCRIPT_VERSION,
+    version: scriptVersion,
     canCopy: false,
   })
-  return { scriptId: created.id, version: SCRIPT_VERSION }
+  return { scriptId: created.id, version: scriptVersion }
 }
 
 /** Create all optional delivery CMS fields (unified schema) on connect / install. */
@@ -226,6 +276,8 @@ export type EnsureDeliverySetupResult = {
   mode: DeliveryMode
   fields: CollectionField[]
   collectionTemplateSnippet: string
+  collectionTemplateBodySnippet?: string
+  needsDesignerShell?: boolean
   needsReconnect?: boolean
   error?: string
   templateAutoConfigured?: boolean
@@ -334,9 +386,31 @@ export async function ensureCollectionDeliverySetup(
 
     let splitScriptId = collectionsJson.automaioDelivery?.splitScriptId
     let iframeScriptId = collectionsJson.automaioDelivery?.iframeScriptId
+    let shellScriptId = collectionsJson.automaioDelivery?.shellScriptId
 
     const needsSplitScript = installAll || mode === 'split_plain_text'
     const needsIframeScript = installAll || mode === 'iframe_embed'
+
+    if (templatePage?.id) {
+      try {
+        const shell = await registerDeliveryScript(
+          client,
+          integration.webflowSiteId,
+          TEMPLATE_SHELL_SCRIPT_NAME,
+          buildTemplateShellHeadBootstrap(),
+        )
+        shellScriptId = shell.scriptId
+        await appendScriptToTemplatePageHeader(
+          client,
+          integration.webflowSiteId,
+          templatePage.id,
+          { id: shell.scriptId, version: shell.version },
+        )
+      } catch (shellErr) {
+        const message = shellErr instanceof Error ? shellErr.message : String(shellErr)
+        if (!isEmbedRecoverableError(message) && !isWebflowNotFoundError(shellErr)) throw shellErr
+      }
+    }
 
     if (templatePage?.id && (needsSplitScript || needsIframeScript)) {
       if (needsSplitScript) {
@@ -398,6 +472,7 @@ export async function ensureCollectionDeliverySetup(
               runtimeMeta?.scriptVersion ?? collectionsJson.automaioDelivery?.scriptVersion,
             splitScriptId,
             iframeScriptId,
+            shellScriptId,
             configuredAt: new Date().toISOString(),
           },
         },
@@ -412,19 +487,24 @@ export async function ensureCollectionDeliverySetup(
 
     const templateAutoConfigured = Boolean(
       templatePage?.id &&
-        (runtimeResult.success || splitScriptId || iframeScriptId),
+        (runtimeResult.success || splitScriptId || iframeScriptId || shellScriptId),
     )
 
     const missingTemplatePage = !templatePage?.id
+    const blankTemplateWarning = templatePage?.id
+      ? 'Webflow collection templates must have at least one element on the canvas or CMS item URLs may 404. Open the Automaio Designer panel → Install template shell, or add a Div/Embed with the shell snippet, then publish the site.'
+      : undefined
     const templatePageWarning = missingTemplatePage
       ? 'No Collection Template page found in Webflow for this collection. Open Webflow Designer → Pages → CMS Collection pages, open the template for this collection, then publish the site so item URLs work.'
-      : undefined
+      : blankTemplateWarning
 
     return {
       success: true,
       mode,
       fields,
       collectionTemplateSnippet: snippet,
+      collectionTemplateBodySnippet: buildCollectionTemplateBodySnippet(),
+      needsDesignerShell: Boolean(templatePage?.id),
       templateAutoConfigured,
       needsReconnect: runtimeResult.success ? undefined : runtimeResult.needsReconnect,
       error:

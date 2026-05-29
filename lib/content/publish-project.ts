@@ -538,7 +538,7 @@ export async function publishContentProject(
         collectionId: project.cmsCollectionId,
         mode: htmlMode as DeliveryMode,
         publishSite: false,
-        force: false,
+        force: true,
       })
       collectionFields = deliveryResult.fields.map((f) => ({
         slug: f.slug,

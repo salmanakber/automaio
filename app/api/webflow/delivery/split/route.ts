@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSplitDeliveryPayload } from '@/lib/webflow/resolve-published-project'
+import {
+  getSplitDeliveryPayload,
+  resolveWebflowIntegrationBySiteKey,
+} from '@/lib/webflow/resolve-published-project'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -20,20 +23,37 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const payload = await getSplitDeliveryPayload(siteId, slug)
-    if (!payload) {
+    const integration = await resolveWebflowIntegrationBySiteKey(siteId)
+    if (!integration) {
       return NextResponse.json(
-        { error: 'Published page not found for this slug' },
+        {
+          error:
+            'Site not found. Use your Webflow site ID (Settings → Webflow), not an Automaio project/org ID.',
+        },
         { status: 404, headers: CORS_HEADERS },
       )
     }
 
-    return NextResponse.json(payload, {
-      headers: {
-        ...CORS_HEADERS,
-        'Cache-Control': 'public, max-age=60',
+    const payload = await getSplitDeliveryPayload(integration.webflowSiteId, slug)
+    if (!payload) {
+      return NextResponse.json(
+        {
+          error: `Published page not found for slug "${slug}". Publish from Automaio first.`,
+          webflowSiteId: integration.webflowSiteId,
+        },
+        { status: 404, headers: CORS_HEADERS },
+      )
+    }
+
+    return NextResponse.json(
+      { ...payload, webflowSiteId: integration.webflowSiteId },
+      {
+        headers: {
+          ...CORS_HEADERS,
+          'Cache-Control': 'public, max-age=60',
+        },
       },
-    })
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Split delivery failed'
     return NextResponse.json({ error: message }, { status: 500, headers: CORS_HEADERS })

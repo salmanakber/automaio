@@ -23,6 +23,7 @@ import {
 import { WebflowSetupNotice } from '@/components/webflow/WebflowSetupNotice'
 import { DesignerAuthOnboarding } from '@/components/webflow/DesignerAuthOnboarding'
 import { DesignerScreensPanel } from '@/components/webflow/DesignerScreensPanel'
+import { TemplateShellInstaller } from '@/components/webflow/TemplateShellInstaller'
 import type { OrgSetupStatus } from '@/lib/organizations/setup-status'
 
 export default function WebflowDesignerPage() {
@@ -151,6 +152,7 @@ export default function WebflowDesignerPage() {
 
           {authenticated ? (
             <>
+              <TemplateShellInstaller />
               <DesignerScreensPanel siteId={webflowSiteId} />
 
               {setupStatus && !setupStatus.isFullySetup && (

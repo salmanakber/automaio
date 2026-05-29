@@ -13,11 +13,29 @@ function slugify(value: string): string {
     .slice(0, 80)
 }
 
+/** Resolve integration from Webflow site ID, Automaio integration ID, or org ID. */
+export async function resolveWebflowIntegrationBySiteKey(siteKey: string) {
+  const key = siteKey.trim()
+  if (!key) return null
+
+  const bySite = await prisma.webflowIntegration.findFirst({
+    where: { webflowSiteId: key },
+  })
+  if (bySite) return bySite
+
+  const byIntegration = await prisma.webflowIntegration.findFirst({
+    where: { id: key },
+  })
+  if (byIntegration) return byIntegration
+
+  return prisma.webflowIntegration.findFirst({
+    where: { organizationId: key },
+  })
+}
+
 /** Find a published landing project on a Webflow site by CMS slug. */
 export async function resolvePublishedProjectBySiteSlug(siteId: string, slug: string) {
-  const integration = await prisma.webflowIntegration.findFirst({
-    where: { webflowSiteId: siteId },
-  })
+  const integration = await resolveWebflowIntegrationBySiteKey(siteId)
   if (!integration) return null
 
   const normalized = slugify(slug)
