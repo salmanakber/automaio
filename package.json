@@ -16,7 +16,7 @@
     "webflow:extension": "cd webflow-designer-ext && npx --yes @webflow/webflow-cli extension serve",
     "webflow:extension:build": "cd webflow-designer-ext && npx --yes @webflow/webflow-cli extension build",
     "webflow:extension:sync-shell": "mkdir -p public/webflow/extension-shell && cp webflow-designer-ext/public/designer-bridge.js public/webflow/extension-shell/designer-bridge.js",
-    "webflow:extension:bundle": "npm run webflow:extension:sync-shell && cd webflow-designer-ext && npx --yes @webflow/webflow-cli extension bundle",
+    "webflow:extension:bundle": "npm run webflow:extension:sync-shell && cd webflow-designer-ext && npx --yes @webflow/webflow-cli extension bundle"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1053.0",
