@@ -5,7 +5,7 @@
 ;(function () {
   var RENDER_MARKER = 'data-automaio-render-embed'
   var RENDER_VERSION = 'v1'
-  var WEBFLOW_WAIT_MS = 10000
+  var WEBFLOW_WAIT_MS = 30000
 
   var EMBED_MARKUP =
     '<!-- Automaio direct render (' +
@@ -82,11 +82,69 @@
     console.log('[Automaio Designer]', message)
   }
 
+  function isInsecureDevShell() {
+    try {
+      return window.location.protocol === 'http:' && window.location.hostname !== 'localhost'
+    } catch (e) {
+      return false
+    }
+  }
+
+  function isLikelyDesignerContext() {
+    try {
+      if (window.parent && window.parent !== window) return true
+      if (document.referrer && document.referrer.indexOf('webflow.com') !== -1) return true
+    } catch (e) {}
+    return false
+  }
+
   async function resolveWebflowApi(options) {
+    if (isInsecureDevShell()) return null
+
     var wf = getWebflowApi()
     if (hasWebflowApi(wf)) return wf
     var timeoutMs = (options && options.timeoutMs) || WEBFLOW_WAIT_MS
     return waitForWebflowApi(timeoutMs)
+  }
+
+  async function getBridgeStatus() {
+    var wf = getWebflowApi()
+    if (!hasWebflowApi(wf)) {
+      wf = await waitForWebflowApi(1500)
+    }
+
+    var insecureDevShell = isInsecureDevShell()
+    var inDesignerContext = isLikelyDesignerContext()
+
+    if (insecureDevShell) {
+      return {
+        webflowAvailable: false,
+        insecureDevShell: true,
+        inDesignerContext: inDesignerContext,
+        shellOrigin: window.location.origin,
+        hint: 'HTTP dev shell — Webflow will not inject the Designer API',
+      }
+    }
+
+    if (!hasWebflowApi(wf)) {
+      return {
+        webflowAvailable: false,
+        insecureDevShell: false,
+        inDesignerContext: inDesignerContext,
+        shellOrigin: window.location.origin,
+        hint: inDesignerContext
+          ? 'Webflow API not injected yet'
+          : 'Not running inside Webflow Designer',
+      }
+    }
+
+    return {
+      webflowAvailable: true,
+      insecureDevShell: false,
+      inDesignerContext: inDesignerContext,
+      shellOrigin: window.location.origin,
+      hint: 'ready',
+    }
   }
 
   async function findAppendTarget(wf) {
@@ -271,10 +329,18 @@
 
   async function ensureRenderEmbed(options) {
     var wf = await resolveWebflowApi(options)
+    if (isInsecureDevShell()) {
+      return {
+        ok: false,
+        error: 'insecure dev shell',
+        alreadyInstalled: false,
+      }
+    }
+
     if (!hasWebflowApi(wf)) {
       return {
         ok: false,
-        error: 'webflow API unavailable',
+        error: isLikelyDesignerContext() ? 'webflow API unavailable' : 'not in designer',
         alreadyInstalled: false,
       }
     }
@@ -327,6 +393,11 @@
       } else if (result.error === 'not a cms template page') {
         userMessage =
           'Open your CMS collection template first (Pages → Collection pages → your template).'
+      } else if (result.error === 'insecure dev shell') {
+        userMessage =
+          'Dev server is HTTP — Webflow will not inject the Designer API. Upload bundle.zip and use Launch App, or run webflow extension serve on your computer.'
+      } else if (result.error === 'not in designer') {
+        userMessage = 'Open Automaio from Webflow Designer (Apps panel), not in a browser tab.'
       } else if (result.error === 'webflow API unavailable') {
         userMessage =
           'Webflow Designer API not ready — close Automaio, reopen it from the Apps panel, then retry.'
@@ -341,6 +412,7 @@
   window.AutomaioDesignerBridge = {
     ensureRenderEmbed: ensureRenderEmbed,
     installTemplateShell: installTemplateShell,
+    getBridgeStatus: getBridgeStatus,
   }
 
   function handleResult(event, result) {
@@ -380,6 +452,19 @@
             resultType: 'automaio-sync-render-embed-result',
           },
           result,
+        )
+      })
+    }
+
+    if (data.type === 'automaio-bridge-status-request') {
+      getBridgeStatus().then(function (status) {
+        handleResult(
+          {
+            source: event.source,
+            origin: event.origin,
+            resultType: 'automaio-bridge-status-result',
+          },
+          status,
         )
       })
     }

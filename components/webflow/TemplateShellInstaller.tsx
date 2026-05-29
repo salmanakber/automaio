@@ -28,8 +28,14 @@ function formatInstallError(error?: string): string {
   if (error === 'not a cms template page') {
     return 'Open your CMS collection template first (Pages → Collection pages → your template).'
   }
+  if (error === 'insecure dev shell') {
+    return 'Your dev extension runs over HTTP (e.g. http://209.97.132.83:1337). Webflow will not inject the Designer API on HTTP. Upload bundle.zip and click Launch App, or run webflow extension serve on your computer and use Launch development app.'
+  }
+  if (error === 'not in designer') {
+    return 'Open Automaio from Webflow Designer (Apps panel → Launch App), not in a browser tab.'
+  }
   if (error === 'webflow API unavailable') {
-    return 'Webflow Designer API not ready — close Automaio, reopen it from the Apps panel, then retry.'
+    return 'Webflow Designer API not ready. Use Launch App (production bundle), reopen Automaio from the Apps panel, and make sure you uploaded the latest bundle.zip.'
   }
   if (error === 'Designer bridge timeout') {
     return 'Designer bridge did not respond. Make sure Automaio is open inside Webflow Designer (Apps panel), not in a browser tab.'
@@ -49,8 +55,32 @@ export function TemplateShellInstaller({
   const [copied, setCopied] = useState(false)
 
   const inDesignerShell =
-    typeof window !== 'undefined' &&
-    (window.location.search.includes('embedded=1') || window.parent !== window)
+    typeof window !== 'undefined' && window.location.search.includes('embedded=1')
+
+  const queryBridgeStatus = useCallback(() => {
+    return new Promise<{
+      webflowAvailable?: boolean
+      insecureDevShell?: boolean
+      inDesignerContext?: boolean
+      hint?: string
+    }>((resolve) => {
+      const timeout = window.setTimeout(() => resolve({}), 3000)
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data as { type?: string; status?: Record<string, unknown> }
+        if (data?.type !== 'automaio-bridge-status-result') return
+        window.clearTimeout(timeout)
+        window.removeEventListener('message', onMessage)
+        resolve((data.status ?? {}) as {
+          webflowAvailable?: boolean
+          insecureDevShell?: boolean
+          inDesignerContext?: boolean
+          hint?: string
+        })
+      }
+      window.addEventListener('message', onMessage)
+      window.parent.postMessage({ type: 'automaio-bridge-status-request' }, '*')
+    })
+  }, [])
 
   const markInstalled = useCallback(
     async (id: string, cid: string) => {
@@ -123,6 +153,13 @@ export function TemplateShellInstaller({
         setMessageType('info')
         setMessage('Installing SEO render embed on this collection template…')
 
+        const bridgeStatus = await queryBridgeStatus()
+        if (bridgeStatus.insecureDevShell) {
+          setMessageType('error')
+          setMessage(formatInstallError('insecure dev shell'))
+          return
+        }
+
         const result = await requestDesignerEmbed()
         if (result.ok) {
           await markInstalled(integrationId, collectionId)
@@ -144,7 +181,7 @@ export function TemplateShellInstaller({
         setSyncing(false)
       }
     },
-    [collectionId, inDesignerShell, integrationId, markInstalled, requestDesignerEmbed],
+    [collectionId, inDesignerShell, integrationId, markInstalled, queryBridgeStatus, requestDesignerEmbed],
   )
 
   useEffect(() => {
@@ -176,6 +213,13 @@ export function TemplateShellInstaller({
 
         setMessageType('info')
         setMessage('Installing SEO render embed…')
+        const bridgeStatus = await queryBridgeStatus()
+        if (cancelled) return
+        if (bridgeStatus.insecureDevShell) {
+          setMessageType('error')
+          setMessage(formatInstallError('insecure dev shell'))
+          return
+        }
         const result = await requestDesignerEmbed()
         if (cancelled) return
         if (result.ok) {
@@ -204,7 +248,7 @@ export function TemplateShellInstaller({
     return () => {
       cancelled = true
     }
-  }, [autoSync, collectionId, inDesignerShell, integrationId, markInstalled, requestDesignerEmbed])
+  }, [autoSync, collectionId, inDesignerShell, integrationId, markInstalled, queryBridgeStatus, requestDesignerEmbed])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

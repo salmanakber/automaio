@@ -62,9 +62,11 @@ Also set in Webflow app settings (**Edit App → Building Blocks**):
 
 ```bash
 npm run dev                    # Next.js on :3301
-npm run webflow:extension      # Extension shell on :1337
+npm run webflow:extension      # Extension shell on localhost:1337 (HTTPS via CLI)
 ```
 
-Temporarily set `AUTOMAIO_APP_URL` in `public/index.html` to your local Next URL if needed.
+In Designer: **Launch development app** — only works when the CLI runs on **your computer** at localhost:1337.
 
-In Designer: **Launch development app** (localhost:1337) — never use this for production sites.
+**Do not** point Webflow at `http://your-server-ip:1337`. Webflow Designer is HTTPS and will **not inject** `window.webflow` into plain HTTP extension shells ([community report](https://community.webflow.com/ask-answer/post/designer-extension----designer-api-window-webflow-not-injected-when-YugWI824Ainax42)).
+
+For production sites, always upload `bundle.zip` and use **Launch App**.

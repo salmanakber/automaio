@@ -11,6 +11,46 @@
         height: 100%;
         overflow: hidden;
         background: #0a0a0a;
+        font-family: system-ui, sans-serif;
+      }
+      #automaio-shell-bar {
+        display: none;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.6rem;
+        font-size: 11px;
+        color: #cbd5e1;
+        background: #111827;
+        border-bottom: 1px solid #1f2937;
+      }
+      #automaio-shell-bar.visible {
+        display: flex;
+      }
+      #automaio-shell-bar .ok {
+        color: #34d399;
+      }
+      #automaio-shell-bar .bad {
+        color: #f87171;
+      }
+      #automaio-shell-bar button {
+        margin-left: auto;
+        font-size: 11px;
+        padding: 0.2rem 0.55rem;
+        border-radius: 4px;
+        border: 1px solid #374151;
+        background: #1f2937;
+        color: #e5e7eb;
+        cursor: pointer;
+      }
+      #automaio-shell-bar button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      #automaio-frame-wrap {
+        height: calc(100% - 0px);
+      }
+      #automaio-shell-bar.visible + #automaio-frame-wrap {
+        height: calc(100% - 30px);
       }
       #automaio-frame {
         width: 100%;
@@ -20,54 +60,154 @@
       }
       #automaio-fallback {
         display: none;
-        font-family: system-ui, sans-serif;
         padding: 1rem;
         font-size: 13px;
         color: #e2e8f0;
+        line-height: 1.5;
+      }
+      #automaio-fallback code {
+        font-size: 12px;
       }
     </style>
   </head>
   <body>
-    <iframe id="automaio-frame" title="Automaio"></iframe>
+    <div id="automaio-shell-bar">
+      <span id="automaio-api-status">Checking Webflow API…</span>
+      <button id="automaio-shell-install" type="button" disabled>Install embed (shell)</button>
+    </div>
+    <div id="automaio-frame-wrap">
+      <iframe id="automaio-frame" title="Automaio"></iframe>
+    </div>
     <div id="automaio-fallback">
-      <p><strong>Automaio</strong> could not load the app.</p>
+      <p><strong>Automaio extension shell</strong></p>
+      <p id="automaio-fallback-reason"></p>
       <p>
         Set <code>AUTOMAIO_APP_URL</code> in this file to your live app URL (same as
-        <code>NEXTAUTH_URL</code> in .env), e.g.
-        <code>https://automaio.kilo1app.com</code>.
+        <code>NEXTAUTH_URL</code>), e.g. <code>https://automaio.kilo1app.com</code>.
+      </p>
+      <p>
+        Dev: run <code>npm run webflow:extension</code> on your machine and use
+        <strong>Launch development app</strong> in Webflow (localhost:1337 over HTTPS via CLI).
+        Do not open <code>http://your-server-ip:1337</code> in a browser tab — the Webflow API is
+        only injected inside the Designer iframe.
       </p>
     </div>
     <script src="./designer-bridge.js"></script>
     <script>
-      (function () {
+      ;(function () {
         // Keep in sync with NEXTAUTH_URL / NEXT_PUBLIC_APP_URL in .env
-        var AUTOMAIO_APP_URL = 'https://automaio.kilo1app.com'
+        var DEFAULT_APP_URL = 'https://automaio.kilo1app.com'
 
         var params = new URLSearchParams(window.location.search)
         var fromQuery = params.get('appUrl')
-        if (fromQuery) AUTOMAIO_APP_URL = fromQuery
+        var AUTOMAIO_APP_URL = (fromQuery || DEFAULT_APP_URL).replace(/\/$/, '')
 
-        var base = AUTOMAIO_APP_URL.replace(/\/$/, '')
         var frame = document.getElementById('automaio-frame')
         var fallback = document.getElementById('automaio-fallback')
+        var fallbackReason = document.getElementById('automaio-fallback-reason')
+        var shellBar = document.getElementById('automaio-shell-bar')
+        var apiStatus = document.getElementById('automaio-api-status')
+        var shellInstall = document.getElementById('automaio-shell-install')
 
-        if (!base || base.indexOf('localhost') !== -1 || base.indexOf('127.0.0.1') !== -1) {
+        function isBlockedDevAppUrl(url) {
+          if (!url) return true
+          if (url.indexOf('localhost') !== -1 || url.indexOf('127.0.0.1') !== -1) return true
+          return false
+        }
+
+        function isInsecureDevShell() {
+          return window.location.protocol === 'http:' && window.location.hostname !== 'localhost'
+        }
+
+        function updateShellStatus() {
+          var bridge = window.AutomaioDesignerBridge
+          if (!bridge || !bridge.getBridgeStatus) return
+
+          bridge.getBridgeStatus().then(function (status) {
+            shellBar.classList.add('visible')
+
+            if (status.webflowAvailable) {
+              apiStatus.innerHTML =
+                '<span class="ok">Webflow API ready</span> · shell: ' + status.shellOrigin
+              shellInstall.disabled = false
+              return
+            }
+
+            var hint = status.hint || 'Webflow API not available in this frame.'
+            apiStatus.innerHTML = '<span class="bad">' + hint + '</span>'
+
+            if (status.insecureDevShell) {
+              apiStatus.innerHTML +=
+                ' Use <strong>Launch App</strong> (production bundle) or local CLI HTTPS dev — not http://ip:1337.'
+            } else if (!status.inDesignerContext) {
+              apiStatus.innerHTML += ' Open from Webflow Designer → Apps → Automaio (not a browser tab).'
+            }
+
+            shellInstall.disabled = true
+          })
+        }
+
+        shellInstall.addEventListener('click', function () {
+          if (!window.AutomaioDesignerBridge) return
+          shellInstall.disabled = true
+          shellInstall.textContent = 'Installing…'
+          window.AutomaioDesignerBridge.installTemplateShell().then(function (result) {
+            shellInstall.textContent = result.ok ? 'Installed' : 'Install failed'
+            shellInstall.disabled = !result.ok
+            updateShellStatus()
+            if (frame.contentWindow) {
+              frame.contentWindow.postMessage(
+                { type: 'automaio-shell-install-result', result: result },
+                '*',
+              )
+            }
+          })
+        })
+
+        if (isBlockedDevAppUrl(AUTOMAIO_APP_URL)) {
           frame.style.display = 'none'
           fallback.style.display = 'block'
+          fallbackReason.textContent =
+            'AUTOMAIO_APP_URL points to localhost. The extension shell should iframe your live app (' +
+            DEFAULT_APP_URL +
+            '), not localhost.'
           return
         }
 
-        var installed = params.get('installed') === '1'
-        var siteId = params.get('siteId') || ''
+        if (isInsecureDevShell()) {
+          fallbackReason.textContent =
+            'This shell is served over plain HTTP at ' +
+            window.location.host +
+            '. Webflow Designer requires HTTPS for API injection. Upload bundle.zip and use Launch App, or run webflow extension serve locally.'
+        }
+
         var qs = new URLSearchParams()
         qs.set('embedded', '1')
-        if (installed) qs.set('installed', '1')
-        if (siteId) qs.set('siteId', siteId)
-        frame.src = base + '/webflow/designer?' + qs.toString()
-        frame.onerror = function () {
-          frame.style.display = 'none'
-          fallback.style.display = 'block'
+        if (params.get('installed') === '1') qs.set('installed', '1')
+        if (params.get('siteId')) qs.set('siteId', params.get('siteId'))
+        frame.src = AUTOMAIO_APP_URL + '/webflow/designer?' + qs.toString()
+
+        frame.onload = function () {
+          updateShellStatus()
         }
+
+        window.addEventListener('message', function (event) {
+          if (!event.data || event.data.type !== 'automaio-bridge-status-request') return
+          updateShellStatus()
+          if (!window.AutomaioDesignerBridge || !window.AutomaioDesignerBridge.getBridgeStatus) return
+          window.AutomaioDesignerBridge.getBridgeStatus().then(function (status) {
+            if (event.source && event.source.postMessage) {
+              event.source.postMessage(
+                { type: 'automaio-bridge-status-result', status: status },
+                event.origin || '*',
+              )
+            }
+          })
+        })
+
+        setTimeout(updateShellStatus, 500)
+        setTimeout(updateShellStatus, 3000)
+        setInterval(updateShellStatus, 8000)
       })()
     </script>
   </body>
