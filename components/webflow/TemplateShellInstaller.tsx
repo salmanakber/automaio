@@ -21,6 +21,22 @@ type TemplateShellInstallerProps = {
   autoSync?: boolean
 }
 
+function formatInstallError(error?: string): string {
+  if (error === 'no append target') {
+    return 'Select the Body element in the Navigator, then click Install render embed again.'
+  }
+  if (error === 'not a cms template page') {
+    return 'Open your CMS collection template first (Pages → Collection pages → your template).'
+  }
+  if (error === 'webflow API unavailable') {
+    return 'Webflow Designer API not ready — close Automaio, reopen it from the Apps panel, then retry.'
+  }
+  if (error === 'Designer bridge timeout') {
+    return 'Designer bridge did not respond. Make sure Automaio is open inside Webflow Designer (Apps panel), not in a browser tab.'
+  }
+  return `Install failed: ${error ?? 'unknown'}`
+}
+
 export function TemplateShellInstaller({
   integrationId,
   collectionId,
@@ -119,11 +135,7 @@ export function TemplateShellInstaller({
           )
         } else {
           setMessageType('error')
-          setMessage(
-            result.error === 'no append target'
-              ? 'Select the Body element in the Navigator, then click Install render embed again.'
-              : `Install failed: ${result.error ?? 'unknown'}. Open your CMS collection template page first.`,
-          )
+          setMessage(formatInstallError(result.error))
         }
       } catch (err) {
         setMessageType('error')
@@ -177,11 +189,7 @@ export function TemplateShellInstaller({
           )
         } else {
           setMessageType('error')
-          setMessage(
-            result.error === 'no append target'
-              ? 'Select Body in the Navigator, then click Install render embed.'
-              : `Install failed: ${result.error ?? 'Open your CMS collection template page first.'}`,
-          )
+          setMessage(formatInstallError(result.error))
         }
       } catch (err) {
         if (!cancelled) {
@@ -212,8 +220,6 @@ export function TemplateShellInstaller({
   }, [collectionId, integrationId, markInstalled])
 
   const installViaDesigner = () => {
-    setSyncing(true)
-    window.parent.postMessage({ type: 'automaio-sync-render-embed' }, '*')
     void runEmbedSync({ manual: true })
   }
 

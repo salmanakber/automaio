@@ -1,9 +1,11 @@
 /**
  * Webflow Designer bridge — idempotent render embed install for direct HTML/CSS mode.
+ * Compatible with Designer API v2 (apiVersion "2" in webflow.json).
  */
 ;(function () {
   var RENDER_MARKER = 'data-automaio-render-embed'
   var RENDER_VERSION = 'v1'
+  var WEBFLOW_WAIT_MS = 10000
 
   var EMBED_MARKUP =
     '<!-- Automaio direct render (' +
@@ -22,30 +24,86 @@
     '{{wf {"path":"generated-html","type":"PlainText"} }}\n' +
     '</div>'
 
-  function notify(message, type) {
+  function getWebflowApi() {
     try {
-      if (typeof webflow !== 'undefined' && webflow.notify) {
-        webflow.notify({ type: type || 'Info', message: message })
+      if (typeof webflow !== 'undefined' && webflow) return webflow
+    } catch (e) {}
+    try {
+      if (typeof window !== 'undefined' && window.webflow) return window.webflow
+    } catch (e) {}
+    return null
+  }
+
+  function hasWebflowApi(wf) {
+    return !!(
+      wf &&
+      (typeof wf.getCurrentPage === 'function' ||
+        typeof wf.getAllElements === 'function' ||
+        typeof wf.getSelectedElement === 'function')
+    )
+  }
+
+  function waitForWebflowApi(maxMs) {
+    return new Promise(function (resolve) {
+      var elapsed = 0
+      var interval = 100
+
+      function tick() {
+        var wf = getWebflowApi()
+        if (hasWebflowApi(wf)) {
+          resolve(wf)
+          return
+        }
+        elapsed += interval
+        if (elapsed >= maxMs) {
+          resolve(null)
+          return
+        }
+        setTimeout(tick, interval)
+      }
+
+      tick()
+    })
+  }
+
+  function whenWebflowReady(wf) {
+    if (wf && typeof wf.ready === 'function') {
+      return wf.ready()
+    }
+    return Promise.resolve()
+  }
+
+  function notifyWith(wf, message, type) {
+    try {
+      if (wf && wf.notify) {
+        wf.notify({ type: type || 'Info', message: message })
       }
     } catch (e) {}
     console.log('[Automaio Designer]', message)
   }
 
-  async function findAppendTarget() {
+  async function resolveWebflowApi(options) {
+    var wf = getWebflowApi()
+    if (hasWebflowApi(wf)) return wf
+    var timeoutMs = (options && options.timeoutMs) || WEBFLOW_WAIT_MS
+    return waitForWebflowApi(timeoutMs)
+  }
+
+  async function findAppendTarget(wf) {
     try {
-      if (typeof webflow !== 'undefined' && webflow.getRootElement) {
-        var root = await webflow.getRootElement()
+      if (wf.getRootElement) {
+        var root = await wf.getRootElement()
         if (root && root.children) return root
       }
     } catch (e) {}
 
     try {
-      var selected = await webflow.getSelectedElement()
+      var selected = await wf.getSelectedElement()
       if (selected && selected.children) return selected
     } catch (e) {}
 
     try {
-      var all = await webflow.getAllElements()
+      var all = await wf.getAllElements()
       if (all && all.length) {
         for (var i = 0; i < all.length; i++) {
           var el = all[i]
@@ -81,9 +139,9 @@
     return false
   }
 
-  async function findExistingRenderEmbed() {
+  async function findExistingRenderEmbed(wf) {
     try {
-      var all = await webflow.getAllElements()
+      var all = await wf.getAllElements()
       for (var i = 0; i < (all || []).length; i++) {
         if (await embedContainsMarker(all[i])) return all[i]
       }
@@ -91,33 +149,91 @@
     return null
   }
 
-  async function appendRenderEmbed(target) {
-    var preset = webflow.elementPresets
+  async function trySetEmbedMarkup(embed, wf) {
+    if (!embed) return false
+    try {
+      if (embed.setInnerHTML) {
+        await embed.setInnerHTML(EMBED_MARKUP)
+        return true
+      }
+    } catch (e) {}
+    try {
+      if (embed.setHTML) {
+        await embed.setHTML(EMBED_MARKUP)
+        return true
+      }
+    } catch (e) {}
+    try {
+      if (embed.setTextContent) {
+        await embed.setTextContent(EMBED_MARKUP)
+        return true
+      }
+    } catch (e) {}
+    notifyWith(
+      wf,
+      'Code Embed added — open Code Embed settings and paste the SEO snippet from the Automaio panel.',
+      'Info',
+    )
+    return true
+  }
 
-    if (preset && preset.Embed && webflow.elementBuilder) {
+  async function appendRenderEmbed(wf, target) {
+    var preset = wf.elementPresets || {}
+
+    if (preset.HtmlEmbed && target.append) {
       try {
-        var embed = webflow.elementBuilder(preset.Embed)
-        if (embed.setInnerHTML) await embed.setInnerHTML(EMBED_MARKUP)
-        else if (embed.setHTML) await embed.setHTML(EMBED_MARKUP)
-        else if (embed.setTextContent) await embed.setTextContent(EMBED_MARKUP)
-        await target.append(embed)
+        var htmlEmbed = await target.append(preset.HtmlEmbed)
+        if (htmlEmbed) {
+          await trySetEmbedMarkup(htmlEmbed, wf)
+          return true
+        }
+      } catch (e) {}
+    }
+
+    if (preset.Embed && wf.elementBuilder) {
+      try {
+        var legacyEmbed = wf.elementBuilder(preset.Embed)
+        await trySetEmbedMarkup(legacyEmbed, wf)
+        await target.append(legacyEmbed)
         return true
       } catch (e) {}
     }
 
-    if (preset && preset.DOM && webflow.elementBuilder) {
+    if (preset.DOM) {
       try {
-        var wrap = webflow.elementBuilder(preset.DOM)
-        wrap.setTag('div')
-        wrap.setAttribute('class', 'automaio-render-root')
-        wrap.setAttribute(RENDER_MARKER, RENDER_VERSION)
-        await target.append(wrap)
-        notify('Added render container — paste SEO embed from Automaio panel if bindings are missing.', 'Info')
-        return true
+        if (wf.elementBuilder) {
+          var builtDom = wf.elementBuilder(preset.DOM)
+          builtDom.setTag('div')
+          builtDom.setAttribute('class', 'automaio-render-root')
+          builtDom.setAttribute(RENDER_MARKER, RENDER_VERSION)
+          await target.append(builtDom)
+          notifyWith(
+            wf,
+            'Added render container — paste the SEO embed snippet from the Automaio panel.',
+            'Info',
+          )
+          return true
+        }
+        if (target.append) {
+          var dom = await target.append(preset.DOM)
+          if (dom) {
+            if (dom.setTag) await dom.setTag('div')
+            if (dom.setAttribute) {
+              await dom.setAttribute('class', 'automaio-render-root')
+              await dom.setAttribute(RENDER_MARKER, RENDER_VERSION)
+            }
+            notifyWith(
+              wf,
+              'Added render container — paste the SEO embed snippet from the Automaio panel.',
+              'Info',
+            )
+            return true
+          }
+        }
       } catch (e) {}
     }
 
-    if (preset && preset.Section) {
+    if (preset.Section && target.append) {
       try {
         await target.append(preset.Section)
         return true
@@ -127,54 +243,97 @@
     return false
   }
 
+  async function assertCmsTemplatePage(page) {
+    try {
+      if (page.getKind) {
+        var kind = await page.getKind()
+        if (kind !== 'cms') {
+          return {
+            ok: false,
+            error: 'not a cms template page',
+            alreadyInstalled: false,
+          }
+        }
+      }
+      if (page.getCollectionID || page.getCollectionId) {
+        var getCollectionId = page.getCollectionID || page.getCollectionId
+        await getCollectionId.call(page)
+      }
+    } catch (e) {
+      return {
+        ok: false,
+        error: 'not a cms template page',
+        alreadyInstalled: false,
+      }
+    }
+    return null
+  }
+
   async function ensureRenderEmbed(options) {
-    if (typeof webflow === 'undefined' || !webflow.ready) {
-      return { ok: false, error: 'webflow API unavailable', alreadyInstalled: false }
+    var wf = await resolveWebflowApi(options)
+    if (!hasWebflowApi(wf)) {
+      return {
+        ok: false,
+        error: 'webflow API unavailable',
+        alreadyInstalled: false,
+      }
     }
 
-    return webflow.ready().then(async function () {
-      try {
-        var existing = await findExistingRenderEmbed()
-        if (existing) {
-          return { ok: true, alreadyInstalled: true, created: false }
-        }
+    await whenWebflowReady(wf)
 
-        var page = await webflow.getCurrentPage()
-        if (!page) {
-          return { ok: false, error: 'no current page', alreadyInstalled: false }
-        }
-
-        var target = await findAppendTarget()
-        if (!target) {
-          return { ok: false, error: 'no append target', alreadyInstalled: false }
-        }
-
-        var added = await appendRenderEmbed(target)
-        if (!added) {
-          return { ok: false, error: 'append failed', alreadyInstalled: false }
-        }
-
-        notify(
-          'Direct render embed installed. HTML/CSS update automatically from CMS on each publish.',
-          'Success',
-        )
-        return { ok: true, alreadyInstalled: false, created: true }
-      } catch (err) {
-        var msg = err && err.message ? err.message : String(err)
-        return { ok: false, error: msg, alreadyInstalled: false }
+    try {
+      var existing = await findExistingRenderEmbed(wf)
+      if (existing) {
+        return { ok: true, alreadyInstalled: true, created: false }
       }
-    })
+
+      var page = await wf.getCurrentPage()
+      if (!page) {
+        return { ok: false, error: 'no current page', alreadyInstalled: false }
+      }
+
+      var cmsCheck = await assertCmsTemplatePage(page)
+      if (cmsCheck) return cmsCheck
+
+      var target = await findAppendTarget(wf)
+      if (!target) {
+        return { ok: false, error: 'no append target', alreadyInstalled: false }
+      }
+
+      var added = await appendRenderEmbed(wf, target)
+      if (!added) {
+        return { ok: false, error: 'append failed', alreadyInstalled: false }
+      }
+
+      notifyWith(
+        wf,
+        'Direct render embed installed. HTML/CSS update automatically from CMS on each publish.',
+        'Success',
+      )
+      return { ok: true, alreadyInstalled: false, created: true }
+    } catch (err) {
+      var msg = err && err.message ? err.message : String(err)
+      return { ok: false, error: msg, alreadyInstalled: false }
+    }
   }
 
   async function installTemplateShell() {
     var result = await ensureRenderEmbed({})
     if (!result.ok) {
-      notify(
-        result.error === 'no append target'
-          ? 'Select Body in Navigator, then retry Install template shell.'
-          : 'Install failed: ' + (result.error || 'unknown'),
-        'Error',
-      )
+      var wf = getWebflowApi()
+      var userMessage
+      if (result.error === 'no append target') {
+        userMessage = 'Select Body in Navigator, then retry Install template shell.'
+      } else if (result.error === 'not a cms template page') {
+        userMessage =
+          'Open your CMS collection template first (Pages → Collection pages → your template).'
+      } else if (result.error === 'webflow API unavailable') {
+        userMessage =
+          'Webflow Designer API not ready — close Automaio, reopen it from the Apps panel, then retry.'
+      } else {
+        userMessage = 'Install failed: ' + (result.error || 'unknown')
+      }
+      notifyWith(wf, userMessage, 'Error')
     }
     return result
   }
@@ -201,20 +360,34 @@
 
     if (data.type === 'automaio-install-template-shell') {
       installTemplateShell().then(function (result) {
-        handleResult({ source: event.source, origin: event.origin, resultType: 'automaio-install-template-shell-result' }, result)
+        handleResult(
+          {
+            source: event.source,
+            origin: event.origin,
+            resultType: 'automaio-install-template-shell-result',
+          },
+          result,
+        )
       })
     }
 
     if (data.type === 'automaio-sync-render-embed') {
       ensureRenderEmbed(data).then(function (result) {
-        handleResult({ source: event.source, origin: event.origin, resultType: 'automaio-sync-render-embed-result' }, result)
+        handleResult(
+          {
+            source: event.source,
+            origin: event.origin,
+            resultType: 'automaio-sync-render-embed-result',
+          },
+          result,
+        )
       })
     }
   })
 
-  if (typeof webflow !== 'undefined' && webflow.ready) {
-    webflow.ready().then(function () {
+  resolveWebflowApi({ timeoutMs: WEBFLOW_WAIT_MS }).then(function (wf) {
+    if (hasWebflowApi(wf)) {
       console.info('[Automaio] Designer bridge ready — render embed sync available.')
-    })
-  }
+    }
+  })
 })()
