@@ -1,14 +1,300 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Loader2, Monitor, Copy, Check } from 'lucide-react'
+import { Loader2, Monitor, Copy, Check, RefreshCw, Layers, AlertCircle, WifiOff } from 'lucide-react'
 import type { DesignerScreenSummary } from '@/lib/webflow/designer-screens'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 
 type DesignerScreensPanelProps = {
   siteId: string | null
+}
+
+const css = `
+  .am-screens {
+    --bg:      #0f0f16;
+    --bg2:     #15151f;
+    --bg3:     #1c1c2a;
+    --bg-h:    #202030;
+    --line:    rgba(255,255,255,0.07);
+    --line-m:  rgba(255,255,255,0.12);
+    --accent:  #7c6fff;
+    --accent2: #a68eff;
+    --t1:      #ededf4;
+    --t2:      #9494aa;
+    --t3:      #5a5a72;
+    --ok:      #3dd68c;
+    --danger:  #f87171;
+    --mono:    'DM Mono', 'Fira Code', monospace;
+    --font:    'DM Sans', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Section header */
+  .am-screens-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .am-screens-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: var(--t3);
+  }
+  .am-screens-title-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: rgba(124,111,255,0.12);
+    color: var(--accent2);
+  }
+  .am-btn-refresh {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    background: var(--bg2);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--font);
+    color: var(--t3);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .am-btn-refresh:hover { background: var(--bg-h); border-color: var(--line-m); color: var(--t2); }
+  @keyframes am-spin { to { transform: rotate(360deg); } }
+  .am-spin { animation: am-spin 0.8s linear infinite; }
+
+  /* Empty / error states */
+  .am-screens-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 20px 16px;
+    background: var(--bg2);
+    border: 1px dashed var(--line-m);
+    border-radius: 10px;
+    text-align: center;
+  }
+  .am-screens-state-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: var(--bg3);
+  }
+  .am-screens-state p {
+    font-size: 11.5px;
+    color: var(--t3);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .am-screens-state.danger .am-screens-state-icon { background: rgba(248,113,113,0.1); }
+  .am-screens-state.danger p { color: rgba(248,113,113,0.8); }
+  .am-screens-state code {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg3);
+    color: var(--t2);
+  }
+
+  /* Screen pills */
+  .am-screen-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 96px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .am-screen-pills::-webkit-scrollbar { width: 3px; }
+  .am-screen-pills::-webkit-scrollbar-track { background: transparent; }
+  .am-screen-pills::-webkit-scrollbar-thumb { background: var(--line-m); border-radius: 2px; }
+
+  .am-screen-pill {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 10px;
+    background: var(--bg2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+    max-width: 148px;
+    min-width: 0;
+    text-align: left;
+  }
+  .am-screen-pill:hover { background: var(--bg-h); border-color: var(--line-m); }
+  .am-screen-pill.active {
+    background: rgba(124,111,255,0.12);
+    border-color: rgba(124,111,255,0.35);
+  }
+  .am-screen-pill-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--t2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .am-screen-pill.active .am-screen-pill-name { color: #c4b5fd; }
+  .am-screen-pill-slug {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--t3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Detail card */
+  .am-screen-detail {
+    background: var(--bg2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  /* Badges row */
+  .am-screen-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .am-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--mono);
+  }
+  .am-badge-type {
+    background: rgba(124,111,255,0.12);
+    color: var(--accent2);
+    border: 1px solid rgba(124,111,255,0.25);
+  }
+  .am-badge-cms {
+    background: rgba(61,214,140,0.1);
+    color: var(--ok);
+    border: 1px solid rgba(61,214,140,0.2);
+  }
+
+  /* Preview iframe wrapper */
+  .am-screen-preview {
+    position: relative;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+  }
+  .am-screen-preview iframe {
+    width: 100%;
+    height: 200px;
+    display: block;
+    border: none;
+  }
+
+  /* CMS snippet */
+  .am-snippet {
+    padding: 10px 12px;
+  }
+  .am-snippet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .am-snippet-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+    color: var(--t3);
+  }
+  .am-btn-copy {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    background: var(--bg3);
+    border: 1px solid var(--line-m);
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 500;
+    font-family: var(--font);
+    color: var(--t2);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .am-btn-copy:hover { background: var(--bg-h); color: var(--t1); }
+  .am-btn-copy.copied { color: var(--ok); border-color: rgba(61,214,140,0.3); background: rgba(61,214,140,0.08); }
+
+  .am-snippet-pre {
+    background: var(--bg3);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--t2);
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0;
+  }
+  .am-snippet-pre .tok-tag    { color: #7dd3fc; }
+  .am-snippet-pre .tok-attr   { color: var(--accent2); }
+  .am-snippet-pre .tok-wf     { color: #86efac; }
+  .am-snippet-pre .tok-str    { color: #fcd34d; }
+`
+
+const SNIPPET = `<div class="ai-wrapper">
+  <style>
+    {{wf {"path":"cssContent","type":"PlainText"} }}
+  </style>
+
+    {{wf {"path":"htmlContent","type":"PlainText"} }}
+</div>`
+
+function SnippetHighlight() {
+  return (
+    <pre className="am-snippet-pre">
+      <span className="tok-tag">&lt;div</span>{' '}
+      <span className="tok-attr">class</span>=
+      <span className="tok-str">"ai-wrapper"</span>
+      <span className="tok-tag">&gt;</span>{'\n'}
+      {'  '}
+      <span className="tok-tag">&lt;style&gt;</span>{'\n'}
+      {'    '}
+      <span className="tok-wf">{'{{wf {"path":"cssContent","type":"PlainText"} }}'}</span>{'\n'}
+      {'  '}
+      <span className="tok-tag">&lt;/style&gt;</span>{'\n\n'}
+      {'    '}
+      <span className="tok-wf">{'{{wf {"path":"htmlContent","type":"PlainText"} }}'}</span>{'\n'}
+      <span className="tok-tag">&lt;/div&gt;</span>
+    </pre>
+  )
 }
 
 export function DesignerScreensPanel({ siteId }: DesignerScreensPanelProps) {
@@ -38,7 +324,7 @@ export function DesignerScreensPanel({ siteId }: DesignerScreensPanelProps) {
       setScreens(data.screens ?? [])
       setIntegrationFound(data.integrationFound !== false)
       if ((data.screens ?? []).length && !selectedId) {
-        setSelectedId(data.screens[0].id)
+        setSelectedId(data.screens![0].id)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load screens')
@@ -48,9 +334,7 @@ export function DesignerScreensPanel({ siteId }: DesignerScreensPanelProps) {
     }
   }, [siteId, selectedId])
 
-  useEffect(() => {
-    void loadScreens()
-  }, [loadScreens])
+  useEffect(() => { void loadScreens() }, [loadScreens])
 
   const copySnippet = async () => {
     if (!selected?.cmsBindingSnippet) return
@@ -61,99 +345,118 @@ export function DesignerScreensPanel({ siteId }: DesignerScreensPanelProps) {
 
   if (!siteId) {
     return (
-      <div className="rounded-md border border-dashed p-3 text-[11px] text-muted-foreground">
-        Connect Webflow to load published screens for this site.
-      </div>
+      <>
+        <style dangerouslySetInnerHTML={{ __html: css }} />
+        <div className="am-screens-state">
+          <div className="am-screens-state-icon">
+            <WifiOff size={14} style={{ color: 'var(--t3)' }} />
+          </div>
+          <p>Connect Webflow to load published screens for this site.</p>
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Monitor className="size-3.5 text-primary" />
-          <p className="text-xs font-medium">Published screens</p>
-        </div>
-        <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => void loadScreens()}>
-          Refresh
-        </Button>
-      </div>
+    <>
+      <style dangerouslySetInnerHTML={{ __html: css }} />
+      <div className="am-screens">
 
-      {loading ? (
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground py-4 justify-center">
-          <Loader2 className="size-3.5 animate-spin" />
-          Loading…
-        </div>
-      ) : error ? (
-        <p className="text-[11px] text-destructive">{error}</p>
-      ) : !integrationFound ? (
-        <p className="text-[11px] text-muted-foreground">
-          No Automaio integration for site <code className="text-[10px]">{siteId}</code>. Connect in Settings.
-        </p>
-      ) : screens.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">No published screens yet. Publish a landing page from Automaio.</p>
-      ) : (
-        <>
-          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-            {screens.map((screen) => (
-              <button
-                key={screen.id}
-                type="button"
-                onClick={() => setSelectedId(screen.id)}
-                className={`rounded-md border px-2 py-1 text-left text-[10px] transition-colors ${
-                  selected?.id === screen.id
-                    ? 'border-primary bg-primary/10 text-foreground'
-                    : 'border-border hover:bg-muted/50 text-muted-foreground'
-                }`}
-              >
-                <span className="font-medium block truncate max-w-[140px]">{screen.name}</span>
-                <span className="opacity-70">{screen.slug || 'no-slug'}</span>
-              </button>
-            ))}
-          </div>
-
-          {selected ? (
-            <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant="secondary" className="text-[9px]">
-                  {selected.configType}
-                </Badge>
-                {selected.webflowCmsItemId ? (
-                  <Badge variant="outline" className="text-[9px]">
-                    CMS synced
-                  </Badge>
-                ) : null}
-              </div>
-
-              <iframe
-                title={selected.name}
-                src={selected.previewUrl}
-                className="w-full h-[220px] rounded border bg-white"
-                sandbox="allow-scripts allow-same-origin"
-              />
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-medium text-muted-foreground">CMS binding (split_method)</p>
-                  <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => void copySnippet()}>
-                    {copied ? <Check className="size-3 mr-1" /> : <Copy className="size-3 mr-1" />}
-                    Copy
-                  </Button>
-                </div>
-                <pre className="text-[9px] leading-relaxed overflow-x-auto rounded bg-background border p-2 whitespace-pre-wrap font-mono">
-                  {`<div class="ai-wrapper">
-  <style>
-    {{wf {"path":"cssContent","type":"PlainText"} }}
-  </style>
-
-    {{wf {"path":"htmlContent","type":"PlainText"} }}
-</div>`}
-                </pre>
-              </div>
+        {/* Header */}
+        <div className="am-screens-head">
+          <div className="am-screens-title">
+            <div className="am-screens-title-icon">
+              <Layers size={12} />
             </div>
-          ) : null}
-        </>
-      )}
-    </div>
+            Published screens
+          </div>
+          <button className="am-btn-refresh" onClick={() => void loadScreens()} disabled={loading}>
+            <RefreshCw size={10} className={loading ? 'am-spin' : ''} />
+            Refresh
+          </button>
+        </div>
+
+        {/* States */}
+        {loading ? (
+          <div className="am-screens-state">
+            <Loader2 size={16} style={{ color: 'var(--t3)' }} className="am-spin" />
+            <p>Loading screens…</p>
+          </div>
+        ) : error ? (
+          <div className="am-screens-state danger">
+            <div className="am-screens-state-icon">
+              <AlertCircle size={14} style={{ color: 'var(--danger)' }} />
+            </div>
+            <p>{error}</p>
+          </div>
+        ) : !integrationFound ? (
+          <div className="am-screens-state">
+            <div className="am-screens-state-icon">
+              <Monitor size={14} style={{ color: 'var(--t3)' }} />
+            </div>
+            <p>No Automaio integration for site <code>{siteId}</code>. Connect in Settings.</p>
+          </div>
+        ) : screens.length === 0 ? (
+          <div className="am-screens-state">
+            <div className="am-screens-state-icon">
+              <Monitor size={14} style={{ color: 'var(--t3)' }} />
+            </div>
+            <p>No published screens yet.<br />Publish a landing page from Automaio.</p>
+          </div>
+        ) : (
+          <>
+            {/* Screen pill selector */}
+            <div className="am-screen-pills">
+              {screens.map((screen) => (
+                <button
+                  key={screen.id}
+                  type="button"
+                  className={`am-screen-pill${selected?.id === screen.id ? ' active' : ''}`}
+                  onClick={() => setSelectedId(screen.id)}
+                >
+                  <span className="am-screen-pill-name">{screen.name}</span>
+                  <span className="am-screen-pill-slug">{screen.slug || 'no-slug'}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Detail card */}
+            {selected && (
+              <div className="am-screen-detail">
+                <div className="am-screen-badges">
+                  <span className="am-badge am-badge-type">{selected.configType}</span>
+                  {selected.webflowCmsItemId && (
+                    <span className="am-badge am-badge-cms">CMS synced</span>
+                  )}
+                </div>
+
+                <div className="am-screen-preview">
+                  <iframe
+                    title={selected.name}
+                    src={selected.previewUrl}
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                </div>
+
+                <div className="am-snippet">
+                  <div className="am-snippet-head">
+                    <span className="am-snippet-label">CMS binding · split_method</span>
+                    <button
+                      className={`am-btn-copy${copied ? ' copied' : ''}`}
+                      onClick={() => void copySnippet()}
+                    >
+                      {copied
+                        ? <><Check size={10} /> Copied</>
+                        : <><Copy size={10} /> Copy</>}
+                    </button>
+                  </div>
+                  <SnippetHighlight />
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
   )
 }
