@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateSession } from '@/lib/auth'
+import { requireUser } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { buildWebflowSplitMethodTemplateEmbed } from '@/lib/webflow/template-embeds'
 import {
@@ -10,9 +10,8 @@ import {
 /** List published landing screens for a Webflow site (Designer extension). */
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get('auth_token')?.value
-    const user = await validateSession(token || '')
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { user, response: authResponse } = await requireUser(req)
+    if (authResponse) return authResponse
 
     const siteId = req.nextUrl.searchParams.get('siteId')?.trim()
     if (!siteId) {
@@ -23,7 +22,7 @@ export async function GET(req: NextRequest) {
       where: {
         webflowSiteId: siteId,
         organization: {
-          OR: [{ ownerId: user.id }, { teamMembers: { some: { userId } } }],
+          OR: [{ ownerId: user.id }, { teamMembers: { some: { userId: user.id } } }],
         },
       },
     })

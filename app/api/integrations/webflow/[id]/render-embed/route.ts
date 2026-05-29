@@ -21,7 +21,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await requireUser()
+  const { user, response: authResponse } = await requireUser(req)
+  if (authResponse) return authResponse
+
   const { id: integrationId } = await params
   const collectionId = req.nextUrl.searchParams.get('collectionId')?.trim()
   if (!collectionId) {
@@ -44,7 +46,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await requireUser()
+  const { user, response: authResponse } = await requireUser(req)
+  if (authResponse) return authResponse
+
   const { id: integrationId } = await params
   const body = (await req.json()) as { collectionId?: string; installed?: boolean }
 

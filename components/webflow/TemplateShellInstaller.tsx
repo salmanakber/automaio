@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { buildCollectionTemplateBodySnippet } from '@/lib/webflow/collection-template-shell'
 import { WEBFLOW_DESIGNER_OPEN_STEPS } from '@/lib/webflow/designer-open-guide'
+import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { Check, Copy, Hammer, Loader2, RefreshCw } from 'lucide-react'
 
 type EmbedSyncStatus = {
@@ -86,7 +87,7 @@ export function TemplateShellInstaller({
           `/api/integrations/webflow/${integrationId}/render-embed?collectionId=${encodeURIComponent(collectionId)}&configType=split_method`,
           { credentials: 'include' },
         )
-        const data = (await res.json()) as EmbedSyncStatus
+        const data = await parseJsonResponse<EmbedSyncStatus>(res)
         setStatus(data)
 
         if (!data.needsInstall) {
@@ -145,7 +146,7 @@ export function TemplateShellInstaller({
           `/api/integrations/webflow/${integrationId}/render-embed?collectionId=${encodeURIComponent(collectionId)}&configType=split_method`,
           { credentials: 'include' },
         )
-        const data = (await res.json()) as EmbedSyncStatus
+        const data = await parseJsonResponse<EmbedSyncStatus>(res)
         if (cancelled) return
         setStatus(data)
 

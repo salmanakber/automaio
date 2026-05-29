@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Loader2, Monitor, Copy, Check } from 'lucide-react'
 import type { DesignerScreenSummary } from '@/lib/webflow/designer-screens'
+import { parseJsonResponse } from '@/lib/api/parse-json-response'
 
 type DesignerScreensPanelProps = {
   siteId: string | null
@@ -28,7 +29,11 @@ export function DesignerScreensPanel({ siteId }: DesignerScreensPanelProps) {
       const res = await fetch(`/api/webflow/designer/screens?siteId=${encodeURIComponent(siteId)}`, {
         credentials: 'include',
       })
-      const data = await res.json()
+      const data = await parseJsonResponse<{
+        screens?: DesignerScreenSummary[]
+        integrationFound?: boolean
+        error?: string
+      }>(res)
       if (!res.ok) throw new Error(data.error ?? 'Failed to load screens')
       setScreens(data.screens ?? [])
       setIntegrationFound(data.integrationFound !== false)
