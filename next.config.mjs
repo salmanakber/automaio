@@ -8,6 +8,20 @@ try {
 
 const nextConfig = {
   allowedDevOrigins: devOrigins,
+  async headers() {
+    return [
+      {
+        source: '/webflow/designer',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value:
+              "frame-ancestors 'self' https://*.webflow-ext.com https://*.webflow.com https://webflow.com http://localhost:1337 http://127.0.0.1:1337",
+          },
+        ],
+      },
+    ]
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
