@@ -5,8 +5,8 @@ import { requireOrgAccess } from '@/lib/api/org-access'
 import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { syncWebflowIntegrationV2 } from '@/lib/integrations/webflow-cms'
 import {
-  DELIVERY_FIELD_DEFINITIONS,
   getDefaultLandingCollectionFields,
+  getUnifiedLandingCollectionFields,
   type DeliveryMode,
 } from '@/lib/webflow/cms-collection-schema'
 import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
 
     const collectionFields = fields?.length
       ? fields
-      : DELIVERY_FIELD_DEFINITIONS[mode].map(({ type, displayName, isRequired }) => ({
+      : getUnifiedLandingCollectionFields().map(({ type, displayName, isRequired }) => ({
           type,
           displayName,
           isRequired,
@@ -131,16 +131,14 @@ export async function POST(req: NextRequest) {
     }
 
     let runtimeAutoConfigured = false
-    if (mode === 'remote_runtime') {
-      try {
-        const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
-          collectionId: collection.id,
-          publishSite: false,
-        })
-        runtimeAutoConfigured = runtimeResult.success === true
-      } catch {
-        // Runtime auto-setup can be retried on first publish
-      }
+    try {
+      const runtimeResult = await ensureAutomaioRuntimeForIntegration(integrationId, {
+        collectionId: collection.id,
+        publishSite: false,
+      })
+      runtimeAutoConfigured = runtimeResult.success === true
+    } catch {
+      // Runtime auto-setup can be retried on first publish
     }
 
     return NextResponse.json(

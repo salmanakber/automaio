@@ -39,7 +39,7 @@ export function applyHtmlModeFieldCleanup(
   }
 
   const addRuntimeSlugs = () => {
-    for (const key of ['pageId', 'runtimeConfig', 'templateId', 'status'] as const) {
+    for (const key of ['pageId', 'runtimeConfig', 'status'] as const) {
       addIfPresent(resolveRuntimeFieldSlug(key, collectionFields))
     }
   }
@@ -52,6 +52,8 @@ export function applyHtmlModeFieldCleanup(
 
   const addIframeSlugs = () => {
     addIfPresent(resolveIframeFieldSlug('iframeUrl', collectionFields))
+    addIfPresent(resolveIframeFieldSlug('iframeHeight', collectionFields))
+    addIfPresent(resolveIframeFieldSlug('iframeSandbox', collectionFields))
   }
 
   const addRichTextSlugs = () => {

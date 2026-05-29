@@ -12,6 +12,33 @@ export type WebflowCollectionFieldDef = {
 }
 
 /**
+ * Unified landing page CMS schema — all delivery fields optional except title + slug.
+ * Created on app connect / collection install so any delivery mode can be used later.
+ */
+export const UNIFIED_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
+  { type: 'PlainText', displayName: 'Title', slug: 'title', isRequired: true },
+  { type: 'PlainText', displayName: 'Slug', slug: 'slug', isRequired: true },
+  { type: 'PlainText', displayName: 'SEO Title', slug: 'seo-title' },
+  { type: 'PlainText', displayName: 'SEO Description', slug: 'seo-description' },
+  { type: 'PlainText', displayName: 'Config Type', slug: 'config-type' },
+  { type: 'PlainText', displayName: 'Page ID', slug: 'page-id' },
+  { type: 'PlainText', displayName: 'Runtime Config', slug: 'runtime-config' },
+  { type: 'PlainText', displayName: 'HTML', slug: 'html' },
+  { type: 'PlainText', displayName: 'CSS', slug: 'css' },
+  { type: 'PlainText', displayName: 'JS', slug: 'js' },
+  { type: 'PlainText', displayName: 'HTML Content', slug: 'html-content' },
+  { type: 'PlainText', displayName: 'CSS Content', slug: 'css-content' },
+  { type: 'PlainText', displayName: 'JS Content', slug: 'js-content' },
+  { type: 'PlainText', displayName: 'Iframe URL', slug: 'iframe-url' },
+  { type: 'PlainText', displayName: 'Iframe Height', slug: 'iframe-height' },
+  { type: 'PlainText', displayName: 'Iframe Sandbox', slug: 'iframe-sandbox' },
+  { type: 'PlainText', displayName: 'Template ID', slug: 'template-id' },
+  { type: 'PlainText', displayName: 'Template Config', slug: 'template-config' },
+  { type: 'PlainText', displayName: 'Status', slug: 'status' },
+  { type: 'Image', displayName: 'Preview Image', slug: 'preview-image' },
+]
+
+/**
  * Remote runtime CMS schema — lightweight Webflow shell only.
  * Full page schema + render bundle lives on Automaio platform API.
  */
@@ -20,9 +47,11 @@ export const RUNTIME_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'Slug', slug: 'slug', isRequired: true },
   { type: 'PlainText', displayName: 'SEO Title', slug: 'seo-title' },
   { type: 'PlainText', displayName: 'SEO Description', slug: 'seo-description' },
-  { type: 'PlainText', displayName: 'Page ID', slug: 'page-id', isRequired: true },
+  { type: 'PlainText', displayName: 'Config Type', slug: 'config-type' },
+  { type: 'PlainText', displayName: 'Page ID', slug: 'page-id' },
   { type: 'PlainText', displayName: 'Runtime Config', slug: 'runtime-config' },
   { type: 'PlainText', displayName: 'Template ID', slug: 'template-id' },
+  { type: 'PlainText', displayName: 'Template Config', slug: 'template-config' },
   { type: 'PlainText', displayName: 'Status', slug: 'status' },
   { type: 'Image', displayName: 'Preview Image', slug: 'preview-image' },
 ]
@@ -33,11 +62,16 @@ export const SPLIT_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'Slug', slug: 'slug', isRequired: true },
   { type: 'PlainText', displayName: 'SEO Title', slug: 'seo-title' },
   { type: 'PlainText', displayName: 'SEO Description', slug: 'seo-description' },
+  { type: 'PlainText', displayName: 'Config Type', slug: 'config-type' },
   { type: 'PlainText', displayName: 'HTML', slug: 'html' },
   { type: 'PlainText', displayName: 'CSS', slug: 'css' },
   { type: 'PlainText', displayName: 'JS', slug: 'js' },
+  { type: 'PlainText', displayName: 'HTML Content', slug: 'html-content' },
+  { type: 'PlainText', displayName: 'CSS Content', slug: 'css-content' },
+  { type: 'PlainText', displayName: 'JS Content', slug: 'js-content' },
   { type: 'Image', displayName: 'Preview Image', slug: 'preview-image' },
   { type: 'PlainText', displayName: 'Template ID', slug: 'template-id' },
+  { type: 'PlainText', displayName: 'Template Config', slug: 'template-config' },
   { type: 'PlainText', displayName: 'Status', slug: 'status' },
 ]
 
@@ -47,9 +81,13 @@ export const IFRAME_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'Slug', slug: 'slug', isRequired: true },
   { type: 'PlainText', displayName: 'SEO Title', slug: 'seo-title' },
   { type: 'PlainText', displayName: 'SEO Description', slug: 'seo-description' },
+  { type: 'PlainText', displayName: 'Config Type', slug: 'config-type' },
   { type: 'PlainText', displayName: 'Iframe URL', slug: 'iframe-url' },
+  { type: 'PlainText', displayName: 'Iframe Height', slug: 'iframe-height' },
+  { type: 'PlainText', displayName: 'Iframe Sandbox', slug: 'iframe-sandbox' },
   { type: 'Image', displayName: 'Preview Image', slug: 'preview-image' },
   { type: 'PlainText', displayName: 'Template ID', slug: 'template-id' },
+  { type: 'PlainText', displayName: 'Template Config', slug: 'template-config' },
   { type: 'PlainText', displayName: 'Status', slug: 'status' },
 ]
 
@@ -71,12 +109,16 @@ export const LEGACY_LANDING_CMS_FIELDS: WebflowCollectionFieldDef[] = [
   { type: 'PlainText', displayName: 'Industry' },
 ]
 
+export const CONFIG_TYPE_FIELD_SLUGS = ['config-type', 'config_type', 'configType'] as const
+
 export const RUNTIME_FIELD_SLUGS = {
   pageId: ['page-id', 'page_id', 'automaio-page-id', 'automaio-id', 'automaio-campaign-id'],
   runtimeConfig: ['runtime-config', 'runtime_config'],
+  configType: [...CONFIG_TYPE_FIELD_SLUGS],
   seoTitle: ['seo-title', 'seo_title'],
   seoDescription: ['seo-description', 'seo_description'],
   templateId: ['template-id', 'template_id', 'automaio-template-id'],
+  templateConfig: ['template-config', 'template_config'],
   status: ['status'],
   previewImage: ['preview-image', 'preview_image'],
   title: ['title', 'name'],
@@ -87,9 +129,11 @@ export const SPLIT_FIELD_SLUGS = {
   html: ['html', 'html-content', 'html_content'],
   css: ['css', 'css-content', 'css_content'],
   js: ['js', 'js-content', 'js_content'],
+  configType: [...CONFIG_TYPE_FIELD_SLUGS],
   seoTitle: ['seo-title', 'seo_title'],
   seoDescription: ['seo-description', 'seo_description'],
   templateId: ['template-id', 'template_id', 'automaio-template-id'],
+  templateConfig: ['template-config', 'template_config'],
   status: ['status'],
   previewImage: ['preview-image', 'preview_image'],
   title: ['title', 'name'],
@@ -98,9 +142,13 @@ export const SPLIT_FIELD_SLUGS = {
 
 export const IFRAME_FIELD_SLUGS = {
   iframeUrl: ['iframe-url', 'iframe_url', 'embed-url', 'page-url'],
+  iframeHeight: ['iframe-height', 'iframe_height'],
+  iframeSandbox: ['iframe-sandbox', 'iframe_sandbox'],
+  configType: [...CONFIG_TYPE_FIELD_SLUGS],
   seoTitle: ['seo-title', 'seo_title'],
   seoDescription: ['seo-description', 'seo_description'],
   templateId: ['template-id', 'template_id', 'automaio-template-id'],
+  templateConfig: ['template-config', 'template_config'],
   status: ['status'],
   previewImage: ['preview-image', 'preview_image'],
   title: ['title', 'name'],
@@ -108,7 +156,11 @@ export const IFRAME_FIELD_SLUGS = {
 } as const
 
 export function getDefaultLandingCollectionFields(): WebflowCollectionFieldDef[] {
-  return [...RUNTIME_LANDING_CMS_FIELDS]
+  return [...UNIFIED_LANDING_CMS_FIELDS]
+}
+
+export function getUnifiedLandingCollectionFields(): WebflowCollectionFieldDef[] {
+  return [...UNIFIED_LANDING_CMS_FIELDS]
 }
 
 export function collectionSupportsRemoteRuntime(fields: CollectionField[]): boolean {
@@ -120,8 +172,7 @@ export function collectionSupportsSplitPlainText(fields: CollectionField[]): boo
   const slugs = new Set(fields.map((f) => f.slug))
   const hasHtml = SPLIT_FIELD_SLUGS.html.some((s) => slugs.has(s))
   const hasCss = SPLIT_FIELD_SLUGS.css.some((s) => slugs.has(s))
-  const hasJs = SPLIT_FIELD_SLUGS.js.some((s) => slugs.has(s))
-  return hasHtml && hasCss && hasJs
+  return hasHtml && hasCss
 }
 
 export function collectionSupportsIframeEmbed(fields: CollectionField[]): boolean {
@@ -166,6 +217,10 @@ export function resolveIframeFieldSlug(
     if (slugs.has(candidate)) return candidate
   }
   return null
+}
+
+export function resolveConfigTypeFieldSlug(fields: CollectionField[]): string | null {
+  return resolveRuntimeFieldSlug('configType', fields)
 }
 
 /** Update cached collection field list on integration after creating fields. */

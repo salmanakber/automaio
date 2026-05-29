@@ -1,6 +1,7 @@
 /**
  * Registered inline scripts for split / iframe delivery.
  * Reads CMS-bound DOM when present; falls back to Automaio API by site + slug.
+ * Respects config-type — split_method pages use native {{wf}} bindings instead.
  */
 
 function escapeForJsString(value: string): string {
@@ -14,10 +15,21 @@ function readSlugFromPath(): string {
 }`
 }
 
+function readConfigTypeFromDom(): string {
+  return `function readConfigType(){
+  var el=document.querySelector('[data-wf-field="config-type"],#am-config-type,[data-am-cms="config-type"]');
+  var t=el?(el.textContent||"").trim().toLowerCase():"";
+  if(t==="split_method"||t==="splitmethod")return"split_method";
+  if(t==="iframe_embed"||t==="iframe")return"iframe_embed";
+  if(t==="remote_runtime"||t==="runtime")return"remote_runtime";
+  return"";
+}`
+}
+
 function injectSplitContent(): string {
   return `function injectSplit(html,css,js){
   if(!html&&!css&&!js)return;
-  var root=document.getElementById("page-root")||document.body.appendChild(Object.assign(document.createElement("div"),{id:"page-root"}));
+  var root=document.getElementById("page-root")||document.body.appendChild(Object.assign(document.createElement("div"),{id:"page-root",className:"ai-wrapper"}));
   var styleEl=document.getElementById("page-style")||(function(){var s=document.createElement("style");s.id="page-style";document.head.appendChild(s);return s;})();
   if(html)root.innerHTML=html;
   if(css)styleEl.textContent=css;
@@ -45,10 +57,14 @@ export function buildSplitInlineBootstrap(appUrl: string, webflowSiteId: string)
 if(window.__automaioSplitBoot)return;window.__automaioSplitBoot=1;
 var API="${base}";
 var SITE="${site}";
+${readConfigTypeFromDom()}
 ${readSlugFromPath()}
 ${readCmsFromDom(['html', 'html-content', 'html_content', 'css', 'css-content', 'css_content', 'js', 'js-content', 'js_content'])}
 ${injectSplitContent()}
 function fromDom(){
+  var cfg=readConfigType();
+  if(cfg==="remote_runtime"||cfg==="iframe_embed")return false;
+  if(document.querySelector(".ai-wrapper,.ai-landing-wrapper,.ai-template-scope"))return false;
   var html=readCms(["html","html-content","html_content"]);
   var css=readCms(["css","css-content","css_content"]);
   var js=readCms(["js","js-content","js_content"]);
@@ -75,6 +91,7 @@ export function buildIframeInlineBootstrap(appUrl: string, webflowSiteId: string
 if(window.__automaioIframeBoot)return;window.__automaioIframeBoot=1;
 var API="${base}";
 var SITE="${site}";
+${readConfigTypeFromDom()}
 ${readSlugFromPath()}
 ${readCmsFromDom(['iframe-url', 'iframe_url', 'embed-url', 'page-url'])}
 function mountIframe(src){
@@ -94,6 +111,8 @@ function mountIframe(src){
   });
 }
 function fromDom(){
+  var cfg=readConfigType();
+  if(cfg==="remote_runtime"||cfg==="split_method")return false;
   var src=readCms(["iframe-url","iframe_url","embed-url","page-url"]);
   if(src){mountIframe(src);return true;}
   return false;

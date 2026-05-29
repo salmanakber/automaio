@@ -6,20 +6,19 @@ import type { PublishHtmlMode } from '@/lib/webflow/field-mapper'
 import type { CollectionField } from '@/lib/webflow/field-mapper'
 import {
   DELIVERY_FIELD_DEFINITIONS,
+  UNIFIED_LANDING_CMS_FIELDS,
   type DeliveryMode,
   collectionHasDeliveryFields,
   syncCollectionFieldsCache,
 } from '@/lib/webflow/cms-collection-schema'
-import { buildIframeInlineBootstrap, buildSplitInlineBootstrap } from '@/lib/webflow/delivery-bootstrap'
+import { buildIframeInlineBootstrap } from '@/lib/webflow/delivery-bootstrap'
 import {
   buildWebflowIframeCollectionEmbed,
-  buildWebflowSplitCollectionEmbed,
+  buildWebflowSplitMethodTemplateEmbed,
 } from '@/lib/webflow/template-embeds'
 import { buildWebflowRuntimeCollectionEmbed } from '@/lib/webflow/runtime-embed'
-import { clearAutomaioSiteLevelRuntime, ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
+import { ensureAutomaioRuntimeForIntegration } from '@/lib/webflow/runtime-site-embed'
 
-const RUNTIME_SCRIPT_NAME = 'Automaio Runtime Bootstrap'
-const SPLIT_SCRIPT_NAME = 'Automaio Split HTML Renderer'
 const IFRAME_SCRIPT_NAME = 'Automaio Iframe Embed Renderer'
 
 const SCRIPT_VERSION = '1.1.0'
@@ -164,17 +163,26 @@ async function registerDeliveryScript(
   return { scriptId: created.id, version: SCRIPT_VERSION }
 }
 
-/** Create missing Plain Text CMS fields for the active delivery mode. */
+/** Create all optional delivery CMS fields (unified schema) on connect / install. */
 export async function ensureDeliveryCmsFields(
   client: WebflowClient,
   collectionId: string,
-  mode: DeliveryMode,
+  mode?: DeliveryMode,
 ): Promise<CollectionField[]> {
   const collection = await client.getCollection(collectionId)
   const existingSlugs = new Set(collection.fields.map((f) => f.slug))
-  const defs = DELIVERY_FIELD_DEFINITIONS[mode]
+  const defs = mode ? DELIVERY_FIELD_DEFINITIONS[mode] : UNIFIED_LANDING_CMS_FIELDS
+  const allDefs = UNIFIED_LANDING_CMS_FIELDS
+  const toCreate = new Map<string, (typeof allDefs)[number]>()
 
+  for (const def of allDefs) {
+    if (def.slug) toCreate.set(def.slug, def)
+  }
   for (const def of defs) {
+    if (def.slug) toCreate.set(def.slug, def)
+  }
+
+  for (const def of toCreate.values()) {
     const expectedSlug = def.slug
     if (expectedSlug && existingSlugs.has(expectedSlug)) continue
     try {
@@ -268,7 +276,7 @@ export async function ensureCollectionDeliverySetup(
     mode === 'remote_runtime'
       ? buildWebflowRuntimeCollectionEmbed(appUrl)
       : mode === 'split_plain_text'
-        ? buildWebflowSplitCollectionEmbed()
+        ? buildWebflowSplitMethodTemplateEmbed()
         : buildWebflowIframeCollectionEmbed()
 
   const modeChanged = Boolean(previousMode && previousMode !== mode)
@@ -361,11 +369,15 @@ export async function ensureCollectionDeliverySetup(
     }
   }
 
-  // Split or iframe — remove runtime bootstrap from collection template
+  // Split or iframe — runtime bootstrap stays optional (config-type gated); mode-specific runner when needed
   try {
-    await clearAutomaioSiteLevelRuntime(integrationId, options.collectionId)
+    await ensureAutomaioRuntimeForIntegration(integrationId, {
+      collectionId: options.collectionId,
+      publishSite: options.publishSite ?? false,
+      skipIfConfigured: !shouldReconfigure,
+    })
   } catch {
-    // non-fatal
+    // non-fatal — runtime is optional per config-type
   }
 
   const templatePage = await client.findCollectionTemplatePage(
@@ -375,11 +387,33 @@ export async function ensureCollectionDeliverySetup(
 
   const automaioIds = new Set(await listAutomaioScriptIds(client, integration.webflowSiteId))
 
-  const scriptName = mode === 'split_plain_text' ? SPLIT_SCRIPT_NAME : IFRAME_SCRIPT_NAME
-  const sourceCode =
-    mode === 'split_plain_text'
-      ? buildSplitInlineBootstrap(appUrl, integration.webflowSiteId)
-      : buildIframeInlineBootstrap(appUrl, integration.webflowSiteId)
+  if (mode === 'split_plain_text') {
+    await prisma.webflowIntegration.update({
+      where: { id: integrationId },
+      data: {
+        collections: {
+          ...collectionsJson,
+          automaioDelivery: {
+            mode,
+            configuredAt: new Date().toISOString(),
+          },
+        },
+      } as object,
+    })
+
+    await syncCollectionFieldsCache(integrationId, options.collectionId, fields)
+
+    return {
+      success: true,
+      mode,
+      fields,
+      collectionTemplateSnippet: snippet,
+      templateAutoConfigured: false,
+    }
+  }
+
+  const scriptName = IFRAME_SCRIPT_NAME
+  const sourceCode = buildIframeInlineBootstrap(appUrl, integration.webflowSiteId)
 
   try {
     const { scriptId, version } = await registerDeliveryScript(
@@ -445,7 +479,7 @@ export async function ensureCollectionDeliverySetup(
 
 export function getCollectionTemplateSnippet(mode: PublishHtmlMode, appUrl?: string): string {
   if (mode === 'remote_runtime') return buildWebflowRuntimeCollectionEmbed(appUrl)
-  if (mode === 'split_plain_text') return buildWebflowSplitCollectionEmbed()
+  if (mode === 'split_plain_text') return buildWebflowSplitMethodTemplateEmbed()
   if (mode === 'iframe_embed') return buildWebflowIframeCollectionEmbed()
-  return buildWebflowSplitCollectionEmbed()
+  return buildWebflowSplitMethodTemplateEmbed()
 }

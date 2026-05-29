@@ -1,3 +1,4 @@
+import * as cheerio from 'cheerio'
 import { extractRichTextFragment } from '@/lib/webflow/embed-setup'
 import {
   normalizeAssetUrls,
@@ -22,76 +23,47 @@ export function buildScopeClass(id: string): string {
   return `ai-template-${safe || 'page'}`
 }
 
-type BlockExtractResult = { blocks: string[]; remainder: string }
+type CheerioExtractResult = {
+  css: string
+  js: string
+  stylesheetUrls: string[]
+  htmlWithoutAssets: string
+}
 
 /**
- * Walk HTML and extract matching tag blocks without dropping unmatched content.
- * Unclosed tags are left in place; external script tags (src-only) stay in HTML.
+ * Split HTML into CSS, JS, and clean markup using cheerio.
+ * External script tags (src-only) and non-stylesheet links stay in HTML.
  */
-function extractTaggedBlocks(html: string, tagName: 'style' | 'script'): BlockExtractResult {
-  const blocks: string[] = []
-  const tag = tagName.toLowerCase()
-  const openRe = new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi')
-  let remainder = ''
-  let cursor = 0
-  let match: RegExpExecArray | null
+export function extractHtmlCssJsWithCheerio(html: string): CheerioExtractResult {
+  const $ = cheerio.load(html, { xml: false }, false)
 
-  while ((match = openRe.exec(html)) !== null) {
-    remainder += html.slice(cursor, match.index)
-    const openTag = match[0]
-    const contentStart = match.index + openTag.length
-    const closeRe = new RegExp(`</${tag}\\s*>`, 'gi')
-    closeRe.lastIndex = contentStart
-    const closeMatch = closeRe.exec(html)
-
-    if (!closeMatch) {
-      remainder += html.slice(match.index)
-      cursor = html.length
-      break
-    }
-
-    const fullBlock = html.slice(match.index, closeMatch.index + closeMatch[0].length)
-    const inner = html.slice(contentStart, closeMatch.index)
-
-    if (tagName === 'script') {
-      const hasSrc = /\bsrc\s*=/.test(openTag)
-      if (hasSrc && !inner.trim()) {
-        remainder += fullBlock
-      } else if (inner.trim()) {
-        blocks.push(inner)
-      } else {
-        remainder += fullBlock
-      }
-    } else if (inner.trim()) {
-      blocks.push(inner)
-    }
-
-    cursor = closeMatch.index + closeMatch[0].length
-    openRe.lastIndex = cursor
-  }
-
-  remainder += html.slice(cursor)
-  return { blocks, remainder }
-}
-
-function extractStyleBlocks(html: string): { css: string; htmlWithoutStyles: string } {
-  const { blocks, remainder } = extractTaggedBlocks(html, 'style')
-  return { css: blocks.join('\n\n'), htmlWithoutStyles: remainder }
-}
-
-function extractStylesheetLinks(html: string): { urls: string[]; htmlWithoutLinks: string } {
-  const urls: string[] = []
-  const without = html.replace(/<link[^>]*rel=["']stylesheet["'][^>]*\/?>/gi, (tag) => {
-    const href = tag.match(/href=["']([^"']+)["']/i)?.[1]
-    if (href) urls.push(href)
-    return ''
+  let css = ''
+  $('style').each((_, el) => {
+    const inner = $(el).html() ?? ''
+    if (inner.trim()) css += `${inner}\n`
   })
-  return { urls, htmlWithoutLinks: without }
-}
 
-function extractScriptBlocks(html: string): { js: string; htmlWithoutScripts: string } {
-  const { blocks, remainder } = extractTaggedBlocks(html, 'script')
-  return { js: blocks.join('\n\n'), htmlWithoutScripts: remainder }
+  let js = ''
+  $('script').each((_, el) => {
+    const hasSrc = Boolean($(el).attr('src')?.trim())
+    const inner = $(el).html() ?? ''
+    if (hasSrc && !inner.trim()) return
+    if (inner.trim()) js += `${inner}\n`
+  })
+
+  const stylesheetUrls: string[] = []
+  $('link[rel="stylesheet"]').each((_, el) => {
+    const href = $(el).attr('href')?.trim()
+    if (href) stylesheetUrls.push(href)
+  })
+
+  $('style').remove()
+  $('script').remove()
+  $('link[rel="stylesheet"]').remove()
+
+  const htmlWithoutAssets = $.root().children().toArray().map((node) => $.html(node)).join('')
+
+  return { css: css.trim(), js: js.trim(), stylesheetUrls, htmlWithoutAssets }
 }
 
 /** Pull @import / @font-face / @keyframes to the top — must never be prefixed or scoped. */
@@ -132,7 +104,7 @@ function wrapWithScope(html: string, scopeClass: string): string {
   const scopePattern = new RegExp(`class=["'][^"']*${scopeClass}`, 'i')
   if (scopePattern.test(trimmed)) return trimmed
 
-  return `<div class="${scopeClass} ai-landing-wrapper ai-template-scope">\n${trimmed}\n</div>`
+  return `<div class="${scopeClass} ai-landing-wrapper ai-template-scope ai-wrapper">\n${trimmed}\n</div>`
 }
 
 function wrapJsInScopeIife(js: string, scopeClass: string): string {
@@ -168,11 +140,10 @@ export function assembleLandingPageForWebflow(
   let html = normalizeAssetUrls(rawHtml, options.cdnBase)
   const inputLines = countNonEmptyLines(html)
 
-  const { js: rawJs, htmlWithoutScripts } = extractScriptBlocks(html)
-  const { css: inlineCss, htmlWithoutStyles } = extractStyleBlocks(htmlWithoutScripts)
-  const { urls: stylesheetUrls, htmlWithoutLinks } = extractStylesheetLinks(htmlWithoutStyles)
+  const { css: inlineCss, js: rawJs, stylesheetUrls, htmlWithoutAssets } =
+    extractHtmlCssJsWithCheerio(html)
 
-  let htmlContent = stripDocumentWrapper(htmlWithoutLinks)
+  let htmlContent = stripDocumentWrapper(htmlWithoutAssets)
   htmlContent = sanitizeLandingPageHtml(htmlContent)
   htmlContent = wrapWithScope(htmlContent, scopeClass)
 

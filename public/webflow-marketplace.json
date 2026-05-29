@@ -38,7 +38,20 @@
       "seo-description",
       "status"
     ],
-    "optionalLegacyFields": ["html", "css", "iframe-url"]
+    "optionalLegacyFields": [
+      "config-type",
+      "html",
+      "css",
+      "js",
+      "html-content",
+      "css-content",
+      "js-content",
+      "iframe-url",
+      "iframe-height",
+      "iframe-sandbox",
+      "template-id",
+      "template-config"
+    ]
   },
   "runtimeScript": "/webflow/runtime.js",
   "documentation": "https://github.com/automaio/docs"

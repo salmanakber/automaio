@@ -27,6 +27,7 @@ import {
 import { buildRuntimeConfigJson } from '@/lib/runtime/build-page-schema'
 import type { LandingPageSchema } from '@/lib/runtime/types'
 import { DEFAULT_PUBLISH_DELIVERY_MODE } from '@/lib/webflow/marketplace-policy'
+import { configTypeForHtmlMode } from '@/lib/webflow/delivery-config-type'
 
 export { formatWebflowValidationError } from '@/lib/webflow/webflow-errors'
 
@@ -112,6 +113,8 @@ const FIELD_ALIASES: Record<keyof CmsFieldMapping, string[]> = {
   'iframe-url': ['iframe-url', 'iframe_url', 'embed-url', 'page-url'],
   'page-id': ['page-id', 'page_id', 'automaio-page-id', 'automaio-id', 'automaio-campaign-id'],
   'runtime-config': ['runtime-config', 'runtime_config'],
+  'config-type': ['config-type', 'config_type', 'configType'],
+  'template-config': ['template-config', 'template_config'],
   'preview-image': ['preview-image', 'preview_image', 'preview-image-url'],
   'template-id': ['template-id', 'template_id', 'automaio-template-id'],
   industry: ['industry', 'category', 'tag', 'sector'],
@@ -248,10 +251,10 @@ export function previewFieldMapping(
     rows.push({
       logicalKey: 'collection-template',
       label: 'Webflow collection template',
-      webflowSlug: 'html + css + js',
-      value: 'Collection template runner injects CMS Plain Text fields',
+      webflowSlug: 'config-type: split_method',
+      value: 'Paste {{wf}} snippet — html + css + js Plain Text fields',
       included: true,
-      note: 'Legacy — HTML/CSS only in CMS; JS is not executed (Webflow App Store policy)',
+      note: 'Legacy split — safe server-side rendering via Webflow CMS bindings',
     })
   }
 
@@ -340,6 +343,9 @@ export function buildWebflowFieldPlan(
     assign('seo-description', payload.seoDescription)
     assign('status', payload.status ?? 'published')
     assign('template-id', payload.automaioTemplateId)
+    if (options?.pageSchema) {
+      assign('template-config', JSON.stringify({ v: 1, templateId: payload.automaioTemplateId ?? null }))
+    }
     assign('og-title', payload.ogTitle ?? payload.seoTitle)
     assign('og-description', payload.ogDescription ?? payload.seoDescription)
   } else {
@@ -456,6 +462,8 @@ export function buildWebflowFieldPlan(
   if (!result.slug && slugs.has('slug')) result.slug = payload.slug
 
   ensureRequiredCmsFields(result, collectionFields, payload)
+
+  assign('config-type', configTypeForHtmlMode(htmlMode))
 
   const sanitized = sanitizeFieldDataForCollection(result, collectionFields)
 
