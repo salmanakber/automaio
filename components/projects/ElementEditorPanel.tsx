@@ -5,17 +5,19 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Sparkles, Type, Image as ImageIcon, Link as LinkIcon, Trash2, Code, Loader2, FolderOpen } from 'lucide-react'
+import { Sparkles, Type, Image as ImageIcon, Link as LinkIcon, Trash2, Code, Loader2, FolderOpen, Shapes } from 'lucide-react'
 import { MediaManagerDialog } from '@/components/projects/MediaManagerDialog'
+import { IconPickerDialog, IconPreviewBadge } from '@/components/projects/IconPickerDialog'
 
 export type SelectedElement = {
   id: string
   text: string
   tag: string
-  kind?: 'text' | 'image' | 'code' | 'link' | 'container'
+  kind?: 'text' | 'image' | 'code' | 'link' | 'container' | 'icon'
   src?: string
   alt?: string
   href?: string
+  iconRef?: string
 }
 
 type ElementEditorPanelProps = {
@@ -43,6 +45,10 @@ export function ElementEditorPanel({
   const [localAlt, setLocalAlt] = useState('')
   const [localCode, setLocalCode] = useState('')
   const [mediaOpen, setMediaOpen] = useState(false)
+  const [iconOpen, setIconOpen] = useState(false)
+  const [iconPickerMode, setIconPickerMode] = useState<'icon' | 'button'>('icon')
+  const [localIconRef, setLocalIconRef] = useState('')
+  const [btnIconRef, setBtnIconRef] = useState('')
 
   useEffect(() => {
     if (!element) return
@@ -51,8 +57,10 @@ export function ElementEditorPanel({
     setLocalSrc(element.src ?? '')
     setLocalAlt(element.alt ?? '')
     setLocalCode(element.text ?? '')
+    setLocalIconRef(element.iconRef ?? '')
+    setBtnIconRef(element.iconRef ?? '')
     setAiPrompt('')
-  }, [element?.id, element?.text, element?.href, element?.src, element?.alt, element?.kind])
+  }, [element?.id, element?.text, element?.href, element?.src, element?.alt, element?.kind, element?.iconRef])
 
   if (!element) return null
 
@@ -70,6 +78,28 @@ export function ElementEditorPanel({
 
   const applyCode = () => {
     onUpdate({ type: 'am-code-update', id: element.id, text: localCode })
+  }
+
+  const applyIcon = (ref: string) => {
+    setLocalIconRef(ref)
+    onUpdate({ type: 'am-icon-update', id: element.id, iconRef: ref, iconSize: 28 })
+  }
+
+  const applyButtonIcon = (ref: string) => {
+    setBtnIconRef(ref)
+    onUpdate({
+      type: 'am-button-icon-update',
+      id: element.id,
+      iconRef: ref,
+      text: localText,
+      iconSize: 16,
+      iconPos: 'before',
+    })
+  }
+
+  const clearButtonIcon = () => {
+    setBtnIconRef('')
+    onUpdate({ type: 'am-button-icon-update', id: element.id, iconRef: '', text: localText })
   }
 
   const runAi = async () => {
@@ -92,7 +122,15 @@ export function ElementEditorPanel({
   }
 
   const Icon =
-    element.kind === 'image' ? ImageIcon : element.kind === 'link' ? LinkIcon : element.kind === 'code' ? Code : Type
+    element.kind === 'image'
+      ? ImageIcon
+      : element.kind === 'link'
+        ? LinkIcon
+        : element.kind === 'code'
+          ? Code
+          : element.kind === 'icon'
+            ? Shapes
+            : Type
 
   const shellClass = embedded
     ? 'w-full'
@@ -187,6 +225,59 @@ export function ElementEditorPanel({
           </div>
         )}
 
+        {element.kind === 'icon' && (
+          <div className="space-y-2">
+            <Label className="text-[10px] text-zinc-500 uppercase font-bold">Icon</Label>
+            <div className="flex items-center gap-2">
+              {localIconRef ? <IconPreviewBadge iconRef={localIconRef} size={24} /> : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-1 h-8 text-[10px] gap-1 border-zinc-700"
+                onClick={() => {
+                  setIconPickerMode('icon')
+                  setIconOpen(true)
+                }}
+              >
+                <Shapes className="h-3 w-3" /> Icon library
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {(element.tag === 'a' || element.tag === 'button') && element.kind !== 'icon' && (
+          <div className="space-y-2">
+            <Label className="text-[10px] text-zinc-500 uppercase font-bold">Button icon</Label>
+            <div className="flex items-center gap-2">
+              {btnIconRef ? <IconPreviewBadge iconRef={btnIconRef} size={18} /> : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-1 h-8 text-[10px] gap-1 border-zinc-700"
+                onClick={() => {
+                  setIconPickerMode('button')
+                  setIconOpen(true)
+                }}
+              >
+                <Shapes className="h-3 w-3" /> {btnIconRef ? 'Change icon' : 'Add icon'}
+              </Button>
+              {btnIconRef ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-[10px] text-zinc-500"
+                  onClick={clearButtonIcon}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        )}
+
         {(element.kind === 'text' || element.kind === 'link' || element.tag === 'button' || element.tag === 'a' || !element.kind) && (
           <div className="p-3 rounded-lg bg-violet-950/30 border border-violet-500/25 space-y-2">
             <div className="flex items-center gap-2">
@@ -229,6 +320,7 @@ export function ElementEditorPanel({
             if (element.kind === 'image') applyImage()
             else if (element.kind === 'link') applyLink()
             else if (element.kind === 'code') applyCode()
+            else if (element.kind === 'icon') applyIcon(localIconRef)
             else applyText()
           }}
         >
@@ -241,6 +333,17 @@ export function ElementEditorPanel({
         onOpenChange={setMediaOpen}
         projectId={projectId}
         onSelect={(url) => setLocalSrc(url)}
+      />
+
+      <IconPickerDialog
+        open={iconOpen}
+        onOpenChange={setIconOpen}
+        value={iconPickerMode === 'button' ? btnIconRef : localIconRef}
+        title={iconPickerMode === 'button' ? 'Button icon' : 'Choose icon'}
+        onSelect={(ref) => {
+          if (iconPickerMode === 'button') applyButtonIcon(ref)
+          else applyIcon(ref)
+        }}
       />
     </div>
   )

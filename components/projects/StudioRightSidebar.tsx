@@ -25,6 +25,7 @@ import {
   type SelectedElement,
 } from '@/components/projects/ElementEditorPanel'
 import { EditorCollectionPanel } from '@/components/projects/EditorCollectionPanel'
+import { EditorCarouselPanel } from '@/components/projects/EditorCarouselPanel'
 import { EditorLeadFormPanel } from '@/components/projects/EditorLeadFormPanel'
 import type { StyleTarget, EditViewport, ElementStyles } from '@/lib/editor/responsive-styles'
 import type { TemplateTheme } from '@/lib/templates/theme'
@@ -41,7 +42,7 @@ export function StudioRightSidebar(props: any) {
     onSetGap,     onStackMobile, onInsertInside,
     orgId,
     onCollectionAdd, onCollectionRemove, onCollectionSetColumns, onCollectionImageUpdate,
-    onLeadFormUpdate,
+    onLeadFormUpdate, onCarouselUpdate,
   } = props
 
   const hasElementFocus = Boolean(selectedElement || sectionSelection || styleTarget)
@@ -160,6 +161,18 @@ export function StudioRightSidebar(props: any) {
                       onRemoveItem={onCollectionRemove!}
                       onSetColumns={onCollectionSetColumns!}
                       onImageUpdate={(imageId, src) => onCollectionImageUpdate?.(imageId, src)}
+                    />
+                  </InspectorPanel>
+                )}
+
+                {(sectionSelection?.widget === 'carousel' ||
+                  sectionSelection?.collection === 'carousel') &&
+                  onCarouselUpdate && (
+                  <InspectorPanel title="Slider">
+                    <EditorCarouselPanel
+                      embedded
+                      section={sectionSelection}
+                      onUpdate={onCarouselUpdate}
                     />
                   </InspectorPanel>
                 )}

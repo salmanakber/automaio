@@ -17,6 +17,9 @@ export type NavigatorItem = {
   tag: string
   widget?: string
   section?: string
+  kind?: string
+  isBlock?: boolean
+  depth?: number
 }
 
 type EditorNavigatorProps = {
@@ -85,6 +88,7 @@ export function EditorNavigator({
             <div
               key={item.id}
               draggable
+              style={{ paddingLeft: `${8 + (item.depth ?? 0) * 14}px` }}
               onDragStart={() => setDragId(item.id)}
               onDragEnd={() => setDragId(null)}
               onDragOver={(e) => e.preventDefault()}
@@ -104,13 +108,19 @@ export function EditorNavigator({
               onClick={() => onSelect(item.id)}
             >
               <GripVertical className="h-3.5 w-3.5 text-zinc-600 shrink-0" />
-              <ChevronRight className="h-3 w-3 text-zinc-600 shrink-0" />
+              {item.isBlock ? (
+                <Layers className="h-3 w-3 text-violet-500 shrink-0" />
+              ) : (
+                <ChevronRight className="h-3 w-3 text-zinc-600 shrink-0" />
+              )}
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-[11px] font-medium text-zinc-200 truncate capitalize">
                   {item.label || item.widget || item.tag}
                 </p>
                 <p className="text-[9px] text-zinc-600 font-mono truncate">
-                  &lt;{item.tag}&gt;{item.section ? ` · ${item.section}` : ''}
+                  &lt;{item.tag}&gt;
+                  {item.kind ? ` · ${item.kind}` : ''}
+                  {item.section ? ` · ${item.section}` : ''}
                 </p>
               </div>
               <ChevronDown className="h-3 w-3 text-zinc-700 opacity-0 group-hover:opacity-100 shrink-0" />

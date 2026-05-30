@@ -3,6 +3,7 @@ import { validateSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAccess } from '@/lib/api/org-access'
 import { renderProjectHtml } from '@/lib/content/render-project-html'
+import { wrapHtmlIfExternalImport } from '@/lib/editor/custom-code-block'
 import { extractBusinessContext, businessContextToParameters } from '@/lib/ai/business-context'
 import { personalizeProject } from '@/lib/ai/personalization-engine'
 import { enhanceBlogBody } from '@/lib/ai/blog-enhance'
@@ -96,9 +97,11 @@ export async function POST(req: NextRequest) {
         where: { id: templateId },
       })
       if (template) {
-        renderedHtml = renderProjectHtml(
-          { name, description, category, template, renderedHtml: null },
-          mergedParameters,
+        renderedHtml = wrapHtmlIfExternalImport(
+          renderProjectHtml(
+            { name, description, category, template, renderedHtml: null },
+            mergedParameters,
+          ),
         )
       }
     }

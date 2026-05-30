@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio'
+import { CAROUSEL_JS } from '@/lib/editor/carousel-runtime'
 import { extractRichTextFragment } from '@/lib/webflow/embed-setup'
 import {
   normalizeAssetUrls,
@@ -154,6 +155,12 @@ export function assembleLandingPageForWebflow(
   if (options.allowJs !== false && rawJs.trim()) {
     const sanitized = sanitizeLandingPageJs(rawJs)
     jsContent = wrapJsInScopeIife(sanitized, scopeClass)
+  }
+
+  const needsCarousel = /data-am-carousel=["']true["']/i.test(rawHtml)
+  if (options.allowJs !== false && needsCarousel) {
+    const carouselSanitized = sanitizeLandingPageJs(CAROUSEL_JS)
+    jsContent = jsContent ? `${jsContent}\n${carouselSanitized}` : carouselSanitized
   }
 
   const outputLines =

@@ -42,7 +42,7 @@ export function buildCollectionItemHtml(type: CollectionWidgetType): string {
     case 'steps':
       return `<div data-am-item style="text-align:center;padding:16px;"><div style="width:40px;height:40px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;margin:0 auto 12px;${itemShadow}">+</div><h3 style="margin:0 0 6px;font-size:1rem;color:#0f172a;">Step title</h3><p style="margin:0;color:#64748b;font-size:13px;">Step description</p></div>`
     case 'iconBoxes':
-      return `<div data-am-item style="text-align:center;padding:24px;border-radius:18px;background:#fff;border:1px solid rgba(15,23,42,0.06);${itemShadow}"><span style="font-size:2rem;">✨</span><h3 style="margin:12px 0 6px;font-size:1rem;color:#0f172a;">Title</h3><p style="margin:0;color:#64748b;font-size:13px;">Description</p></div>`
+      return `<div data-am-item style="text-align:center;padding:24px;border-radius:18px;background:#fff;border:1px solid rgba(15,23,42,0.06);${itemShadow}"><span data-am-icon="true" data-am-icon-set="material" data-am-icon-name="auto_awesome" class="am-icon" style="display:inline-flex;font-family:'Material Symbols Outlined',sans-serif;font-size:2rem;">auto_awesome</span><h3 style="margin:12px 0 6px;font-size:1rem;color:#0f172a;">Title</h3><p style="margin:0;color:#64748b;font-size:13px;">Description</p></div>`
     case 'gallery':
       return `<img data-am-item src="https://placehold.co/400x300/e2e8f0/64748b?text=Image" alt="" style="width:100%;border-radius:14px;${itemShadow}" />`
     case 'logos':

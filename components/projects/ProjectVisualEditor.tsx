@@ -17,6 +17,7 @@ import {
 import { Sparkles, Save, Loader2, CheckCircle2, MousePointerClick, Wand2, AlertTriangle } from 'lucide-react'
 import { VISUAL_EDITOR_SCRIPT } from '@/lib/editor/visual-editor-script'
 import { CAROUSEL_CSS } from '@/lib/editor/carousel-runtime'
+import { MATERIAL_SYMBOLS_FONT_URL } from '@/lib/editor/icon-render'
 import { buildWidgetHtml, type EditorWidgetType } from '@/lib/editor/editor-widgets'
 import type { EditViewport, ElementStyles, StyleTarget } from '@/lib/editor/responsive-styles'
 import { VIEWPORT_FRAME_WIDTHS } from '@/lib/editor/responsive-styles'
@@ -57,6 +58,13 @@ const EDITOR_CSS = `
 #am-tb .am-del:hover { background: #991b1b; }
 html[data-am-edit-viewport="mobile"] body { box-shadow: inset 0 0 0 3px rgba(236,72,153,0.2); }
 html[data-am-edit-viewport="tablet"] body { box-shadow: inset 0 0 0 3px rgba(59,130,246,0.15); }
+html[data-am-preview="1"] [data-am-id]:hover,
+html[data-am-preview="1"] [data-am-block]:hover,
+html[data-am-preview="1"] [data-am-block].am-block-hover {
+  outline: none !important;
+  box-shadow: none !important;
+}
+html[data-am-preview="1"] #am-tb { display: none !important; }
 ${CAROUSEL_CSS}
 `
 
@@ -67,12 +75,13 @@ type SelectedElement = {
   id: string
   text: string
   tag: string
-  kind?: 'text' | 'image' | 'code' | 'link' | 'container'
+  kind?: 'text' | 'image' | 'code' | 'link' | 'container' | 'icon'
   src?: string
   alt?: string
   href?: string
   innerHtml?: string
   inlineTags?: string
+  iconRef?: string
 }
 
 export type { SectionSelection }
@@ -104,6 +113,7 @@ export type ProjectVisualEditorHandle = {
       formPrimary?: string
     },
   ) => void
+  updateCarousel: (targetId: string, settings: Record<string, unknown>) => void
   selectById: (id: string) => void
   moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') => void
   refreshOutline: () => void
@@ -130,7 +140,16 @@ interface ProjectVisualEditorProps {
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void
   onSectionSelect?: (section: SectionSelection | null) => void
   onStyleTargetChange?: (target: StyleTarget | null) => void
-  onOutlineChange?: (items: { id: string; label: string; tag: string; widget?: string; section?: string }[]) => void
+  onOutlineChange?: (items: {
+    id: string
+    label: string
+    tag: string
+    widget?: string
+    section?: string
+    kind?: string
+    isBlock?: boolean
+    depth?: number
+  }[]) => void
   editViewport?: EditViewport
   variant?: 'default' | 'studio'
   previewMode?: boolean
@@ -172,6 +191,7 @@ function buildEditorHtml(raw: string): string {
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   ${prefix}
   ${styleBlocks}
+  <link rel="stylesheet" href="${MATERIAL_SYMBOLS_FONT_URL}" />
   <style data-am-editor="true">${EDITOR_CSS}</style>
 </head>
 <body>
@@ -200,7 +220,7 @@ function buildEditorHtml(raw: string): string {
   }
 
   // Inject prefix (theme styles) and editor CSS into <head>
-  const editorStyle = `${prefix ? prefix + '\n' : ''}<style data-am-editor="true">${EDITOR_CSS}</style>`
+  const editorStyle = `${prefix ? prefix + '\n' : ''}<link rel="stylesheet" href="${MATERIAL_SYMBOLS_FONT_URL}" />\n<style data-am-editor="true">${EDITOR_CSS}</style>`
   html = html.replace(/<\/head>/i, `${editorStyle}\n</head>`)
 
   // Inject API base + editor JS before </body>
@@ -470,6 +490,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
               src: d.src,
               alt: d.alt,
               href: d.href,
+              iconRef: d.iconRef,
             }
             setSelected(el)
             onSelectElement?.(el)
@@ -594,6 +615,15 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
               formInputPadding: d.formInputPadding,
               formRadius: d.formRadius,
               formPrimary: d.formPrimary,
+              carouselPrevIcon: d.carouselPrevIcon,
+              carouselNextIcon: d.carouselNextIcon,
+              carouselIconSize: d.carouselIconSize,
+              carouselIconColor: d.carouselIconColor,
+              carouselNavBg: d.carouselNavBg,
+              carouselNavSize: d.carouselNavSize,
+              carouselAutoplay: d.carouselAutoplay,
+              carouselHideArrows: d.carouselHideArrows,
+              carouselHideDots: d.carouselHideDots,
             })
             if (d.styles) {
               onStyleTargetChange?.(
@@ -864,6 +894,20 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       postToIframe({ type: 'am-collection-image-update', targetId, imageId, src }),
     updateLeadForm: (targetId, config) =>
       postToIframe({ type: 'am-lead-form-update', targetId, ...config }),
+    updateCarousel: (targetId, settings) =>
+      postToIframe({
+        type: 'am-carousel-update',
+        targetId,
+        prevIcon: settings.prevIcon,
+        nextIcon: settings.nextIcon,
+        iconSize: settings.iconSize,
+        iconColor: settings.iconColor,
+        navBg: settings.navBg,
+        navSize: settings.navSize,
+        autoplay: settings.autoplay,
+        hideArrows: settings.hideArrows,
+        hideDots: settings.hideDots,
+      }),
     selectById: (id: string) => postToIframe({ type: 'am-select-by-id', id }),
     moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') =>
       postToIframe({ type: 'am-nav-move', id, targetId, position }),

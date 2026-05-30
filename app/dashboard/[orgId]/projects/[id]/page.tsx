@@ -44,6 +44,9 @@ import { RepersonalizePanel } from '@/components/projects/RepersonalizePanel'
 import { BlogStudioPanel } from '@/components/projects/BlogStudioPanel'
 import type { StyleTarget } from '@/lib/editor/responsive-styles'
 import type { SectionSelection } from '@/components/projects/EditorSectionPanel'
+import {
+  wrapHtmlIfExternalImport,
+} from '@/lib/editor/custom-code-block'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { parseStoredBusinessContext } from '@/lib/onboarding/persistence'
 import {
@@ -178,15 +181,17 @@ export default function ProjectStudioPage() {
   }
 
   const handleImportHtml = async (html: string) => {
+    const payload = wrapHtmlIfExternalImport(html)
     const res = await fetch(`/api/projects/${projectId}/html`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ renderedHtml: html }),
+      body: JSON.stringify({ renderedHtml: payload }),
       credentials: 'same-origin',
     })
     const data = await parseJsonResponse<{ error?: string }>(res)
     if (!res.ok) throw new Error(data.error ?? 'Import failed')
-    setProject((p) => (p ? { ...p, renderedHtml: html } : p))
+    setProject((p) => (p ? { ...p, renderedHtml: payload } : p))
+    setEditorKey((k) => k + 1)
   }
 
   const handleGenerateSeo = async () => {
@@ -463,7 +468,7 @@ export default function ProjectStudioPage() {
             </div>
           )}
 
-          {!isBlogPost && isLandingPage && (
+          {!isBlogPost && isLandingPage && !previewMode && (
             <StudioLeftSidebar
               canUndo={editorCanUndo}
               canRedo={editorCanRedo}
@@ -602,7 +607,7 @@ export default function ProjectStudioPage() {
             )}
           </main>
 
-          {!isBlogPost && isLandingPage && (
+          {!isBlogPost && isLandingPage && !previewMode && (
             <StudioRightSidebar
               project={project!}
               projectId={projectId}
@@ -685,6 +690,9 @@ export default function ProjectStudioPage() {
               }}
               onLeadFormUpdate={(config) => {
                 if (sectionSelection?.id) editorRef.current?.updateLeadForm(sectionSelection.id, config)
+              }}
+              onCarouselUpdate={(settings) => {
+                if (sectionSelection?.id) editorRef.current?.updateCarousel(sectionSelection.id, settings)
               }}
             />
           )}

@@ -39,6 +39,15 @@ export type SectionSelection = {
   formInputPadding?: string
   formRadius?: string
   formPrimary?: string
+  carouselPrevIcon?: string
+  carouselNextIcon?: string
+  carouselIconSize?: number
+  carouselIconColor?: string
+  carouselNavBg?: string
+  carouselNavSize?: number
+  carouselAutoplay?: boolean
+  carouselHideArrows?: boolean
+  carouselHideDots?: boolean
 }
 
 type EditorSectionPanelProps = {

@@ -152,7 +152,7 @@ export function buildElementorBlock(type: ElementorBlockType): string {
       const items = Array.from({ length: 3 }, () => buildCollectionItemHtml('carousel')).join('\n    ')
       return buildCarouselSectionHtml(
         items,
-        `${b} data-am-widget="carousel" data-am-collection="carousel"`,
+        `${b} data-am-widget="carousel" data-am-collection="carousel" data-am-carousel-prev-icon="lucide:chevron-left" data-am-carousel-next-icon="lucide:chevron-right" data-am-carousel-icon-size="20" data-am-carousel-icon-color="#0f172a" data-am-carousel-nav-bg="rgba(255,255,255,0.95)" data-am-carousel-nav-size="42"`,
         S.section,
         'Image slider',
       )
@@ -243,7 +243,7 @@ export function buildElementorBlock(type: ElementorBlockType): string {
     case 'video':
       return `<div ${b} style="aspect-ratio:16/9;background:#1e293b;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Video</div>`
     case 'icon':
-      return `<span ${b} style="font-size:2rem;">★</span>`
+      return `<span ${b} data-am-icon="true" data-am-icon-set="material" data-am-icon-name="star" class="am-icon" style="display:inline-flex;font-family:'Material Symbols Outlined',sans-serif;font-size:2rem;">star</span>`
     case 'badge':
       return `<span ${b} style="padding:6px 14px;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:12px;font-weight:600;">Badge</span>`
     case 'card':
