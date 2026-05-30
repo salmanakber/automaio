@@ -3,6 +3,7 @@ import {
   buildCollectionItemHtml,
   type CollectionWidgetType,
 } from '@/lib/editor/block-collections'
+import { buildCarouselSectionHtml } from '@/lib/editor/carousel-runtime'
 
 /** Elementor-style block HTML — class prefix `am-elt-block` for polished defaults. */
 const S = {
@@ -11,9 +12,9 @@ const S = {
   h1: 'font-size:clamp(2.5rem, 6vw, 4rem); font-weight:850; line-height:1.05; margin:0 0 20px; letter-spacing:-0.04em; color:#0f172a;',
   h2: 'font-size:clamp(1.75rem, 4vw, 2.5rem); font-weight:800; line-height:1.2; margin:0 0 16px; letter-spacing:-0.02em; color:#0f172a;',
   lead: 'font-size:1.25rem; line-height:1.6; color:#475569; margin:0 0 32px; max-width:60ch;',
-  btn: 'display:inline-flex; align-items:center; justify-content:center; padding:14px 32px; background:#6366f1; color:#ffffff; text-decoration:none; border-radius:12px; font-weight:600; font-size:16px; box-shadow:0 4px 14px rgba(99,102,241,0.35); transition: all 0.2s;',
+  btn: 'display:inline-flex; align-items:center; justify-content:center; padding:14px 32px; background:#6366f1; color:#ffffff !important; text-decoration:none; border-radius:12px; font-weight:600; font-size:16px; box-shadow:0 4px 14px rgba(99,102,241,0.35); transition: all 0.2s; border:0; cursor:pointer;',
   btnOutline:
-    'display:inline-flex; padding:14px 32px; background:#ffffff; color:#0f172a; text-decoration:none; border-radius:12px; font-weight:600; border:1px solid rgba(15,23,42,0.1); box-shadow:0 1px 2px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04);',
+    'display:inline-flex; padding:14px 32px; background:#ffffff; color:#0f172a !important; text-decoration:none; border-radius:12px; font-weight:600; border:1px solid rgba(15,23,42,0.1); box-shadow:0 1px 2px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04);',
   card: 'padding:32px; border:1px solid rgba(15,23,42,0.06); border-radius:22px; background:#ffffff; box-shadow:0 1px 2px rgba(15,23,42,0.04), 0 10px 28px rgba(15,23,42,0.07);',
   panel:
     'border-radius:20px; background:#ffffff; border:1px solid rgba(15,23,42,0.06); box-shadow:0 2px 4px rgba(15,23,42,0.03), 0 12px 32px rgba(15,23,42,0.08);',
@@ -147,8 +148,15 @@ export function buildElementorBlock(type: ElementorBlockType): string {
   <div style="max-width:400px;margin:0 auto;"><input placeholder="Email" style="width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px;" readonly /><button style="${S.btn}width:100%;">Send</button></div></section>`
     case 'gallery':
       return collectionBlock('gallery', 'Gallery', undefined, 3, 3)
-    case 'carousel':
-      return collectionBlock('carousel', 'Image slider', 'Swipe through slides — click each image on canvas to replace.', 3, 1)
+    case 'carousel': {
+      const items = Array.from({ length: 3 }, () => buildCollectionItemHtml('carousel')).join('\n    ')
+      return buildCarouselSectionHtml(
+        items,
+        `${b} data-am-widget="carousel" data-am-collection="carousel"`,
+        S.section,
+        'Image slider',
+      )
+    }
     case 'marquee':
       return `<section ${b} style="${S.section}overflow:hidden;"><div style="display:flex;gap:48px;animation:am-marquee 24s linear infinite;white-space:nowrap;"><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand One</span><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand Two</span><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand Three</span><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand Four</span></div><style>@keyframes am-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}</style></section>`
     case 'logos':

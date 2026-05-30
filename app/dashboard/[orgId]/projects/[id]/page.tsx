@@ -36,6 +36,7 @@ import {
 import { SidebarFields } from '@/components/projects/SidebarFields'
 import { StudioLeftSidebar } from '@/components/projects/StudioLeftSidebar'
 import { StudioRightSidebar } from '@/components/projects/StudioRightSidebar'
+import { EditorNavigator, EditorNavigatorToggle, type NavigatorItem } from '@/components/projects/EditorNavigator'
 import type { SelectedElement } from '@/components/projects/ElementEditorPanel'
 import { PublishDialog } from '@/components/projects/PublishDialog'
 import { AiProgressOverlay } from '@/components/projects/AiProgressOverlay'
@@ -93,6 +94,8 @@ export default function ProjectStudioPage() {
   const [bootstrappingBlank, setBootstrappingBlank] = useState(false)
   const [editorTheme, setEditorTheme] = useState<TemplateTheme>(DEFAULT_TEMPLATE_THEME)
   const [previewMode, setPreviewMode] = useState(false)
+  const [navigatorOpen, setNavigatorOpen] = useState(false)
+  const [navigatorItems, setNavigatorItems] = useState<NavigatorItem[]>([])
   const seoAutoTried = useRef(false)
 
   const load = useCallback(async () => {
@@ -289,98 +292,111 @@ export default function ProjectStudioPage() {
   return (
     <TooltipProvider>
       <div className="h-screen w-full flex flex-col bg-[#09090b] text-zinc-200 overflow-hidden">
-        <header className="h-14 border-b border-zinc-800 flex items-center justify-between px-4 bg-[#09090b] z-50 shrink-0">
-          <div className="flex items-center gap-4">
+        <header className="h-14 border-b border-zinc-800 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 sm:px-4 bg-[#09090b] z-50 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Button
               variant="ghost"
               size="icon"
-              className="text-zinc-400 hover:text-white"
+              className="h-8 w-8 shrink-0 text-zinc-400 hover:text-white"
               onClick={() => router.push(`/dashboard/${orgId}/projects`)}
             >
               <ChevronLeft className="h-5 w-5" />
             </Button>
-            <Separator orientation="vertical" className="h-6 bg-zinc-800" />
-            <div>
-              <h1 className="text-sm font-semibold truncate max-w-[200px]">{project?.name as string}</h1>
-              <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">
+            <Separator orientation="vertical" className="h-6 bg-zinc-800 shrink-0 hidden sm:block" />
+            <div className="min-w-0">
+              <h1 className="text-sm font-semibold truncate">{project?.name as string}</h1>
+              <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter truncate">
                 {String(project?.contentType ?? '').replace('_', ' ')}
               </p>
             </div>
           </div>
 
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-            {!isBlogPost && (
-            <>
-            <div className="flex items-center bg-zinc-900 rounded-full border border-zinc-800 p-1 shadow-2xl">
-              <ViewportButton icon={Monitor} active={viewport === 'desktop'} onClick={() => setViewport('desktop')} label="Desktop" />
-              <ViewportButton icon={Tablet} active={viewport === 'tablet'} onClick={() => setViewport('tablet')} label="Tablet" />
-              <ViewportButton icon={Smartphone} active={viewport === 'mobile'} onClick={() => setViewport('mobile')} label="Mobile" />
+          {!isBlogPost && (
+            <div className="flex items-center justify-center shrink-0">
+              <div className="flex items-center bg-zinc-900 rounded-full border border-zinc-800 p-0.5 shadow-lg">
+                <ViewportButton icon={Monitor} active={viewport === 'desktop'} onClick={() => setViewport('desktop')} label="Desktop" />
+                <ViewportButton icon={Tablet} active={viewport === 'tablet'} onClick={() => setViewport('tablet')} label="Tablet" />
+                <ViewportButton icon={Smartphone} active={viewport === 'mobile'} onClick={() => setViewport('mobile')} label="Mobile" />
+                <Separator orientation="vertical" className="h-5 bg-zinc-700 mx-0.5" />
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-[10px] font-mono w-9 text-center text-zinc-400 tabular-nums">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setZoom((z) => Math.min(2, z + 0.1))}>
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center bg-zinc-900 rounded-full border border-zinc-800 p-0.5 ml-2">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
-                <ZoomOut className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-[10px] font-mono w-10 text-center text-zinc-400">{Math.round(zoom * 100)}%</span>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(2, z + 0.1))}>
-                <ZoomIn className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            </>
-            )}
-          </div>
+          )}
 
-          <div className="flex items-center gap-3">
+          {isBlogPost && <div />}
+
+          <div className="flex items-center justify-end gap-1 sm:gap-1.5 min-w-0 overflow-x-auto custom-scrollbar">
             {!isBlogPost && renderedHtml.trim() && (
-              <>
-                <Button
-                  size="sm"
-                  variant={previewMode ? 'default' : 'outline'}
-                  className={`h-8 gap-1.5 ${previewMode ? 'bg-violet-600 hover:bg-violet-500' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}
-                  onClick={() => setPreviewMode((v) => !v)}
-                >
-                  {previewMode ? <Pencil className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  {previewMode ? 'Edit' : 'View'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1.5"
-                  onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Open preview
-                </Button>
-              </>
+              <div className="flex items-center shrink-0 rounded-full border border-zinc-800 bg-zinc-900/80 p-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant={previewMode ? 'default' : 'ghost'}
+                      className={`h-7 w-7 shrink-0 ${previewMode ? 'bg-violet-600 hover:bg-violet-500' : 'text-zinc-400 hover:text-white'}`}
+                      onClick={() => setPreviewMode((v) => !v)}
+                    >
+                      {previewMode ? <Pencil className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    {previewMode ? 'Back to edit mode' : 'View mode (read-only)'}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0 text-zinc-400 hover:text-white"
+                      onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Open preview in new tab
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             )}
             {saveError && (
-              <span className="text-xs text-red-400 max-w-[200px] truncate" title={saveError}>
+              <span className="text-xs text-red-400 max-w-[120px] truncate shrink-0 hidden lg:inline" title={saveError}>
                 {saveError}
               </span>
             )}
             {saved && (
-              <span className="text-xs text-emerald-500 flex items-center gap-1">
+              <span className="text-xs text-emerald-500 items-center gap-1 shrink-0 hidden md:flex">
                 <CheckCircle2 className="h-3 w-3" /> Saved
               </span>
             )}
             {!isBlogPost && editorSaveState.autoSaving && (
-              <span className="text-xs text-zinc-500 flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" /> Auto-saving…
+              <span className="text-xs text-zinc-500 items-center gap-1 shrink-0 hidden md:flex">
+                <Loader2 className="h-3 w-3 animate-spin" /> Saving…
               </span>
             )}
             {!isBlogPost && editorSaveState.hasChanges && !editorSaveState.autoSaving && (
-              <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-500">
+              <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-500 shrink-0 hidden sm:flex">
                 Unsaved
               </Badge>
             )}
             {!isBlogPost && (
-              <div className="flex items-center gap-2 px-2 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
+              <div className="hidden xl:flex items-center gap-1.5 px-2 py-1 rounded-full border border-zinc-800 bg-zinc-900/50 shrink-0">
                 <Switch
                   id="auto-save"
                   checked={autoSaveEnabled}
                   onCheckedChange={setAutoSaveEnabled}
                   className="scale-75"
                 />
-                <Label htmlFor="auto-save" className="text-[10px] text-zinc-400 cursor-pointer">
+                <Label htmlFor="auto-save" className="text-[10px] text-zinc-400 cursor-pointer whitespace-nowrap">
                   Auto-save
                 </Label>
               </div>
@@ -389,34 +405,35 @@ export default function ProjectStudioPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1.5"
+                className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1 shrink-0 hidden lg:flex"
                 onClick={() => setRepersonalizeOpen(true)}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                {hasBusinessContext ? 'Re-personalize' : 'Personalize'}
+                <span className="hidden xl:inline">{hasBusinessContext ? 'Re-personalize' : 'Personalize'}</span>
               </Button>
             )}
             <Button
               variant="outline"
               size="sm"
-              className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300"
+              className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 shrink-0 px-2 sm:px-3"
               onClick={() => void openPublishDialog()}
             >
-              <Upload className="h-4 w-4 mr-2" /> Publish
+              <Upload className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Publish</span>
             </Button>
             <Button
               size="sm"
-              className="h-8 bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]"
+              className="h-8 bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] shrink-0 px-2 sm:px-3"
               onClick={handleSaveAll}
               disabled={isSaving}
             >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Save
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 sm:mr-1.5" />}
+              <span className="hidden sm:inline">Save</span>
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-zinc-500 hover:text-red-400"
+              className="h-8 w-8 shrink-0 text-zinc-500 hover:text-red-400"
               onClick={handleDeleteProject}
               disabled={deleting}
               title="Delete project"
@@ -553,12 +570,33 @@ export default function ProjectStudioPage() {
                   onFocusRect={handleFocusRect}
                   onSectionSelect={handleSectionSelect}
                   onStyleTargetChange={setStyleTarget}
+                  onOutlineChange={setNavigatorItems}
                   onHistoryChange={({ canUndo, canRedo }) => {
                     setEditorCanUndo(canUndo)
                     setEditorCanRedo(canRedo)
                   }}
                   onSave={(html) => setProject((p) => (p ? { ...p, renderedHtml: html } : p))}
                 />
+                {!previewMode && (
+                  <>
+                    <EditorNavigatorToggle
+                      open={navigatorOpen}
+                      count={navigatorItems.length}
+                      onClick={() => setNavigatorOpen((v) => !v)}
+                    />
+                    <EditorNavigator
+                      open={navigatorOpen}
+                      onOpenChange={setNavigatorOpen}
+                      items={navigatorItems}
+                      activeId={sectionSelection?.id ?? selectedElement?.id ?? styleTarget?.id ?? null}
+                      onRefresh={() => editorRef.current?.refreshOutline()}
+                      onSelect={(id) => editorRef.current?.selectById(id)}
+                      onMove={(id, targetId, position) =>
+                        editorRef.current?.moveNavigatorItem(id, targetId, position)
+                      }
+                    />
+                  </>
+                )}
               </div>
             </motion.div>
             )}

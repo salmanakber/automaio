@@ -21,6 +21,8 @@ import {
   FONT_WEIGHT_OPTIONS,
   buildBoxShadow,
   buildTransform,
+  buildLinearGradient,
+  parseLinearGradient,
   parseBoxShadow,
   parseTransform,
   parseFontSize,
@@ -161,10 +163,23 @@ export function EditorStylePanel({
     translateX: 0,
     translateY: 0,
   })
+  const [fillMode, setFillMode] = useState<'solid' | 'gradient'>('solid')
+  const [gradAngle, setGradAngle] = useState(135)
+  const [gradFrom, setGradFrom] = useState('#6366f1')
+  const [gradTo, setGradTo] = useState('#a855f7')
 
   useEffect(() => {
     if (!target) return
     setStyles(target.styles)
+    const parsedGrad = parseLinearGradient(target.styles.backgroundImage)
+    if (parsedGrad) {
+      setFillMode('gradient')
+      setGradAngle(parsedGrad.angle)
+      setGradFrom(parsedGrad.from)
+      setGradTo(parsedGrad.to)
+    } else {
+      setFillMode('solid')
+    }
     const r = parseInt(String(target.styles.borderRadius ?? '0').replace('px', ''), 10)
     setRadius(Number.isFinite(r) ? r : 0)
     setFontSize(parseFontSize(target.styles.fontSize))
@@ -238,18 +253,103 @@ export function EditorStylePanel({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
         <div className="grid grid-cols-1 gap-4">
-          <div className="flex gap-3">
-            <ColorField
-              label="Background"
-              value={styles.backgroundColor ?? ''}
-              onChange={(v) => commit({ ...styles, backgroundColor: v })}
-            />
-            <ColorField
-              label="Text"
-              value={styles.color ?? ''}
-              onChange={(v) => commit({ ...styles, color: v })}
-            />
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Fill type</Label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(['solid', 'gradient'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={cn(
+                    'px-2 py-1.5 rounded-md text-[10px] font-bold border capitalize transition-all',
+                    fillMode === mode
+                      ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700',
+                  )}
+                  onClick={() => {
+                    setFillMode(mode)
+                    if (mode === 'solid') {
+                      commit({ ...styles, backgroundImage: '', backgroundColor: styles.backgroundColor || '#6366f1' })
+                    } else {
+                      const gradient = buildLinearGradient(gradAngle, gradFrom, gradTo)
+                      commit({ ...styles, backgroundImage: gradient, backgroundColor: '' })
+                    }
+                  }}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {fillMode === 'solid' ? (
+            <div className="flex gap-3">
+              <ColorField
+                label="Background"
+                value={styles.backgroundColor ?? ''}
+                onChange={(v) => commit({ ...styles, backgroundImage: '', backgroundColor: v })}
+              />
+              <ColorField
+                label="Text"
+                value={styles.color ?? ''}
+                onChange={(v) => commit({ ...styles, color: v })}
+              />
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+              <SliderField
+                label="Gradient angle"
+                value={gradAngle}
+                min={0}
+                max={360}
+                step={1}
+                unit="°"
+                onChange={(v) => {
+                  setGradAngle(v)
+                  commit({
+                    ...styles,
+                    backgroundColor: '',
+                    backgroundImage: buildLinearGradient(v, gradFrom, gradTo),
+                  })
+                }}
+              />
+              <div className="flex gap-3">
+                <ColorField
+                  label="From"
+                  value={gradFrom}
+                  onChange={(v) => {
+                    setGradFrom(v)
+                    commit({
+                      ...styles,
+                      backgroundColor: '',
+                      backgroundImage: buildLinearGradient(gradAngle, v, gradTo),
+                    })
+                  }}
+                />
+                <ColorField
+                  label="To"
+                  value={gradTo}
+                  onChange={(v) => {
+                    setGradTo(v)
+                    commit({
+                      ...styles,
+                      backgroundColor: '',
+                      backgroundImage: buildLinearGradient(gradAngle, gradFrom, v),
+                    })
+                  }}
+                />
+              </div>
+              <div
+                className="h-10 rounded-lg border border-zinc-800"
+                style={{ backgroundImage: buildLinearGradient(gradAngle, gradFrom, gradTo) }}
+              />
+              <ColorField
+                label="Text"
+                value={styles.color ?? ''}
+                onChange={(v) => commit({ ...styles, color: v })}
+              />
+            </div>
+          )}
           <ColorField
             label="Border Stroke"
             value={styles.borderColor ?? ''}
@@ -426,6 +526,7 @@ export function EditorStylePanel({
             setTransform(parseTransform(''))
             commit({
               backgroundColor: '',
+              backgroundImage: '',
               color: '',
               borderColor: '',
               borderRadius: '',

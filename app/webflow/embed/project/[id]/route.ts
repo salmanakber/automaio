@@ -3,7 +3,7 @@ import { embedHtmlResponse, getProjectEmbedHtml } from '@/lib/webflow/embed-page
 
 type RouteParams = { params: Promise<{ id: string }> }
 
-/** Iframe document for a published project — isolated, clean HTML page (no navbar/footer). */
+/** Iframe document for a published project — full page content including header/footer blocks. */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   const { id } = await params
   const result = await getProjectEmbedHtml(id)

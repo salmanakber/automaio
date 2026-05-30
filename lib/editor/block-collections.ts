@@ -69,7 +69,7 @@ export function collectionBodyStyle(type: CollectionWidgetType, columns: number)
     return 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;border-bottom:1px solid #e2e8f0;padding-bottom:12px;'
   }
   if (type === 'carousel') {
-    return 'display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 4px 16px;-webkit-overflow-scrolling:touch;'
+    return 'display:flex;gap:0;'
   }
   return `display:grid;grid-template-columns:repeat(${columns}, minmax(0, 1fr));gap:24px;`
 }

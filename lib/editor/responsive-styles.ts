@@ -16,6 +16,7 @@ export const VIEWPORT_FRAME_WIDTHS: Record<EditViewport, number | null> = {
 
 export type ElementStyles = {
   backgroundColor?: string
+  backgroundImage?: string
   color?: string
   borderColor?: string
   borderRadius?: string
@@ -25,6 +26,31 @@ export type ElementStyles = {
   fontFamily?: string
   fontSize?: string
   fontWeight?: string
+}
+
+export function buildLinearGradient(angle: number, from: string, to: string): string {
+  return `linear-gradient(${angle}deg, ${from}, ${to})`
+}
+
+export function parseLinearGradient(raw?: string): { angle: number; from: string; to: string } | null {
+  if (!raw?.includes('linear-gradient')) return null
+  const match = raw.match(/linear-gradient\((\d+)deg,\s*([^,]+),\s*([^)]+)\)/i)
+  if (!match) return null
+  return {
+    angle: parseInt(match[1], 10) || 135,
+    from: match[2].trim(),
+    to: match[3].trim(),
+  }
+}
+
+export function isLightColor(hex: string): boolean {
+  const c = hex.replace('#', '')
+  if (c.length !== 6) return false
+  const r = parseInt(c.slice(0, 2), 16)
+  const g = parseInt(c.slice(2, 4), 16)
+  const b = parseInt(c.slice(4, 6), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.72
 }
 
 export type StyleTarget = {

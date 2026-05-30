@@ -41,8 +41,6 @@ function extractCleanBody(html: string): { headAssets: string; inlineStyles: str
   }
 
   body = body.replace(/<nav[\s\S]*?<\/nav>/gi, '')
-  body = body.replace(/<header[\s\S]*?<\/header>/gi, '')
-  body = body.replace(/<footer[\s\S]*?<\/footer>/gi, '')
 
   return { headAssets, inlineStyles, body: body.trim() }
 }

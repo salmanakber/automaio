@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Sparkles, Save, Loader2, CheckCircle2, MousePointerClick, Wand2, AlertTriangle } from 'lucide-react'
 import { VISUAL_EDITOR_SCRIPT } from '@/lib/editor/visual-editor-script'
+import { CAROUSEL_CSS } from '@/lib/editor/carousel-runtime'
 import { buildWidgetHtml, type EditorWidgetType } from '@/lib/editor/editor-widgets'
 import type { EditViewport, ElementStyles, StyleTarget } from '@/lib/editor/responsive-styles'
 import { VIEWPORT_FRAME_WIDTHS } from '@/lib/editor/responsive-styles'
@@ -56,6 +57,7 @@ const EDITOR_CSS = `
 #am-tb .am-del:hover { background: #991b1b; }
 html[data-am-edit-viewport="mobile"] body { box-shadow: inset 0 0 0 3px rgba(236,72,153,0.2); }
 html[data-am-edit-viewport="tablet"] body { box-shadow: inset 0 0 0 3px rgba(59,130,246,0.15); }
+${CAROUSEL_CSS}
 `
 
 /* Editor script lives in lib/editor/visual-editor-script.ts */
@@ -102,6 +104,9 @@ export type ProjectVisualEditorHandle = {
       formPrimary?: string
     },
   ) => void
+  selectById: (id: string) => void
+  moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') => void
+  refreshOutline: () => void
   undo: () => void
   redo: () => void
   duplicate: () => void
@@ -125,6 +130,7 @@ interface ProjectVisualEditorProps {
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void
   onSectionSelect?: (section: SectionSelection | null) => void
   onStyleTargetChange?: (target: StyleTarget | null) => void
+  onOutlineChange?: (items: { id: string; label: string; tag: string; widget?: string; section?: string }[]) => void
   editViewport?: EditViewport
   variant?: 'default' | 'studio'
   previewMode?: boolean
@@ -222,6 +228,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       onHistoryChange,
       onSectionSelect,
       onStyleTargetChange,
+      onOutlineChange,
       editViewport = 'desktop',
       variant = 'default',
       zoom = 1,
@@ -443,6 +450,10 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       switch (d.type) {
         case 'am-ready':
           setElementCount(d.count ?? 0)
+          postToIframe({ type: 'am-get-outline' })
+          break
+        case 'am-outline':
+          onOutlineChange?.(d.items ?? [])
           break
         case 'am-history':
           setCanUndo(Boolean(d.canUndo))
@@ -489,6 +500,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
         case 'am-changed':
           setHasChanges(true)
           scheduleAutoSave()
+          postToIframe({ type: 'am-get-outline' })
           if (selected && d.id === selected.id) {
             const next: SelectedElement = {
               id: d.id,
@@ -621,7 +633,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [selected?.id, onSelectElement, onFocusRect, isStudio, scheduleAutoSave, onHistoryChange, onSectionSelect, onStyleTargetChange, buildStyleTarget])
+  }, [selected?.id, onSelectElement, onFocusRect, isStudio, scheduleAutoSave, onHistoryChange, onSectionSelect, onStyleTargetChange, onOutlineChange, buildStyleTarget, postToIframe])
 
   const insertWidget = useCallback(
     (type: EditorWidgetType, options?: { targetId?: string; position?: 'before' | 'after' | 'inside' }) => {
@@ -852,6 +864,10 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       postToIframe({ type: 'am-collection-image-update', targetId, imageId, src }),
     updateLeadForm: (targetId, config) =>
       postToIframe({ type: 'am-lead-form-update', targetId, ...config }),
+    selectById: (id: string) => postToIframe({ type: 'am-select-by-id', id }),
+    moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') =>
+      postToIframe({ type: 'am-nav-move', id, targetId, position }),
+    refreshOutline: () => postToIframe({ type: 'am-get-outline' }),
     undo: handleUndo,
     redo: handleRedo,
     duplicate: handleDuplicate,
