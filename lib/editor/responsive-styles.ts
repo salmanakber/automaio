@@ -19,6 +19,8 @@ export type ElementStyles = {
   backgroundImage?: string
   color?: string
   borderColor?: string
+  borderWidth?: string
+  borderStyle?: string
   borderRadius?: string
   boxShadow?: string
   transform?: string
@@ -26,6 +28,16 @@ export type ElementStyles = {
   fontFamily?: string
   fontSize?: string
   fontWeight?: string
+  minHeight?: string
+  maxWidth?: string
+  marginTop?: string
+  marginRight?: string
+  marginBottom?: string
+  marginLeft?: string
+  textAlign?: string
+  alignItems?: string
+  justifyContent?: string
+  opacity?: string
 }
 
 export function buildLinearGradient(angle: number, from: string, to: string): string {
@@ -103,11 +115,25 @@ export const FONT_FAMILY_PRESETS = [
   'DM Sans',
 ] as const
 
-export const FONT_WEIGHT_OPTIONS = [
-  { label: 'Regular', value: '400' },
-  { label: 'Medium', value: '500' },
-  { label: 'Semibold', value: '600' },
-  { label: 'Bold', value: '700' },
+export const BORDER_STYLE_OPTIONS = [
+  { label: 'None', value: 'none' },
+  { label: 'Solid', value: 'solid' },
+  { label: 'Dashed', value: 'dashed' },
+  { label: 'Dotted', value: 'dotted' },
+] as const
+
+export const TEXT_ALIGN_OPTIONS = [
+  { label: 'Left', value: 'left' },
+  { label: 'Center', value: 'center' },
+  { label: 'Right', value: 'right' },
+  { label: 'Justify', value: 'justify' },
+] as const
+
+export const FLEX_ALIGN_OPTIONS = [
+  { label: 'Start', value: 'flex-start' },
+  { label: 'Center', value: 'center' },
+  { label: 'End', value: 'flex-end' },
+  { label: 'Stretch', value: 'stretch' },
 ] as const
 
 export function parseFontSize(raw?: string): number {

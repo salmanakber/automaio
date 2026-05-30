@@ -1,11 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { LayoutGrid, Plus, Columns2, Columns3, Square, Link2, Unlink } from 'lucide-react'
+import { LayoutGrid, Plus, Columns2, Columns3, Square, Link2, Unlink, Box } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { BLOCK_CATEGORIES, type EditorWidgetType } from '@/lib/editor/editor-widgets'
+import {
+  BORDER_STYLE_OPTIONS,
+  FLEX_ALIGN_OPTIONS,
+  TEXT_ALIGN_OPTIONS,
+  type ElementStyles,
+} from '@/lib/editor/responsive-styles'
 
 export type SectionPadding = {
   top: number
@@ -48,6 +55,9 @@ export type SectionSelection = {
   carouselAutoplay?: boolean
   carouselHideArrows?: boolean
   carouselHideDots?: boolean
+  role?: string
+  columnIndex?: string
+  containerStyles?: import('@/lib/editor/responsive-styles').ElementStyles
 }
 
 type EditorSectionPanelProps = {
@@ -61,6 +71,7 @@ type EditorSectionPanelProps = {
   onStackMobile?: () => void
   onInsertInside: (type: EditorWidgetType) => void
   onClose: () => void
+  onApplyContainerStyles?: (id: string, styles: import('@/lib/editor/responsive-styles').ElementStyles) => void
 }
 
 const QUICK_BLOCKS: EditorWidgetType[] = ['heading', 'paragraph', 'button', 'image', 'spacer', 'card']
@@ -98,12 +109,20 @@ export function EditorSectionPanel({
   onStackMobile,
   onInsertInside,
   onClose,
+  onApplyContainerStyles,
 }: EditorSectionPanelProps) {
   const [padding, setPadding] = useState<SectionPadding>(DEFAULT_PADDING)
   const [linkedPadding, setLinkedPadding] = useState(true)
   const [col1, setCol1] = useState(50)
   const [col2, setCol2] = useState(34)
   const [gap, setGap] = useState(32)
+  const [containerStyles, setContainerStyles] = useState<ElementStyles>({})
+  const [minHeight, setMinHeight] = useState(0)
+  const [maxWidth, setMaxWidth] = useState(1200)
+  const [borderWidth, setBorderWidth] = useState(0)
+  const [marginV, setMarginV] = useState(0)
+  const [marginH, setMarginH] = useState(0)
+  const [opacityPct, setOpacityPct] = useState(100)
 
   useEffect(() => {
     if (!section) return
@@ -118,9 +137,26 @@ export function EditorSectionPanel({
       setCol2(34)
     }
     setGap(section.gap ?? 32)
-  }, [section?.id, section?.padding, section?.columnWidths, section?.gap])
+    const cs = section.containerStyles ?? {}
+    setContainerStyles(cs)
+    setMinHeight(parseInt(String(cs.minHeight ?? '0').replace('px', ''), 10) || 0)
+    setMaxWidth(parseInt(String(cs.maxWidth ?? '1200').replace('px', ''), 10) || 1200)
+    setBorderWidth(parseInt(String(cs.borderWidth ?? '0').replace('px', ''), 10) || 0)
+    setMarginV(parseInt(String(cs.marginTop ?? '0').replace('px', ''), 10) || 0)
+    setMarginH(parseInt(String(cs.marginRight ?? '0').replace('px', ''), 10) || 0)
+    const op = parseFloat(cs.opacity ?? '1')
+    setOpacityPct(Number.isFinite(op) ? Math.round(op * 100) : 100)
+  }, [section?.id, section?.padding, section?.columnWidths, section?.gap, section?.containerStyles])
 
   if (!section) return null
+
+  const isColumn = section.role === 'column' || Boolean(section.columnIndex)
+
+  const commitContainer = (patch: ElementStyles) => {
+    const next = { ...containerStyles, ...patch }
+    setContainerStyles(next)
+    onApplyContainerStyles?.(section.id, next)
+  }
 
   const label = section.widget
     ? section.widget.charAt(0).toUpperCase() + section.widget.slice(1)
@@ -194,6 +230,8 @@ export function EditorSectionPanel({
       </div>
 
       <div className="p-3 space-y-4">
+        {!isColumn && (
+        <>
         {/* Layout */}
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Layout</p>
@@ -296,6 +334,164 @@ export function EditorSectionPanel({
               >
                 Stack columns on mobile
               </Button>
+            )}
+          </div>
+        )}
+        </>
+        )}
+
+        {onApplyContainerStyles && (
+          <div className="space-y-2.5 p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+              <Box className="h-3 w-3" />
+              {isColumn ? 'Column styles' : 'Section styles'}
+            </p>
+            <div className="flex gap-2">
+              <div className="flex-1 space-y-1">
+                <Label className="text-[9px] text-zinc-500 uppercase">Background</Label>
+                <Input
+                  type="color"
+                  value={
+                    containerStyles.backgroundColor?.startsWith('#')
+                      ? containerStyles.backgroundColor
+                      : '#ffffff'
+                  }
+                  onChange={(e) => commitContainer({ backgroundColor: e.target.value, backgroundImage: '' })}
+                  className="h-8 p-1 bg-zinc-950 border-zinc-800"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <Label className="text-[9px] text-zinc-500 uppercase">Border</Label>
+                <Input
+                  type="color"
+                  value={
+                    containerStyles.borderColor?.startsWith('#')
+                      ? containerStyles.borderColor
+                      : '#e2e8f0'
+                  }
+                  onChange={(e) =>
+                    commitContainer({
+                      borderColor: e.target.value,
+                      borderWidth: borderWidth ? `${borderWidth}px` : '1px',
+                      borderStyle: containerStyles.borderStyle || 'solid',
+                    })
+                  }
+                  className="h-8 p-1 bg-zinc-950 border-zinc-800"
+                />
+              </div>
+            </div>
+            <PadSlider
+              label="Min height"
+              value={minHeight}
+              onChange={(v) => {
+                setMinHeight(v)
+                commitContainer({ minHeight: v ? `${v}px` : '' })
+              }}
+            />
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <Label className="text-[9px] text-zinc-500 uppercase">Max width</Label>
+                <span className="text-[9px] text-violet-400 font-mono">{maxWidth}px</span>
+              </div>
+              <Slider
+                min={320}
+                max={1600}
+                step={20}
+                value={[maxWidth]}
+                onValueChange={([v]) => {
+                  setMaxWidth(v)
+                  commitContainer({ maxWidth: `${v}px` })
+                }}
+              />
+            </div>
+            <PadSlider
+              label="Border width"
+              value={borderWidth}
+              onChange={(v) => {
+                setBorderWidth(v)
+                commitContainer({
+                  borderWidth: v ? `${v}px` : '0',
+                  borderStyle: v ? containerStyles.borderStyle || 'solid' : 'none',
+                })
+              }}
+            />
+            <PadSlider
+              label="Margin vertical"
+              value={marginV}
+              onChange={(v) => {
+                setMarginV(v)
+                commitContainer({ marginTop: `${v}px`, marginBottom: `${v}px` })
+              }}
+            />
+            <PadSlider
+              label="Margin horizontal"
+              value={marginH}
+              onChange={(v) => {
+                setMarginH(v)
+                commitContainer({ marginLeft: `${v}px`, marginRight: `${v}px` })
+              }}
+            />
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <Label className="text-[9px] text-zinc-500 uppercase">Opacity</Label>
+                <span className="text-[9px] text-violet-400 font-mono">{opacityPct}%</span>
+              </div>
+              <Slider
+                min={10}
+                max={100}
+                step={5}
+                value={[opacityPct]}
+                onValueChange={([v]) => {
+                  setOpacityPct(v)
+                  commitContainer({ opacity: String(v / 100) })
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[9px] text-zinc-500 uppercase">Text align</Label>
+                <select
+                  value={containerStyles.textAlign || 'left'}
+                  onChange={(e) => commitContainer({ textAlign: e.target.value })}
+                  className="w-full h-8 rounded-md bg-zinc-950 border border-zinc-800 text-[10px] px-2 text-zinc-200"
+                >
+                  {TEXT_ALIGN_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[9px] text-zinc-500 uppercase">Border style</Label>
+                <select
+                  value={containerStyles.borderStyle || 'solid'}
+                  onChange={(e) => commitContainer({ borderStyle: e.target.value })}
+                  className="w-full h-8 rounded-md bg-zinc-950 border border-zinc-800 text-[10px] px-2 text-zinc-200"
+                >
+                  {BORDER_STYLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {!isColumn && (
+              <div className="space-y-1">
+                <Label className="text-[9px] text-zinc-500 uppercase">Vertical align</Label>
+                <select
+                  value={containerStyles.alignItems || 'stretch'}
+                  onChange={(e) => commitContainer({ alignItems: e.target.value })}
+                  className="w-full h-8 rounded-md bg-zinc-950 border border-zinc-800 text-[10px] px-2 text-zinc-200"
+                >
+                  {FLEX_ALIGN_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         )}

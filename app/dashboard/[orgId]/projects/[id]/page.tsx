@@ -599,6 +599,11 @@ export default function ProjectStudioPage() {
                       onMove={(id, targetId, position) =>
                         editorRef.current?.moveNavigatorItem(id, targetId, position)
                       }
+                      onDelete={(id) => {
+                        editorRef.current?.deleteNavigatorItem(id)
+                        setSelectedElement(null)
+                        setSectionSelection(null)
+                      }}
                     />
                   </>
                 )}

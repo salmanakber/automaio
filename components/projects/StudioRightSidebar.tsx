@@ -201,6 +201,7 @@ export function StudioRightSidebar(props: any) {
                       onStackMobile={onStackMobile}
                       onInsertInside={onInsertInside}
                       onClose={() => {}}
+                      onApplyContainerStyles={(id, styles) => onApplyStyles(id, styles)}
                     />
                   </InspectorPanel>
                 )}

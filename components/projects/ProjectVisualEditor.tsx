@@ -116,6 +116,7 @@ export type ProjectVisualEditorHandle = {
   updateCarousel: (targetId: string, settings: Record<string, unknown>) => void
   selectById: (id: string) => void
   moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') => void
+  deleteNavigatorItem: (id: string) => void
   refreshOutline: () => void
   undo: () => void
   redo: () => void
@@ -149,6 +150,10 @@ interface ProjectVisualEditorProps {
     kind?: string
     isBlock?: boolean
     depth?: number
+    parentId?: string | null
+    hasChildren?: boolean
+    childCount?: number
+    role?: string
   }[]) => void
   editViewport?: EditViewport
   variant?: 'default' | 'studio'
@@ -624,6 +629,9 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
               carouselAutoplay: d.carouselAutoplay,
               carouselHideArrows: d.carouselHideArrows,
               carouselHideDots: d.carouselHideDots,
+              role: d.role,
+              columnIndex: d.columnIndex,
+              containerStyles: d.styles,
             })
             if (d.styles) {
               onStyleTargetChange?.(
@@ -911,6 +919,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     selectById: (id: string) => postToIframe({ type: 'am-select-by-id', id }),
     moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') =>
       postToIframe({ type: 'am-nav-move', id, targetId, position }),
+    deleteNavigatorItem: (id: string) => postToIframe({ type: 'am-nav-delete', id }),
     refreshOutline: () => postToIframe({ type: 'am-get-outline' }),
     undo: handleUndo,
     redo: handleRedo,
