@@ -7,15 +7,12 @@
 
   var LOADER_STYLES =
     '@keyframes automaio-spin{to{transform:rotate(360deg)}}' +
-    '.automaio-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:2.5rem 1.5rem;font-family:system-ui,sans-serif;color:#64748b}' +
-    '.automaio-loader-ring{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:automaio-spin .7s linear infinite}' +
-    '.automaio-loader-text{font-size:13px;margin:0;text-align:center}'
+    '#automaio-page-loader{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;background:#fff;}' +
+    '#automaio-page-loader .automaio-loader-ring{width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:automaio-spin .7s linear infinite}' +
+    '[data-automaio-loading-root]{min-height:100vh;width:100%;display:flex;align-items:center;justify-content:center}'
 
-  var LOADER_HTML =
-    '<div class="automaio-loader" data-automaio-loading="true">' +
-    '<div class="automaio-loader-ring"></div>' +
-    '<p class="automaio-loader-text">Loading page from Automaio…</p>' +
-    '</div>'
+  var LOADER_RING =
+    '<div class="automaio-loader-ring" role="status" aria-label="Loading"></div>'
 
   function injectLoaderStyles() {
     if (document.getElementById('automaio-loader-css')) return
@@ -25,11 +22,28 @@
     ;(document.head || document.documentElement).appendChild(style)
   }
 
+  function showPageLoader() {
+    injectLoaderStyles()
+    if (document.getElementById('automaio-page-loader')) return
+    var overlay = document.createElement('div')
+    overlay.id = 'automaio-page-loader'
+    overlay.setAttribute('data-automaio-loading', 'true')
+    overlay.innerHTML = LOADER_RING
+    ;(document.body || document.documentElement).appendChild(overlay)
+  }
+
+  function hidePageLoader() {
+    var overlay = document.getElementById('automaio-page-loader')
+    if (overlay) overlay.remove()
+  }
+
   function showLoader(target) {
     if (!target) return
     injectLoaderStyles()
+    showPageLoader()
     target.setAttribute('data-automaio-loading', 'true')
-    target.innerHTML = LOADER_HTML
+    target.setAttribute('data-automaio-loading-root', 'true')
+    target.innerHTML = LOADER_RING
   }
 
   function getScriptBase() {
@@ -188,20 +202,25 @@
       }
 
       target.removeAttribute('data-automaio-loading')
+      target.removeAttribute('data-automaio-loading-root')
+      hidePageLoader()
       target.setAttribute('data-automaio-rendered', schema.version || '1')
       target.dispatchEvent(
         new CustomEvent('automaio:rendered', { detail: { pageId: pageId, schema: schema } }),
       )
     } catch (err) {
-      showError(target, 'Automaio: ' + (err.message || 'render failed'))
+      hidePageLoader()
+      showError(target, err.message || 'Page failed to load')
       console.error('[AutomaioRuntime]', err)
     }
   }
 
   global.AutomaioRuntime = {
-    version: '1.0.4',
+    version: '1.0.5',
     render: render,
     showLoader: showLoader,
+    showPageLoader: showPageLoader,
+    hidePageLoader: hidePageLoader,
   }
 
   // Auto-init when root has data-automaio-page-id (manual embed path)
@@ -210,12 +229,17 @@
     if (!root) return
     var pageId = root.getAttribute('data-automaio-page-id')
     if (!pageId || !pageId.trim() || pageId.indexOf('{{') !== -1) return
-    showLoader(root)
+    showPageLoader()
     render({
       pageId: pageId.trim(),
       target: root,
       apiBase: getScriptBase() || undefined,
     })
+  }
+
+  injectLoaderStyles()
+  if (document.getElementById('ai-page-root') || document.querySelector('[data-automaio-page-id]')) {
+    showPageLoader()
   }
 
   if (document.readyState === 'loading') {

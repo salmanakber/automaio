@@ -3,7 +3,7 @@ import { WebflowClient } from '@/lib/integrations/webflow-client'
 import { prisma } from '@/lib/prisma'
 import { isCustomCodePermissionError, isEmbedRecoverableError } from '@/lib/webflow/embed-permissions'
 
-const RUNTIME_SCRIPT_VERSION = '1.0.4'
+const RUNTIME_SCRIPT_VERSION = '1.0.5'
 const RUNTIME_SCRIPT_DISPLAY_NAME = 'Automaio Runtime Bootstrap'
 
 export type AutomaioRuntimeMeta = {
@@ -27,10 +27,13 @@ export function buildRuntimeInlineBootstrap(webflowSiteId: string, apiUrl: strin
   const base = apiUrl.replace(/\/$/, '')
   const runtimeVersion = RUNTIME_SCRIPT_VERSION
   return `(function(){if(window.__automaioBootstrap)return;window.__automaioBootstrap=1;var u="${base}",s="${webflowSiteId}",v="${runtimeVersion}";
-function injectLoaderStyles(){if(document.getElementById("automaio-loader-css"))return;var st=document.createElement("style");st.id="automaio-loader-css";st.textContent="@keyframes automaio-spin{to{transform:rotate(360deg)}}.automaio-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:2.5rem 1.5rem;font-family:system-ui,sans-serif;color:#64748b}.automaio-loader-ring{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:automaio-spin .7s linear infinite}.automaio-loader-text{font-size:13px;margin:0}";document.head.appendChild(st);}
-function showLoader(r){injectLoaderStyles();r.innerHTML='<div class="automaio-loader" data-automaio-loading="true"><div class="automaio-loader-ring"></div><p class="automaio-loader-text">Loading page from Automaio…</p></div>';}
+function injectLoaderStyles(){if(document.getElementById("automaio-loader-css"))return;var st=document.createElement("style");st.id="automaio-loader-css";st.textContent="@keyframes automaio-spin{to{transform:rotate(360deg)}}#automaio-page-loader{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;background:#fff}#automaio-page-loader .automaio-loader-ring{width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:automaio-spin .7s linear infinite}[data-automaio-loading-root]{min-height:100vh;width:100%;display:flex;align-items:center;justify-content:center}";(document.head||document.documentElement).appendChild(st);}
+function showPageLoader(){injectLoaderStyles();if(document.getElementById("automaio-page-loader"))return;var o=document.createElement("div");o.id="automaio-page-loader";o.setAttribute("data-automaio-loading","true");o.innerHTML='<div class="automaio-loader-ring" role="status" aria-label="Loading"></div>';(document.body||document.documentElement).appendChild(o);}
+function hidePageLoader(){var o=document.getElementById("automaio-page-loader");if(o)o.remove();}
+function showLoader(r){injectLoaderStyles();showPageLoader();r.setAttribute("data-automaio-loading","true");r.setAttribute("data-automaio-loading-root","true");r.innerHTML='<div class="automaio-loader-ring" role="status" aria-label="Loading"></div>';}
+injectLoaderStyles();showPageLoader();
 function ensureRoot(){var r=document.getElementById("ai-page-root");if(!r){r=document.createElement("div");r.id="ai-page-root";r.setAttribute("data-automaio-root","true");var m=document.querySelector("main")||document.querySelector("[role=main]")||document.body;m.insertBefore(r,m.firstChild);}return r;}
-function showStatus(msg,isErr){var r=ensureRoot();r.innerHTML='<p style="font-family:system-ui;padding:1rem 1.25rem;color:'+(isErr?"#b45309":"#64748b")+';font-size:13px;margin:0;line-height:1.5">'+msg+'</p>';}
+function showStatus(msg,isErr){hidePageLoader();var r=ensureRoot();r.innerHTML='<p style="font-family:system-ui;padding:1rem 1.25rem;color:'+(isErr?"#b45309":"#64748b")+';font-size:13px;margin:0;line-height:1.5;text-align:center">'+msg+'</p>';}
 function parsePageIdFromJson(text){if(!text||text.indexOf("pageId")===-1)return null;try{var j=JSON.parse(text.trim());if(j.pageId&&String(j.pageId).trim())return String(j.pageId).trim();}catch(e){var m=text.match(/"pageId"\\s*:\\s*"([^"]+)"/);if(m)return m[1];}return null;}
 function isValidPageId(v){return v&&v.length>=10&&v.length<=40&&/^[a-z0-9_-]+$/i.test(v)&&v.indexOf(" ")===-1&&!/\\{\\{/.test(v);}
 function findPageId(){var r=document.getElementById("ai-page-root");if(r){var p=r.getAttribute("data-automaio-page-id")||r.dataset.automaioPageId;if(isValidPageId(p))return p.trim();}
@@ -47,14 +50,14 @@ function hasRuntimeMarkers(){if(document.getElementById("ai-page-root"))return t
 var nodes=document.querySelectorAll("script[type='application/json'],pre,code,p,span,div,small");for(var k=0;k<nodes.length;k++){var tx=(nodes[k].textContent||"").trim();if(tx.indexOf("pageId")>-1&&parsePageIdFromJson(tx))return true;}return false;}
 function render(pageId){var root=ensureRoot();root.setAttribute("data-automaio-page-id",pageId);showLoader(root);function go(){window.AutomaioRuntime.render({pageId:pageId,target:"#ai-page-root",apiBase:u,hideShell:true});}
 if(window.AutomaioRuntime)return go();
-var sc=document.createElement("script");sc.src=u+"/webflow/runtime.js?v="+v;sc.onload=go;sc.onerror=function(){showStatus("Automaio: failed to load runtime.js from "+u,true);};document.head.appendChild(sc);}
-if(shouldSkipRuntime())return;
+var sc=document.createElement("script");sc.src=u+"/webflow/runtime.js?v="+v;sc.onload=go;sc.onerror=function(){showStatus("Could not load page renderer.",true);};document.head.appendChild(sc);}
+if(shouldSkipRuntime()){hidePageLoader();return;}
 var pid=findPageId();if(pid){render(pid);return;}
 if(!hasRuntimeMarkers())return;
 var root=ensureRoot();showLoader(root);
 var sl=location.pathname.split("/").filter(Boolean).pop();
-if(!sl){showStatus("Automaio: Page ID not found. Bind <strong>Page ID</strong> or <strong>Runtime Config</strong> on your collection template, or add the #ai-page-root embed.",true);return;}
-fetch(u+"/api/runtime/resolve?siteId="+encodeURIComponent(s)+"&slug="+encodeURIComponent(sl)).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});}).then(function(res){if(res.d&&res.d.pageId){render(res.d.pageId);return;}showStatus("Automaio: no page for slug \\""+sl+"\\". Publish from Automaio and ensure CMS slug matches.",true);}).catch(function(){showStatus("Automaio: could not resolve page. Bind Page ID / Runtime Config on your collection template.",true);});
+if(!sl){showStatus("Page ID not found. Bind <strong>Page ID</strong> or <strong>Runtime Config</strong> on your collection template.",true);return;}
+fetch(u+"/api/runtime/resolve?siteId="+encodeURIComponent(s)+"&slug="+encodeURIComponent(sl)).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});}).then(function(res){if(res.d&&res.d.pageId){render(res.d.pageId);return;}showStatus("No page found for this URL. Publish your page and ensure the CMS slug matches.",true);}).catch(function(){showStatus("Could not load page. Check your Page ID or Runtime Config binding.",true);});
 window.AutomaioRuntimeDebug=function(){
   console.group("[Automaio runtime debug]");
   console.log("booted",!!window.__automaioBootstrap);

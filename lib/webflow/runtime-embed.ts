@@ -4,10 +4,21 @@ import { getAppBaseUrl } from '@/lib/app-url'
 export function buildWebflowRuntimeCollectionEmbed(appUrl?: string): string {
   const base = (appUrl ?? getAppBaseUrl()).replace(/\/$/, '')
 
-  return `<!-- Automaio Remote Runtime — bind Page ID to data attribute -->
+  return `<!-- Remote page runtime — bind Page ID to data attribute -->
 <div id="ai-page-root" data-automaio-page-id="{{wf {"path":"page-id","type":"PlainText"} }}"></div>
-<!-- Optional: hide Page ID / Runtime Config text rows with display:none in Webflow Designer -->
-<script src="${base}/webflow/runtime.js?v=1.0.3" defer></script>
+<script>
+(function(){
+  if(document.getElementById("automaio-page-loader"))return;
+  var st=document.createElement("style");
+  st.textContent="@keyframes am-spin{to{transform:rotate(360deg)}}#automaio-page-loader{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;background:#fff}#automaio-page-loader .am-ring{width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:am-spin .7s linear infinite}";
+  (document.head||document.documentElement).appendChild(st);
+  var o=document.createElement("div");
+  o.id="automaio-page-loader";
+  o.innerHTML='<div class="am-ring" role="status" aria-label="Loading"></div>';
+  (document.body||document.documentElement).appendChild(o);
+})();
+</script>
+<script src="${base}/webflow/runtime.js?v=1.0.5" defer></script>
 <script>
 (function(){
   var el = document.getElementById('ai-page-root');
@@ -30,9 +41,21 @@ export function buildWebflowRuntimeCollectionEmbed(appUrl?: string): string {
 export function buildWebflowRuntimeCollectionEmbedStatic(appUrl?: string): string {
   const base = (appUrl ?? getAppBaseUrl()).replace(/\/$/, '')
 
-  return `<!-- Automaio Remote Runtime -->
+  return `<!-- Remote page runtime -->
 <div id="ai-page-root" data-automaio-page-id="PAGE_ID_HERE"></div>
-<script src="${base}/webflow/runtime.js" defer></script>
+<script>
+(function(){
+  if(document.getElementById("automaio-page-loader"))return;
+  var st=document.createElement("style");
+  st.textContent="@keyframes am-spin{to{transform:rotate(360deg)}}#automaio-page-loader{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;background:#fff}#automaio-page-loader .am-ring{width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:am-spin .7s linear infinite}";
+  (document.head||document.documentElement).appendChild(st);
+  var o=document.createElement("div");
+  o.id="automaio-page-loader";
+  o.innerHTML='<div class="am-ring" role="status" aria-label="Loading"></div>';
+  (document.body||document.documentElement).appendChild(o);
+})();
+</script>
+<script src="${base}/webflow/runtime.js?v=1.0.5" defer></script>
 <script>
 window.AutomaioRuntime && window.AutomaioRuntime.render({
   pageId: 'PAGE_ID_HERE',
