@@ -133,7 +133,7 @@ export function ElementEditorPanel({
               value={localHref}
               onChange={(e) => setLocalHref(e.target.value)}
               className="bg-zinc-950 border-zinc-800 h-8 text-xs"
-              placeholder="https://"
+              placeholder="https://…"
             />
           </div>
         )}

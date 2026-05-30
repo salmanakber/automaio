@@ -15,6 +15,7 @@ function isEditableText(el){
   return (el.textContent||'').trim().length>0;
 }
 var idx=0;
+var previewMode=false;
 function nextId(){return String(idx++);}
 function tagEl(el,kind){
   if(skip(el))return;
@@ -422,6 +423,33 @@ function countCollectionItems(el){
   var body=getCollectionBody(el);
   return body?body.querySelectorAll('[data-am-item]').length:0;
 }
+function collectionHasImages(type){
+  return ['team','gallery','carousel','testimonials'].indexOf(type)>-1;
+}
+function collectCollectionImages(el){
+  var body=getCollectionBody(el);
+  if(!body)return [];
+  var type=el.getAttribute('data-am-collection')||'';
+  if(!collectionHasImages(type))return [];
+  var out=[], items=body.querySelectorAll('[data-am-item]');
+  items.forEach(function(item,idx){
+    var img=null;
+    if(type==='gallery'&&item.tagName==='IMG')img=item;
+    else img=item.querySelector('img[data-am-team-photo], img');
+    if(!img)return;
+    if(!img.getAttribute('data-am-id'))tagEl(img,'image');
+    var label='Item '+(idx+1);
+    if(type==='team'){
+      var nameEl=item.querySelector('h3');
+      if(nameEl&&(nameEl.textContent||'').trim())label=(nameEl.textContent||'').trim();
+    }else if(type==='carousel'){
+      var cap=item.querySelector('figcaption');
+      if(cap&&(cap.textContent||'').trim())label=(cap.textContent||'').trim();
+    }
+    out.push({index:idx,imageId:img.getAttribute('data-am-id'),src:img.src||img.getAttribute('src')||'',label:label});
+  });
+  return out;
+}
 function applyCollectionColumns(el,cols){
   if(!el)return;
   var body=getCollectionBody(el);
@@ -491,45 +519,14 @@ function renderLeadForm(section){
   var root=section.querySelector('[data-am-lead-form-root]');
   if(!root)return;
   var token=section.getAttribute('data-form-token')||root.getAttribute('data-form-token')||'';
-  var inputW=section.getAttribute('data-form-input-width')||root.getAttribute('data-form-input-width')||'100';
-  var inputPad=section.getAttribute('data-form-input-padding')||root.getAttribute('data-form-input-padding')||'12';
   var radius=section.getAttribute('data-form-radius')||root.getAttribute('data-form-radius')||'10';
-  var primary=section.getAttribute('data-form-primary')||root.getAttribute('data-form-primary')||'#6366f1';
   if(!token){
     root.innerHTML='<div data-am-lead-form-placeholder style="padding:24px;border:2px dashed #e2e8f0;border-radius:12px;text-align:center;color:#94a3b8;font-size:14px;">Select a lead form in the inspector</div>';
     return;
   }
   root.setAttribute('data-form-token',token);
-  root.innerHTML='<div style="padding:12px;color:#64748b;font-size:13px;">Loading form…</div>';
-  fetch(apiBase()+'/api/runtime/forms/'+encodeURIComponent(token))
-    .then(function(r){return r.json();})
-    .then(function(schema){
-      if(!schema||schema.error)throw new Error(schema.error||'Form not found');
-      var fields=schema.fields||[];
-      var html='<form class="automaio-form" data-am-lead-form-preview="true" style="font-family:system-ui,sans-serif;">';
-      if(schema.name)html+='<h3 style="margin:0 0 16px;font-size:1.125rem;color:#0f172a;">'+schema.name+'</h3>';
-      fields.forEach(function(field){
-        html+='<label style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;color:#111">'+field.label+(field.required?' *':'')+'</label>';
-        var style='width:'+inputW+'%;padding:'+inputPad+'px;border:1px solid #e2e8f0;border-radius:'+radius+'px;font-size:14px;margin-bottom:12px;box-sizing:border-box;display:block;';
-        if(field.type==='textarea'){
-          html+='<textarea readonly style="'+style+'" rows="4" placeholder="'+(field.placeholder||'')+'"></textarea>';
-        }else{
-          html+='<input readonly type="'+(field.type==='email'?'email':field.type==='phone'?'tel':'text')+'" style="'+style+'" placeholder="'+(field.placeholder||'')+'" />';
-        }
-      });
-      html+='<button type="button" style="background:'+primary+';color:#fff;border:0;padding:12px 20px;border-radius:'+radius+'px;font-size:14px;font-weight:600;width:100%;cursor:default;">Submit</button></form>';
-      root.innerHTML=html;
-      root.querySelectorAll('input,textarea,button,label,h3').forEach(function(n){
-        if(!n.getAttribute('data-am-id')&&n.tagName&&!skip(n)){
-          if(n.tagName==='BUTTON'||n.tagName==='LABEL')tagEl(n,'text');
-          else tagEl(n,'container');
-        }
-      });
-      scanEditable();
-    })
-    .catch(function(err){
-      root.innerHTML='<div style="padding:16px;color:#b91c1c;font-size:13px;border:1px solid #fecaca;border-radius:10px;background:#fef2f2;">'+(err&&err.message?err.message:'Failed to load form')+'</div>';
-    });
+  var embedUrl=apiBase()+'/webflow/embed/form/'+encodeURIComponent(token);
+  root.innerHTML='<iframe data-am-lead-form-iframe="true" src="'+embedUrl+'" title="Lead form" style="width:100%;min-height:420px;border:0;display:block;border-radius:'+radius+'px;background:#fff;" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>';
 }
 function sectionPayload(el){
   var pad=parsePadding(el);
@@ -552,6 +549,7 @@ function sectionPayload(el){
     collection:collection||undefined,
     collectionItemCount:collection?countCollectionItems(el):undefined,
     collectionColumns:parseInt(el.getAttribute('data-am-columns')||'1',10)||1,
+    collectionImages:collection&&collectionHasImages(collection)?collectCollectionImages(el):undefined,
     formToken:el.getAttribute('data-form-token')||'',
     formInputWidth:el.getAttribute('data-form-input-width')||'100',
     formInputPadding:el.getAttribute('data-form-input-padding')||'12',
@@ -838,6 +836,7 @@ function moveBlock(el,target,position){
 }
 
 document.addEventListener('dragstart',function(ev){
+  if(previewMode){ev.preventDefault();return;}
   if(ev.target.closest('#am-tb'))return;
   var innerEdit=ev.target.closest('[data-am-kind="text"],[data-am-kind="link"],[data-am-kind="image"]');
   if(innerEdit&&!innerEdit.hasAttribute('data-am-block'))return;
@@ -904,6 +903,7 @@ document.addEventListener('mouseout',function(ev){
 });
 
 document.addEventListener('click',function(ev){
+  if(previewMode)return;
   if(ev.target.closest('#am-tb'))return;
   var t=pickSelectable(ev.target);
   if(t){ev.preventDefault();ev.stopPropagation();sel(t);}
@@ -992,6 +992,12 @@ document.addEventListener('focusout',function(ev){if(act&&ev.target===act)snapsh
 
 window.addEventListener('message',function(ev){
   var d=ev.data;if(!d)return;
+  if(d.type==='am-set-preview-mode'){
+    previewMode=!!d.enabled;
+    document.documentElement.setAttribute('data-am-preview', previewMode?'1':'0');
+    if(previewMode){desel();tb.style.display='none';}
+    return;
+  }
   if(d.type==='am-ai-result'&&d.id!=null){
     var el=document.querySelector('[data-am-id="'+d.id+'"]');
     if(el){snapshotEl(el);setTextPreserve(el,d.text);notifyUpd(el);}
@@ -1096,6 +1102,20 @@ window.addEventListener('message',function(ev){
   if(d.type==='am-collection-set-columns'&&d.targetId&&d.columns!=null){
     var colEl2=document.querySelector('[data-am-id="'+d.targetId+'"]');
     if(colEl2){snapshotEl(colEl2);applyCollectionColumns(colEl2,d.columns);window.parent.postMessage(sectionPayload(colEl2),'*');window.parent.postMessage({type:'am-changed'},'*');}
+  }
+  if(d.type==='am-collection-image-update'&&d.targetId&&d.imageId&&d.src){
+    var colSec=document.querySelector('[data-am-id="'+d.targetId+'"]');
+    if(colSec){
+      var colImg=colSec.querySelector('[data-am-id="'+d.imageId+'"]');
+      if(colImg&&colImg.tagName==='IMG'){
+        snapshotEl(colSec);
+        colImg.src=d.src;
+        if(d.alt!=null)colImg.alt=d.alt;
+        scanEditable();
+        window.parent.postMessage(sectionPayload(colSec),'*');
+        window.parent.postMessage({type:'am-changed'},'*');
+      }
+    }
   }
   if(d.type==='am-lead-form-update'&&d.targetId){
     var formSec=document.querySelector('[data-am-id="'+d.targetId+'"]');

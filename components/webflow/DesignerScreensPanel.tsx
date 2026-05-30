@@ -266,6 +266,45 @@ const css = `
   .am-snippet-pre .tok-tag    { color: #7dd3fc; }
   .am-snippet-pre .tok-attr   { color: var(--accent2); }
   .am-snippet-pre .tok-wf     { color: #86efac; }
+  .am-seo-box {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(124,111,255,0.04);
+  }
+  .am-seo-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.25px;
+    text-transform: uppercase;
+    color: var(--t3);
+    margin-bottom: 6px;
+  }
+  .am-seo-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--t1);
+    margin: 0 0 4px;
+    line-height: 1.4;
+  }
+  .am-seo-desc {
+    font-size: 11px;
+    color: var(--t2);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .am-paste-steps {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg3);
+  }
+  .am-paste-steps ol {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    font-size: 11px;
+    color: var(--t2);
+    line-height: 1.55;
+  }
+  .am-paste-steps strong { color: var(--t1); font-weight: 500; }
   .am-snippet-pre .tok-str    { color: #fcd34d; }
 `
 
@@ -423,6 +462,32 @@ export function DesignerScreensPanel({ siteId }: DesignerScreensPanelProps) {
             {/* Detail card */}
             {selected && (
               <div className="am-screen-detail">
+                <div className="am-paste-steps">
+                  <span className="am-snippet-label">Where to paste in Webflow</span>
+                  <ol>
+                    <li>Open <strong>Pages → your CMS collection template</strong></li>
+                    <li>Add a <strong>Code Embed</strong> inside the Body</li>
+                    <li>Paste the snippet below → save → publish site</li>
+                  </ol>
+                </div>
+
+                {(selected.seoTitle || selected.seoDescription) && (
+                  <div className="am-seo-box">
+                    <div className="am-seo-label">SEO (from Automaio page settings)</div>
+                    {selected.seoTitle && (
+                      <p className="am-seo-title">{selected.seoTitle}</p>
+                    )}
+                    {selected.seoDescription && (
+                      <p className="am-seo-desc">{selected.seoDescription}</p>
+                    )}
+                    {selected.slug && (
+                      <p className="am-seo-desc" style={{ marginTop: 6 }}>
+                        Slug: <code style={{ fontFamily: 'var(--mono)' }}>{selected.slug}</code>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="am-screen-badges">
                   <span className="am-badge am-badge-type">{selected.configType}</span>
                   {selected.webflowCmsItemId && (

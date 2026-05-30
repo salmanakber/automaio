@@ -14,6 +14,13 @@ export type SectionPadding = {
   left: number
 }
 
+export type CollectionImageRef = {
+  index: number
+  imageId: string
+  src: string
+  label: string
+}
+
 export type SectionSelection = {
   id: string
   tag: string
@@ -26,6 +33,7 @@ export type SectionSelection = {
   collection?: string
   collectionItemCount?: number
   collectionColumns?: number
+  collectionImages?: CollectionImageRef[]
   formToken?: string
   formInputWidth?: string
   formInputPadding?: string

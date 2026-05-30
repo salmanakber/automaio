@@ -13,6 +13,7 @@ export const COLLECTION_WIDGET_TYPES = [
   'stats',
   'counters',
   'tabs',
+  'carousel',
 ] as const
 
 export type CollectionWidgetType = (typeof COLLECTION_WIDGET_TYPES)[number]
@@ -29,7 +30,9 @@ export function buildCollectionItemHtml(type: CollectionWidgetType): string {
     case 'faq':
       return `<details data-am-item style="border:1px solid rgba(15,23,42,0.08);border-radius:14px;padding:16px 18px;background:#fff;${itemShadow}"><summary style="font-weight:600;cursor:pointer;color:#0f172a;">New question?</summary><p style="color:#64748b;font-size:14px;margin:12px 0 0;line-height:1.6;">Answer goes here.</p></details>`
     case 'team':
-      return `<div data-am-item style="text-align:center;padding:20px;border-radius:18px;background:#fff;border:1px solid rgba(15,23,42,0.06);${itemShadow}"><div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#e2e8f0,#cbd5e1);margin:0 auto 12px;"></div><h3 style="margin:0 0 4px;font-size:1rem;color:#0f172a;">Team member</h3><p style="margin:0;color:#64748b;font-size:13px;">Role title</p></div>`
+      return `<div data-am-item style="text-align:center;padding:20px;border-radius:18px;background:#fff;border:1px solid rgba(15,23,42,0.06);${itemShadow}"><img data-am-team-photo="true" src="https://placehold.co/144x144/e2e8f0/64748b?text=Photo" alt="Team member" style="width:72px;height:72px;border-radius:50%;object-fit:cover;margin:0 auto 12px;display:block;" /><h3 style="margin:0 0 4px;font-size:1rem;color:#0f172a;">Team member</h3><p style="margin:0;color:#64748b;font-size:13px;">Role title</p></div>`
+    case 'carousel':
+      return `<figure data-am-item style="flex:0 0 min(85%,320px);scroll-snap-align:center;margin:0;"><img src="https://placehold.co/640x360/e2e8f0/64748b?text=Slide" alt="Slide" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:16px;display:block;${itemShadow}" /><figcaption style="margin-top:10px;font-size:13px;color:#64748b;text-align:center;">Slide caption</figcaption></figure>`
     case 'features':
       return `<div data-am-item style="padding:28px;border:1px solid rgba(15,23,42,0.06);border-radius:20px;background:#fff;${itemShadow}"><h3 style="margin:0 0 8px;color:#0f172a;">Feature title</h3><p style="margin:0;color:#64748b;font-size:14px;line-height:1.6;">Short description.</p></div>`
     case 'testimonials':
@@ -65,11 +68,15 @@ export function collectionBodyStyle(type: CollectionWidgetType, columns: number)
   if (type === 'tabs') {
     return 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;border-bottom:1px solid #e2e8f0;padding-bottom:12px;'
   }
+  if (type === 'carousel') {
+    return 'display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 4px 16px;-webkit-overflow-scrolling:touch;'
+  }
   return `display:grid;grid-template-columns:repeat(${columns}, minmax(0, 1fr));gap:24px;`
 }
 
 export function defaultCollectionColumns(type: CollectionWidgetType): number {
   if (type === 'faq' || type === 'tabs') return 1
+  if (type === 'carousel') return 1
   if (type === 'gallery') return 3
   if (type === 'pricing' || type === 'steps') return 2
   return 3

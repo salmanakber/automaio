@@ -17,6 +17,9 @@ import {
   RefreshCw,
   Trash2,
   LayoutGrid,
+  Eye,
+  Pencil,
+  ExternalLink,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -49,7 +52,8 @@ import {
   type TemplateTheme,
 } from '@/lib/templates/theme'
 import type { TemplateStructure } from '@/lib/templates/starter-templates'
-import { buildBlankStarterPage, buildMinimalStarterPage } from '@/lib/editor/elementor-blocks'
+import { buildBlankStarterPage, buildMinimalStarterPage, buildEmptyStarterPage } from '@/lib/editor/elementor-blocks'
+import { buildProjectIframeUrl } from '@/lib/webflow/embed-page'
 
 export default function ProjectStudioPage() {
   const params = useParams()
@@ -88,6 +92,7 @@ export default function ProjectStudioPage() {
   const [styleTarget, setStyleTarget] = useState<StyleTarget | null>(null)
   const [bootstrappingBlank, setBootstrappingBlank] = useState(false)
   const [editorTheme, setEditorTheme] = useState<TemplateTheme>(DEFAULT_TEMPLATE_THEME)
+  const [previewMode, setPreviewMode] = useState(false)
   const seoAutoTried = useRef(false)
 
   const load = useCallback(async () => {
@@ -210,10 +215,15 @@ export default function ProjectStudioPage() {
     setSectionSelection(section)
   }, [])
 
-  const bootstrapBlankPage = async (mode: 'full' | 'minimal') => {
+  const bootstrapBlankPage = async (mode: 'full' | 'minimal' | 'empty') => {
     setBootstrappingBlank(true)
     try {
-      const starter = mode === 'full' ? buildBlankStarterPage() : buildMinimalStarterPage()
+      const starter =
+        mode === 'full'
+          ? buildBlankStarterPage()
+          : mode === 'minimal'
+            ? buildMinimalStarterPage()
+            : buildEmptyStarterPage()
       await handleImportHtml(starter)
       setEditorKey((k) => k + 1)
     } finally {
@@ -245,6 +255,10 @@ export default function ProjectStudioPage() {
   const renderedHtml = (project?.renderedHtml as string) || ''
   const isLandingPage = project?.contentType === 'landing_page'
   const isBlogPost = project?.contentType === 'blog_post'
+  const previewUrl =
+    typeof window !== 'undefined'
+      ? buildProjectIframeUrl(window.location.origin, projectId)
+      : `/webflow/embed/project/${projectId}`
   const hasBusinessContext = Boolean(
     parseStoredBusinessContext((project?.parameters as Record<string, unknown>) ?? {}),
   )
@@ -316,6 +330,28 @@ export default function ProjectStudioPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {!isBlogPost && renderedHtml.trim() && (
+              <>
+                <Button
+                  size="sm"
+                  variant={previewMode ? 'default' : 'outline'}
+                  className={`h-8 gap-1.5 ${previewMode ? 'bg-violet-600 hover:bg-violet-500' : 'border-zinc-700 bg-zinc-900 text-zinc-300'}`}
+                  onClick={() => setPreviewMode((v) => !v)}
+                >
+                  {previewMode ? <Pencil className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  {previewMode ? 'Edit' : 'View'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-zinc-700 bg-zinc-900 text-zinc-300 gap-1.5"
+                  onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open preview
+                </Button>
+              </>
+            )}
             {saveError && (
               <span className="text-xs text-red-400 max-w-[200px] truncate" title={saveError}>
                 {saveError}
@@ -464,10 +500,6 @@ export default function ProjectStudioPage() {
                 width: viewport === 'desktop' ? '100%' : viewport === 'tablet' ? '768px' : '375px',
                 height: '100%',
               }}
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top center',
-              }}
               className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden border border-zinc-800 relative h-full shrink-0"
             >
               <div className="h-full min-h-0 relative">
@@ -495,6 +527,14 @@ export default function ProjectStudioPage() {
                       >
                         Minimal (Header + Section + Footer)
                       </Button>
+                      <Button
+                        variant="ghost"
+                        className="text-zinc-400 gap-2"
+                        disabled={bootstrappingBlank}
+                        onClick={() => bootstrapBlankPage('empty')}
+                      >
+                        True blank canvas
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -505,7 +545,9 @@ export default function ProjectStudioPage() {
                   projectId={projectId}
                   variant="studio"
                   editViewport={viewport}
-                  autoSaveEnabled={autoSaveEnabled}
+                  zoom={zoom}
+                  previewMode={previewMode}
+                  autoSaveEnabled={autoSaveEnabled && !previewMode}
                   onAutoSaveStateChange={setEditorSaveState}
                   onSelectElement={handleSelectElement}
                   onFocusRect={handleFocusRect}
@@ -597,6 +639,11 @@ export default function ProjectStudioPage() {
               }}
               onCollectionSetColumns={(columns) => {
                 if (sectionSelection?.id) editorRef.current?.setCollectionColumns(sectionSelection.id, columns)
+              }}
+              onCollectionImageUpdate={(imageId, src) => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.setCollectionImage(sectionSelection.id, imageId, src)
+                }
               }}
               onLeadFormUpdate={(config) => {
                 if (sectionSelection?.id) editorRef.current?.updateLeadForm(sectionSelection.id, config)

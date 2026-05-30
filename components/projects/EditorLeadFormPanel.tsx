@@ -86,7 +86,7 @@ export function EditorLeadFormPanel({ section, orgId, onUpdate }: EditorLeadForm
       </div>
 
       <p className="text-[11px] text-zinc-500 leading-relaxed">
-        Choose a form to embed. The preview updates live on the canvas.
+        Choose a form to embed. The canvas loads a live iframe so the form works everywhere when published.
       </p>
 
       {loading ? (

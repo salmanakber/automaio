@@ -156,6 +156,15 @@ export function SidebarFields({
                   />
                 </FieldWrapper>
 
+                <FieldWrapper label="URL slug" icon={Hash}>
+                  <Input
+                    value={params.slug || ''}
+                    onChange={(e) => updateParam('slug', e.target.value)}
+                    className="bg-zinc-950/50 border-zinc-800 text-xs h-9 font-mono"
+                    placeholder="my-landing-page"
+                  />
+                </FieldWrapper>
+
                 <FieldWrapper label="Meta Description" hint={`${(params.seoDescription || '').length}/155`}>
                   <Textarea
                     value={params.seoDescription || ''}

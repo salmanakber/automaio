@@ -40,7 +40,7 @@ export function StudioRightSidebar(props: any) {
     onApplyStyles, onSetLayout, onSetPadding, onSetColumnWidths,
     onSetGap,     onStackMobile, onInsertInside,
     orgId,
-    onCollectionAdd, onCollectionRemove, onCollectionSetColumns,
+    onCollectionAdd, onCollectionRemove, onCollectionSetColumns, onCollectionImageUpdate,
     onLeadFormUpdate,
   } = props
 
@@ -155,9 +155,11 @@ export function StudioRightSidebar(props: any) {
                     <EditorCollectionPanel
                       embedded
                       section={sectionSelection}
+                      projectId={projectId}
                       onAddItem={onCollectionAdd}
                       onRemoveItem={onCollectionRemove!}
                       onSetColumns={onCollectionSetColumns!}
+                      onImageUpdate={(imageId, src) => onCollectionImageUpdate?.(imageId, src)}
                     />
                   </InspectorPanel>
                 )}

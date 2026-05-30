@@ -18,6 +18,7 @@ import { Sparkles, Save, Loader2, CheckCircle2, MousePointerClick, Wand2, AlertT
 import { VISUAL_EDITOR_SCRIPT } from '@/lib/editor/visual-editor-script'
 import { buildWidgetHtml, type EditorWidgetType } from '@/lib/editor/editor-widgets'
 import type { EditViewport, ElementStyles, StyleTarget } from '@/lib/editor/responsive-styles'
+import { VIEWPORT_FRAME_WIDTHS } from '@/lib/editor/responsive-styles'
 import type { SectionSelection } from '@/components/projects/EditorSectionPanel'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
 import { playEditorSound, type EditorSound } from '@/lib/editor/editor-sounds'
@@ -90,6 +91,7 @@ export type ProjectVisualEditorHandle = {
   addCollectionItem: (targetId: string) => void
   removeCollectionItem: (targetId: string) => void
   setCollectionColumns: (targetId: string, columns: number) => void
+  setCollectionImage: (targetId: string, imageId: string, src: string) => void
   updateLeadForm: (
     targetId: string,
     config: {
@@ -125,7 +127,7 @@ interface ProjectVisualEditorProps {
   onStyleTargetChange?: (target: StyleTarget | null) => void
   editViewport?: EditViewport
   variant?: 'default' | 'studio'
-  zoom?: number
+  previewMode?: boolean
 }
 
 /**
@@ -223,6 +225,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
       editViewport = 'desktop',
       variant = 'default',
       zoom = 1,
+      previewMode = false,
     },
     ref,
   ) {
@@ -319,6 +322,11 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     if (!iframeReady) return
     postToIframe({ type: 'am-set-viewport', viewport: editViewport })
   }, [editViewport, iframeReady, postToIframe])
+
+  useEffect(() => {
+    if (!iframeReady) return
+    postToIframe({ type: 'am-set-preview-mode', enabled: previewMode })
+  }, [previewMode, iframeReady, postToIframe])
 
   const buildStyleTarget = useCallback(
     (payload: {
@@ -568,6 +576,7 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
               collection: d.collection,
               collectionItemCount: d.collectionItemCount,
               collectionColumns: d.collectionColumns,
+              collectionImages: d.collectionImages,
               formToken: d.formToken,
               formInputWidth: d.formInputWidth,
               formInputPadding: d.formInputPadding,
@@ -839,6 +848,8 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     removeCollectionItem: (targetId: string) => postToIframe({ type: 'am-collection-remove', targetId }),
     setCollectionColumns: (targetId: string, columns: number) =>
       postToIframe({ type: 'am-collection-set-columns', targetId, columns }),
+    setCollectionImage: (targetId: string, imageId: string, src: string) =>
+      postToIframe({ type: 'am-collection-image-update', targetId, imageId, src }),
     updateLeadForm: (targetId, config) =>
       postToIframe({ type: 'am-lead-form-update', targetId, ...config }),
     undo: handleUndo,
@@ -869,17 +880,56 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
     <div
       className={
         isStudio
-          ? 'h-full w-full bg-white overflow-hidden'
+          ? 'h-full w-full bg-[#121214] overflow-auto flex justify-center py-4 px-3'
           : 'rounded-b-xl border bg-white overflow-hidden'
       }
       style={isStudio ? undefined : { minHeight: 520 }}
     >
-      <iframe
-        ref={iframeRef}
-        title="Visual editor"
-        className="w-full border-0"
-        style={isStudio ? { height: '100%', minHeight: '100%' } : { minHeight: 520, height: '70vh' }}
-      />
+      <div
+        className={
+          isStudio
+            ? `flex flex-col shrink-0 transition-[width] duration-200 ${
+                editViewport !== 'desktop' ? 'rounded-[20px] border border-zinc-700/80 shadow-2xl overflow-hidden' : ''
+              }`
+            : undefined
+        }
+        style={
+          isStudio
+            ? {
+                transform: `scale(${zoom})`,
+                transformOrigin: 'top center',
+                width: VIEWPORT_FRAME_WIDTHS[editViewport]
+                  ? `${VIEWPORT_FRAME_WIDTHS[editViewport]}px`
+                  : `${100 / zoom}%`,
+                maxWidth: '100%',
+                minHeight: editViewport === 'desktop' ? `${100 / zoom}%` : undefined,
+              }
+            : undefined
+        }
+      >
+        {isStudio && editViewport !== 'desktop' && (
+          <div className="flex items-center justify-center gap-2 py-2 px-3 bg-zinc-900 border-b border-zinc-800">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+              {editViewport === 'tablet' ? 'Tablet · 991px' : 'Mobile · 390px'}
+            </span>
+          </div>
+        )}
+        <div className={isStudio ? 'bg-white shadow-inner flex-1 min-h-0' : undefined}>
+          <iframe
+            ref={iframeRef}
+            title="Visual editor"
+            className="w-full border-0 block"
+            style={
+              isStudio
+                ? {
+                    height: editViewport === 'desktop' ? '100%' : '720px',
+                    minHeight: editViewport === 'desktop' ? '100%' : '720px',
+                  }
+                : { minHeight: 520, height: '70vh' }
+            }
+          />
+        </div>
+      </div>
       {!iframeReady && (
         <div
           className={

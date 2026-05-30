@@ -82,6 +82,8 @@ export type ElementorBlockType =
   | 'dividerWave'
   | 'steps'
   | 'leadForm'
+  | 'carousel'
+  | 'marquee'
 
 export function buildElementorBlock(type: ElementorBlockType): string {
   const b = 'data-am-block="true" data-am-widget="' + type + '" class="am-elt-block"'
@@ -145,6 +147,10 @@ export function buildElementorBlock(type: ElementorBlockType): string {
   <div style="max-width:400px;margin:0 auto;"><input placeholder="Email" style="width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px;" readonly /><button style="${S.btn}width:100%;">Send</button></div></section>`
     case 'gallery':
       return collectionBlock('gallery', 'Gallery', undefined, 3, 3)
+    case 'carousel':
+      return collectionBlock('carousel', 'Image slider', 'Swipe through slides — click each image on canvas to replace.', 3, 1)
+    case 'marquee':
+      return `<section ${b} style="${S.section}overflow:hidden;"><div style="display:flex;gap:48px;animation:am-marquee 24s linear infinite;white-space:nowrap;"><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand One</span><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand Two</span><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand Three</span><span style="font-size:1.25rem;font-weight:700;color:#94a3b8;">Brand Four</span></div><style>@keyframes am-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}</style></section>`
     case 'logos':
       return `<section ${b} data-am-collection="logos" style="padding:56px 24px;text-align:center;${S.panel}margin:0 auto;max-width:1200px;">
   <p style="font-size:12px;color:#94a3b8;margin:0 0 24px;letter-spacing:0.08em;font-weight:600;">TRUSTED BY</p>
@@ -277,6 +283,19 @@ ${buildElementorBlock('footer')}
 </html>`
 }
 
+export function buildEmptyStarterPage(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>New Page</title>
+</head>
+<body>
+</body>
+</html>`
+}
+
 export const BLOCK_CATEGORIES: Record<string, { type: string; label: string }[]> = {
   structure: [
     { type: 'header', label: 'Header / Nav' },
@@ -301,6 +320,8 @@ export const BLOCK_CATEGORIES: Record<string, { type: string; label: string }[]>
     { type: 'image', label: 'Image' },
     { type: 'video', label: 'Video' },
     { type: 'gallery', label: 'Gallery' },
+    { type: 'carousel', label: 'Image slider' },
+    { type: 'marquee', label: 'Logo marquee' },
   ],
   blocks: [
     { type: 'hero', label: 'Hero' },

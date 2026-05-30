@@ -7,6 +7,13 @@ export const VIEWPORT_BREAKPOINTS: Record<EditViewport, number | null> = {
   mobile: 767,
 }
 
+/** Canvas frame width in the studio (null = full width). */
+export const VIEWPORT_FRAME_WIDTHS: Record<EditViewport, number | null> = {
+  desktop: null,
+  tablet: 991,
+  mobile: 390,
+}
+
 export type ElementStyles = {
   backgroundColor?: string
   color?: string

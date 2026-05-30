@@ -35,6 +35,8 @@ export type DesignerScreenSummary = {
   updatedAt: string
   previewUrl: string
   cmsBindingSnippet: string
+  seoTitle?: string
+  seoDescription?: string
 }
 
 type ProjectRow = {
@@ -65,6 +67,8 @@ export function buildDesignerScreenSummaries(
       updatedAt: project.updatedAt.toISOString(),
       previewUrl: `/webflow/designer/screen/${project.id}`,
       cmsBindingSnippet,
+      seoTitle: typeof params.seoTitle === 'string' ? params.seoTitle : undefined,
+      seoDescription: typeof params.seoDescription === 'string' ? params.seoDescription : undefined,
     }
   })
 }

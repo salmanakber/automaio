@@ -1,7 +1,8 @@
 'use client'
 
-import type { ComponentType } from 'react'
+import { useMemo, useState, type ComponentType } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Type,
   Image as ImageIcon,
@@ -25,9 +26,11 @@ import {
   Mail,
   Quote,
   List,
-  Play,
   PlayCircle,
   FileInput,
+  Search,
+  Images,
+  GalleryHorizontal,
 } from 'lucide-react'
 import {
   EDITOR_WIDGETS,
@@ -80,6 +83,9 @@ const WIDGET_SPECIFIC_ICONS: Record<string, any> = {
   hero: Sparkles,
   divider: Minus,
   leadForm: FileInput,
+  carousel: GalleryHorizontal,
+  marquee: Sparkles,
+  gallery: Images,
 }
 
 function WidgetButton({
@@ -139,6 +145,8 @@ export function EditorToolbar({
   onDuplicate,
   onInsertWidget,
 }: EditorToolbarProps) {
+  const [query, setQuery] = useState('')
+
   const grouped = EDITOR_WIDGETS.reduce(
     (acc, w) => {
       if (!acc[w.category]) acc[w.category] = []
@@ -150,6 +158,24 @@ export function EditorToolbar({
 
   const categories = Object.keys(EDITOR_CATEGORY_LABELS) as Array<keyof typeof EDITOR_CATEGORY_LABELS>
   const isSidebar = layout === 'sidebar'
+  const normalizedQuery = query.trim().toLowerCase()
+
+  const filteredGrouped = useMemo(() => {
+    if (!normalizedQuery) return grouped
+    const next: Record<string, typeof EDITOR_WIDGETS> = {}
+    for (const cat of categories) {
+      const items = (grouped[cat] ?? []).filter(
+        (w) =>
+          w.label.toLowerCase().includes(normalizedQuery) ||
+          w.type.toLowerCase().includes(normalizedQuery) ||
+          cat.toLowerCase().includes(normalizedQuery),
+      )
+      if (items.length) next[cat] = items
+    }
+    return next
+  }, [categories, grouped, normalizedQuery])
+
+  const visibleCount = Object.values(filteredGrouped).reduce((n, items) => n + items.length, 0)
 
   return (
     <div className={cn(
@@ -181,11 +207,21 @@ export function EditorToolbar({
         </div>
       </div>
 
-      {/* Widget Search Placeholder (Visual only) */}
       <div className="px-3 py-2 border-b border-zinc-800/30">
-        <div className="flex items-center gap-2 px-2 h-8 rounded-md bg-zinc-900/50 border border-zinc-800 text-[11px] text-zinc-600">
-          <Plus className="h-3 w-3" /> Search blocks...
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-600" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search blocks…"
+            className="h-8 pl-8 text-[11px] bg-zinc-900/50 border-zinc-800 text-zinc-300 placeholder:text-zinc-600"
+          />
         </div>
+        {normalizedQuery && (
+          <p className="text-[10px] text-zinc-600 mt-1.5">
+            {visibleCount} block{visibleCount === 1 ? '' : 's'} match
+          </p>
+        )}
       </div>
 
       {/* Scrollable Content */}
@@ -193,7 +229,7 @@ export function EditorToolbar({
         <Accordion type="multiple" defaultValue={['structure', 'blocks']} className="space-y-1">
           {categories.map((cat) => {
             const Icon = CATEGORY_ICONS[cat] ?? Plus
-            const items = grouped[cat] ?? []
+            const items = filteredGrouped[cat] ?? []
             if (!items.length) return null
             
             return (

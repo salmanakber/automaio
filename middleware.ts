@@ -18,7 +18,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/forms/public') ||
     pathname.startsWith('/api/public/embed') ||
     pathname.startsWith('/api/runtime/') ||
-    pathname.startsWith('/webflow/embed') ||
+    pathname.startsWith('/webflow/embed/') ||
     pathname.startsWith('/webflow/form-embed')
 
   // Redirect unauthenticated users to login for protected routes

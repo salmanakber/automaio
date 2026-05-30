@@ -161,9 +161,57 @@ export type MediaLibraryItem = {
   name?: string
 }
 
+/** Ensure CDN URLs load reliably in the studio (https, trimmed). */
+export function normalizeMediaUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return trimmed
+  if (trimmed.startsWith('//')) return `https:${trimmed}`
+  if (trimmed.startsWith('http://res.cloudinary.com')) {
+    return trimmed.replace(/^http:\/\//, 'https://')
+  }
+  return trimmed
+}
+
+export function normalizeMediaLibraryItem(item: unknown, index: number): MediaLibraryItem | null {
+  if (!item || typeof item !== 'object') return null
+  const raw = item as Record<string, unknown>
+  const urlRaw =
+    (typeof raw.url === 'string' && raw.url) ||
+    (typeof raw.secureUrl === 'string' && raw.secureUrl) ||
+    (typeof raw.secure_url === 'string' && raw.secure_url) ||
+    ''
+  const url = normalizeMediaUrl(urlRaw)
+  if (!url) return null
+  const publicId =
+    (typeof raw.publicId === 'string' && raw.publicId) ||
+    (typeof raw.public_id === 'string' && raw.public_id) ||
+    ''
+  const id =
+    (typeof raw.id === 'string' && raw.id) ||
+    publicId ||
+    `media-${index}-${url.slice(-24)}`
+  return {
+    id,
+    url,
+    publicId,
+    width: typeof raw.width === 'number' ? raw.width : undefined,
+    height: typeof raw.height === 'number' ? raw.height : undefined,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),
+    name: typeof raw.name === 'string' ? raw.name : undefined,
+  }
+}
+
 export function readMediaLibrary(parameters: unknown): MediaLibraryItem[] {
   if (!parameters || typeof parameters !== 'object') return []
   const raw = (parameters as { mediaLibrary?: unknown }).mediaLibrary
   if (!Array.isArray(raw)) return []
-  return raw.filter((item) => item && typeof item === 'object' && typeof item.url === 'string') as MediaLibraryItem[]
+  const seen = new Set<string>()
+  const items: MediaLibraryItem[] = []
+  raw.forEach((item, index) => {
+    const normalized = normalizeMediaLibraryItem(item, index)
+    if (!normalized || seen.has(normalized.url)) return
+    seen.add(normalized.url)
+    items.push(normalized)
+  })
+  return items
 }

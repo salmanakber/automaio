@@ -67,6 +67,7 @@ export function NewLandingPageWizard({
   const router = useRouter()
   const [step, setStep] = useState(initialTemplateId ? 1 : 0)
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null)
+  const [startBlank, setStartBlank] = useState(false)
   const [templateName, setTemplateName] = useState(initialName ?? '')
   const [projectName, setProjectName] = useState(initialName ?? '')
   const [onboardingData, setOnboardingData] = useState<OnboardingFormData | null>(null)
@@ -180,12 +181,12 @@ export function NewLandingPageWizard({
       .finally(() => setDetectLoading(false))
   }, [integrationId, collectionId, templateLineCount])
 
-  const canStep0 = Boolean(templateId && projectName.trim())
+  const canStep0 = Boolean(projectName.trim()) && (Boolean(templateId) || startBlank)
   const canStep2 = Boolean(integrationId && collectionId)
   const canCreate = canStep0 && canStep2 && (Boolean(onboardingData) || onboardingSkipped)
 
   const handleCreate = async () => {
-    if (!canCreate || !templateId) return
+    if (!canCreate || (!templateId && !startBlank)) return
     setLoading(true)
     setError('')
     try {
@@ -198,7 +199,7 @@ export function NewLandingPageWizard({
           description: onboardingData?.businessDescription || projectName,
           category: 'project',
           contentType: 'landing_page',
-          templateId,
+          templateId: startBlank ? null : templateId,
           parameters: {
             name: projectName,
             headline: onboardingData?.businessDescription?.split('.')[0] || projectName,
@@ -284,10 +285,30 @@ export function NewLandingPageWizard({
               Step 1 — Choose a landing page template
             </CardTitle>
             <CardDescription>
-              Pick a design. AI will personalize the copy while keeping the layout intact.
+              Pick a design or start with a blank canvas. AI can personalize copy after you add blocks.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-lg border border-dashed border-violet-500/40 bg-violet-500/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Start with a blank page</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Skip templates — open the studio empty and drag blocks from the library.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant={startBlank ? 'default' : 'outline'}
+                className={startBlank ? 'bg-violet-600 hover:bg-violet-700' : ''}
+                onClick={() => {
+                  setStartBlank(true)
+                  setTemplateId(null)
+                  setTemplateName('Blank page')
+                }}
+              >
+                Blank canvas
+              </Button>
+            </div>
             <div className="space-y-2">
               <Label>Landing page name</Label>
               <Input
@@ -297,15 +318,23 @@ export function NewLandingPageWizard({
                 required
               />
             </div>
+            {!startBlank && (
             <TemplatePicker
               selectedId={templateId ?? undefined}
               categoryFilter="landing"
               onSelect={(t: TemplateOption) => {
+                setStartBlank(false)
                 setTemplateId(t.id)
                 setTemplateName(t.name)
                 if (!projectName) setProjectName(t.name)
               }}
             />
+            )}
+            {startBlank && (
+              <p className="text-xs text-violet-300/90 rounded-md border border-violet-500/20 bg-violet-500/5 px-3 py-2">
+                Blank page selected — you will choose starter blocks inside the visual studio.
+              </p>
+            )}
             <div className="flex justify-between pt-2">
               <Button variant="outline" asChild>
                 <Link href={`/dashboard/${orgId}/projects`}>Cancel</Link>

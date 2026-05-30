@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2, Upload, ImageIcon, Check, X, AlertCircle } from 'lucide-react'
 import { parseJsonResponse } from '@/lib/api/parse-json-response'
-import type { MediaLibraryItem } from '@/lib/integrations/cloudinary'
+import { normalizeMediaUrl, type MediaLibraryItem } from '@/lib/integrations/cloudinary'
 import { cn } from '@/lib/utils'
 
 type MediaManagerDialogProps = {
@@ -70,6 +70,51 @@ function uploadFileWithProgress(
   })
 }
 
+function MediaThumb({
+  item,
+  selected,
+  onClick,
+}: {
+  item: MediaLibraryItem
+  selected: boolean
+  onClick: () => void
+}) {
+  const [broken, setBroken] = useState(false)
+  const url = normalizeMediaUrl(item.url)
+
+  return (
+    <button
+      type="button"
+      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+        selected ? 'border-violet-500 ring-2 ring-violet-500/30' : 'border-zinc-800 hover:border-zinc-600'
+      }`}
+      onClick={onClick}
+    >
+      {!broken && url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt={item.name ?? 'Media'}
+          className="w-full h-full object-cover"
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900 text-zinc-600 gap-1 p-2">
+          <ImageIcon className="h-5 w-5 opacity-50" />
+          <span className="text-[9px] text-center line-clamp-2">{item.name ?? 'Image'}</span>
+        </div>
+      )}
+      {selected && (
+        <span className="absolute top-1 right-1 bg-violet-600 rounded-full p-0.5">
+          <Check className="h-3 w-3 text-white" />
+        </span>
+      )}
+    </button>
+  )
+}
+
 export function MediaManagerDialog({
   open,
   onOpenChange,
@@ -80,8 +125,7 @@ export function MediaManagerDialog({
   const [items, setItems] = useState<MediaLibraryItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [cloudinaryConfigured, setCloudinaryConfigured] = useState(true)
-  const [cloudinaryMode, setCloudinaryMode] = useState<string>('')
+  const [uploadsEnabled, setUploadsEnabled] = useState(true)
   const [selectedUrl, setSelectedUrl] = useState('')
   const [manualUrl, setManualUrl] = useState('')
   const [jobs, setJobs] = useState<UploadJob[]>([])
@@ -96,18 +140,16 @@ export function MediaManagerDialog({
       const data = await parseJsonResponse<{
         items?: MediaLibraryItem[]
         cloudinaryConfigured?: boolean
-        cloudinary?: { mode?: string; hasApiSecret?: boolean }
         error?: string
       }>(res)
       if (!res.ok) throw new Error(data.error ?? 'Failed to load media')
-      setItems(data.items ?? [])
-      setCloudinaryConfigured(data.cloudinaryConfigured !== false)
-      setCloudinaryMode(data.cloudinary?.mode ?? '')
-      if (data.cloudinary?.mode === 'unsigned-preset' && !data.cloudinary?.hasApiSecret) {
-        setError(
-          'Cloudinary is using unsigned preset mode. Add CLOUDINARY_API_SECRET to .env for signed uploads, then restart the dev server.',
-        )
-      }
+      setItems(
+        (data.items ?? []).map((item) => ({
+          ...item,
+          url: normalizeMediaUrl(item.url),
+        })),
+      )
+      setUploadsEnabled(data.cloudinaryConfigured !== false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load media')
     } finally {
@@ -149,8 +191,17 @@ export function MediaManagerDialog({
         const data = await uploadFileWithProgress(projectId, job.file, (pct) => {
           setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, progress: pct } : j)))
         })
-        if (data.items) setItems(data.items)
-        if (data.item?.url) setSelectedUrl(data.item.url)
+        if (data.items) {
+          setItems(
+            data.items.map((item) => ({
+              ...item,
+              url: normalizeMediaUrl(item.url),
+            })),
+          )
+        } else {
+          await loadMedia()
+        }
+        if (data.item?.url) setSelectedUrl(normalizeMediaUrl(data.item.url))
         setJobs((prev) =>
           prev.map((j) =>
             j.id === job.id ? { ...j, status: 'done' as const, progress: 100 } : j,
@@ -169,7 +220,7 @@ export function MediaManagerDialog({
   }
 
   const handleUse = () => {
-    const url = selectedUrl || manualUrl.trim()
+    const url = normalizeMediaUrl(selectedUrl || manualUrl.trim())
     if (!url) return
     onSelect(url)
     onOpenChange(false)
@@ -184,7 +235,7 @@ export function MediaManagerDialog({
             Media library
           </DialogTitle>
           <DialogDescription className="text-zinc-500">
-            Upload one or many images to Cloudinary, or pick from your project library.
+            Upload images or pick from assets already saved to this project.
           </DialogDescription>
         </DialogHeader>
 
@@ -205,18 +256,15 @@ export function MediaManagerDialog({
             type="button"
             size="sm"
             className="gap-2 bg-violet-600 hover:bg-violet-500"
-            disabled={anyUploading || !cloudinaryConfigured}
+            disabled={anyUploading || !uploadsEnabled}
             onClick={() => fileRef.current?.click()}
           >
             {anyUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Upload images
           </Button>
-          {cloudinaryConfigured && cloudinaryMode && (
-            <span className="text-[10px] text-zinc-500">Upload mode: {cloudinaryMode}</span>
-          )}
-          {!cloudinaryConfigured && (
+          {!uploadsEnabled && (
             <span className="text-[10px] text-amber-400">
-              Set CLOUDINARY_CLOUD_NAME + API secret in .env
+              Image uploads are not configured on this server.
             </span>
           )}
         </div>
@@ -273,25 +321,13 @@ export function MediaManagerDialog({
             </div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                    selectedUrl === item.url
-                      ? 'border-violet-500 ring-2 ring-violet-500/30'
-                      : 'border-zinc-800 hover:border-zinc-600'
-                  }`}
+              {items.map((item, index) => (
+                <MediaThumb
+                  key={`${item.id}-${index}`}
+                  item={item}
+                  selected={selectedUrl === item.url}
                   onClick={() => setSelectedUrl(item.url)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={item.url} alt={item.name ?? 'Media'} className="w-full h-full object-cover" />
-                  {selectedUrl === item.url && (
-                    <span className="absolute top-1 right-1 bg-violet-600 rounded-full p-0.5">
-                      <Check className="h-3 w-3 text-white" />
-                    </span>
-                  )}
-                </button>
+                />
               ))}
             </div>
           )}
@@ -302,7 +338,7 @@ export function MediaManagerDialog({
           <Input
             value={manualUrl}
             onChange={(e) => setManualUrl(e.target.value)}
-            placeholder="https://res.cloudinary.com/…"
+            placeholder="https://…"
             className="bg-zinc-950 border-zinc-800 h-8 text-xs"
           />
         </div>

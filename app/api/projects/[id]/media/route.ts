@@ -5,6 +5,8 @@ import { requireOrgAccessByUserId } from '@/lib/api/org-access'
 import {
   getCloudinaryDiagnostics,
   isCloudinaryConfigured,
+  normalizeMediaLibraryItem,
+  normalizeMediaUrl,
   readMediaLibrary,
   uploadImageBuffer,
   type MediaLibraryItem,
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         {
           error:
-            'Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME and either CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET in .env',
+            'Image uploads are not configured. Contact your administrator to enable media storage.',
         },
         { status: 503 },
       )
@@ -102,15 +104,20 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           filename: file.name || 'image.jpg',
         })
 
-        uploadedItems.push({
-          id: uploaded.publicId || `media-${Date.now()}-${uploadedItems.length}`,
-          url: uploaded.secureUrl || uploaded.url,
-          publicId: uploaded.publicId,
-          width: uploaded.width,
-          height: uploaded.height,
-          createdAt: new Date().toISOString(),
-          name: file.name,
-        })
+        uploadedItems.push(
+          normalizeMediaLibraryItem(
+            {
+              id: uploaded.publicId || `media-${Date.now()}-${uploadedItems.length}`,
+              url: normalizeMediaUrl(uploaded.secureUrl || uploaded.url),
+              publicId: uploaded.publicId,
+              width: uploaded.width,
+              height: uploaded.height,
+              createdAt: new Date().toISOString(),
+              name: file.name,
+            },
+            uploadedItems.length,
+          )!,
+        )
       } catch (err) {
         errors.push({
           name: file.name,
