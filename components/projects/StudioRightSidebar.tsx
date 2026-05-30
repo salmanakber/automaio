@@ -26,6 +26,8 @@ import {
 } from '@/components/projects/ElementEditorPanel'
 import { EditorCollectionPanel } from '@/components/projects/EditorCollectionPanel'
 import { EditorCarouselPanel } from '@/components/projects/EditorCarouselPanel'
+import { BlockDesignPicker } from '@/components/projects/BlockDesignPicker'
+import { defaultBlockVariant, supportsBlockVariants } from '@/lib/editor/block-variants'
 import { EditorLeadFormPanel } from '@/components/projects/EditorLeadFormPanel'
 import type { StyleTarget, EditViewport, ElementStyles } from '@/lib/editor/responsive-styles'
 import type { TemplateTheme } from '@/lib/templates/theme'
@@ -42,7 +44,7 @@ export function StudioRightSidebar(props: any) {
     onSetGap,     onStackMobile, onInsertInside,
     orgId,
     onCollectionAdd, onCollectionRemove, onCollectionSetColumns, onCollectionImageUpdate,
-    onLeadFormUpdate, onCarouselUpdate,
+    onLeadFormUpdate, onCarouselUpdate, onBlockVariantUpdate,
   } = props
 
   const hasElementFocus = Boolean(selectedElement || sectionSelection || styleTarget)
@@ -174,6 +176,24 @@ export function StudioRightSidebar(props: any) {
                       section={sectionSelection}
                       onUpdate={onCarouselUpdate}
                     />
+                  </InspectorPanel>
+                )}
+
+                {sectionSelection?.widget &&
+                  supportsBlockVariants(sectionSelection.widget) &&
+                  sectionSelection.widget !== 'carousel' &&
+                  onBlockVariantUpdate && (
+                  <InspectorPanel title="Block design">
+                    <div className="p-4">
+                      <BlockDesignPicker
+                        widgetType={sectionSelection.widget}
+                        value={
+                          sectionSelection.blockVariant ??
+                          defaultBlockVariant(sectionSelection.widget)
+                        }
+                        onChange={(v) => onBlockVariantUpdate(v)}
+                      />
+                    </div>
                   </InspectorPanel>
                 )}
 

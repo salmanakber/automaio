@@ -699,6 +699,11 @@ export default function ProjectStudioPage() {
               onCarouselUpdate={(settings) => {
                 if (sectionSelection?.id) editorRef.current?.updateCarousel(sectionSelection.id, settings)
               }}
+              onBlockVariantUpdate={(variant) => {
+                if (sectionSelection?.id) {
+                  editorRef.current?.updateBlockVariant(sectionSelection.id, variant)
+                }
+              }}
             />
           )}
         </div>

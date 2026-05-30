@@ -23,6 +23,8 @@ import {
   buildTransform,
   buildLinearGradient,
   parseLinearGradient,
+  normalizeColorInput,
+  GRADIENT_PRESETS,
   parseBoxShadow,
   parseTransform,
   parseFontSize,
@@ -105,7 +107,7 @@ function ColorField({
           value={value?.replace('#', '')}
           onChange={(e) => {
             const v = e.target.value
-            onChange(v === '' ? '' : v.startsWith('#') ? v : `#${v}`)
+            onChange(v === '' ? '' : normalizeColorInput(v))
           }}
           placeholder="None"
           className="h-8 pl-10 pr-2 font-mono text-[10px] bg-zinc-950 border-zinc-800 focus-visible:ring-violet-500/50 focus-visible:border-violet-500/50"
@@ -343,6 +345,32 @@ export function EditorStylePanel({
                 className="h-10 rounded-lg border border-zinc-800"
                 style={{ backgroundImage: buildLinearGradient(gradAngle, gradFrom, gradTo) }}
               />
+              <div className="space-y-1.5">
+                <Label className="text-[9px] font-bold text-zinc-500 uppercase">Presets</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {GRADIENT_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      title={preset.label}
+                      className="h-7 rounded-md border border-zinc-800 hover:border-violet-500/50 transition-colors"
+                      style={{
+                        backgroundImage: buildLinearGradient(preset.angle, preset.from, preset.to),
+                      }}
+                      onClick={() => {
+                        setGradAngle(preset.angle)
+                        setGradFrom(preset.from)
+                        setGradTo(preset.to)
+                        commit({
+                          ...styles,
+                          backgroundColor: '',
+                          backgroundImage: buildLinearGradient(preset.angle, preset.from, preset.to),
+                        })
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
               <ColorField
                 label="Text"
                 value={styles.color ?? ''}

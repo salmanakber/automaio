@@ -32,7 +32,7 @@ export function buildCollectionItemHtml(type: CollectionWidgetType): string {
     case 'team':
       return `<div data-am-item style="text-align:center;padding:20px;border-radius:18px;background:#fff;border:1px solid rgba(15,23,42,0.06);${itemShadow}"><img data-am-team-photo="true" src="https://placehold.co/144x144/e2e8f0/64748b?text=Photo" alt="Team member" style="width:72px;height:72px;border-radius:50%;object-fit:cover;margin:0 auto 12px;display:block;" /><h3 style="margin:0 0 4px;font-size:1rem;color:#0f172a;">Team member</h3><p style="margin:0;color:#64748b;font-size:13px;">Role title</p></div>`
     case 'carousel':
-      return `<figure data-am-item style="flex:0 0 min(85%,320px);scroll-snap-align:center;margin:0;"><img src="https://placehold.co/640x360/e2e8f0/64748b?text=Slide" alt="Slide" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:16px;display:block;${itemShadow}" /><figcaption style="margin-top:10px;font-size:13px;color:#64748b;text-align:center;">Slide caption</figcaption></figure>`
+      return `<figure data-am-item style="margin:0;position:relative;"><img src="https://placehold.co/1280x720/e2e8f0/64748b?text=Slide" alt="Slide" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;${itemShadow}" /><figcaption style="margin-top:10px;font-size:13px;color:#64748b;text-align:center;">Slide caption</figcaption></figure>`
     case 'features':
       return `<div data-am-item style="padding:28px;border:1px solid rgba(15,23,42,0.06);border-radius:20px;background:#fff;${itemShadow}"><h3 style="margin:0 0 8px;color:#0f172a;">Feature title</h3><p style="margin:0;color:#64748b;font-size:14px;line-height:1.6;">Short description.</p></div>`
     case 'testimonials':

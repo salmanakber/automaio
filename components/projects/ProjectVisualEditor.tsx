@@ -114,6 +114,7 @@ export type ProjectVisualEditorHandle = {
     },
   ) => void
   updateCarousel: (targetId: string, settings: Record<string, unknown>) => void
+  updateBlockVariant: (targetId: string, variant: string) => void
   selectById: (id: string) => void
   moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') => void
   deleteNavigatorItem: (id: string) => void
@@ -629,6 +630,9 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
               carouselAutoplay: d.carouselAutoplay,
               carouselHideArrows: d.carouselHideArrows,
               carouselHideDots: d.carouselHideDots,
+              carouselVariant: d.carouselVariant,
+              carouselFullWidth: d.carouselFullWidth,
+              blockVariant: d.blockVariant,
               role: d.role,
               columnIndex: d.columnIndex,
               containerStyles: d.styles,
@@ -915,7 +919,11 @@ export const ProjectVisualEditor = forwardRef<ProjectVisualEditorHandle, Project
         autoplay: settings.autoplay,
         hideArrows: settings.hideArrows,
         hideDots: settings.hideDots,
+        variant: settings.variant,
+        fullWidth: settings.fullWidth,
       }),
+    updateBlockVariant: (targetId, variant) =>
+      postToIframe({ type: 'am-block-variant-update', targetId, variant }),
     selectById: (id: string) => postToIframe({ type: 'am-select-by-id', id }),
     moveNavigatorItem: (id: string, targetId: string, position: 'before' | 'after') =>
       postToIframe({ type: 'am-nav-move', id, targetId, position }),

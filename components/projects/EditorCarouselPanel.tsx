@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { GalleryHorizontal, Shapes, Eye, EyeOff } from 'lucide-react'
+import { GalleryHorizontal, Shapes, Eye, EyeOff, Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -9,10 +9,13 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import type { SectionSelection } from '@/components/projects/EditorSectionPanel'
 import { IconPickerDialog, IconPreviewBadge } from '@/components/projects/IconPickerDialog'
+import { BlockDesignPicker } from '@/components/projects/BlockDesignPicker'
+import { CAROUSEL_VARIANTS } from '@/lib/editor/block-variants'
 import {
   DEFAULT_CAROUSEL_NEXT,
   DEFAULT_CAROUSEL_PREV,
 } from '@/lib/editor/icon-catalog'
+import { cn } from '@/lib/utils'
 
 export type CarouselSettings = {
   prevIcon: string
@@ -24,6 +27,8 @@ export type CarouselSettings = {
   autoplay: boolean
   hideArrows: boolean
   hideDots: boolean
+  variant: string
+  fullWidth: boolean
 }
 
 type EditorCarouselPanelProps = {
@@ -42,6 +47,8 @@ export function EditorCarouselPanel({ section, onUpdate }: EditorCarouselPanelPr
   const [autoplay, setAutoplay] = useState(true)
   const [hideArrows, setHideArrows] = useState(false)
   const [hideDots, setHideDots] = useState(false)
+  const [variant, setVariant] = useState('classic')
+  const [fullWidth, setFullWidth] = useState(false)
   const [picker, setPicker] = useState<'prev' | 'next' | null>(null)
 
   useEffect(() => {
@@ -54,6 +61,8 @@ export function EditorCarouselPanel({ section, onUpdate }: EditorCarouselPanelPr
     setAutoplay(section.carouselAutoplay !== false)
     setHideArrows(Boolean(section.carouselHideArrows))
     setHideDots(Boolean(section.carouselHideDots))
+    setVariant(section.carouselVariant ?? 'classic')
+    setFullWidth(Boolean(section.carouselFullWidth))
   }, [
     section.id,
     section.carouselPrevIcon,
@@ -65,6 +74,8 @@ export function EditorCarouselPanel({ section, onUpdate }: EditorCarouselPanelPr
     section.carouselAutoplay,
     section.carouselHideArrows,
     section.carouselHideDots,
+    section.carouselVariant,
+    section.carouselFullWidth,
   ])
 
   const push = (patch: Partial<CarouselSettings>) => onUpdate(patch)
@@ -78,9 +89,46 @@ export function EditorCarouselPanel({ section, onUpdate }: EditorCarouselPanelPr
         </span>
       </div>
 
+      <BlockDesignPicker
+        widgetType="carousel"
+        value={variant}
+        title="Slider design"
+        onChange={(v) => {
+          setVariant(v)
+          push({ variant: v })
+        }}
+      />
+
+      <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2.5">
+        <Label className="text-[10px] text-zinc-400 flex items-center gap-1.5">
+          <Maximize2 className="h-3 w-3" />
+          Full width
+        </Label>
+        <Switch
+          checked={fullWidth}
+          onCheckedChange={(v) => {
+            setFullWidth(v)
+            push({ fullWidth: v })
+          }}
+        />
+      </div>
+
       <p className="text-[11px] text-zinc-500 leading-relaxed">
-        Previous icon sits on the left, next icon on the right — auto-aligned in the slider nav bar.
+        Previous sits on the left edge, next on the right — aligned inside the slide viewport.
       </p>
+
+      <div className="grid grid-cols-3 gap-1.5">
+        {CAROUSEL_VARIANTS.map((v) => (
+          <div
+            key={v.id}
+            className={cn(
+              'h-1.5 rounded-full',
+              variant === v.id ? 'bg-violet-500' : 'bg-zinc-800',
+            )}
+            title={v.label}
+          />
+        ))}
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5">
@@ -154,7 +202,7 @@ export function EditorCarouselPanel({ section, onUpdate }: EditorCarouselPanelPr
           <Label className="text-[9px] text-zinc-500 uppercase">Icon color</Label>
           <Input
             type="color"
-            value={iconColor}
+            value={iconColor.startsWith('#') ? iconColor : '#0f172a'}
             onChange={(e) => {
               setIconColor(e.target.value)
               push({ iconColor: e.target.value })

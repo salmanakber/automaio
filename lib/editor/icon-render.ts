@@ -111,7 +111,13 @@ function applyCarouselNavIcons(section){
   var nav=section.querySelector('[data-am-carousel-nav]');
   if(nav){
     nav.style.display=section.getAttribute('data-am-carousel-hide-arrows')==='1'?'none':'flex';
+    nav.style.alignItems='center';
+    nav.style.justifyContent='space-between';
+    nav.style.width='100%';
+    nav.style.boxSizing='border-box';
   }
+  prev.style.flexShrink='0';
+  next.style.flexShrink='0';
   var dots=section.querySelector('[data-am-carousel-dots]');
   if(dots){
     dots.style.display=section.getAttribute('data-am-carousel-hide-dots')==='1'?'none':'flex';

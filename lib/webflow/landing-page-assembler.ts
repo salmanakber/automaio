@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import { CAROUSEL_JS } from '@/lib/editor/carousel-runtime'
+import { CAROUSEL_CSS, CAROUSEL_JS } from '@/lib/editor/carousel-runtime'
 import { extractRichTextFragment } from '@/lib/webflow/embed-setup'
 import {
   normalizeAssetUrls,
@@ -149,7 +149,7 @@ export function assembleLandingPageForWebflow(
   htmlContent = wrapWithScope(htmlContent, scopeClass)
 
   const { global: globalCss, local: localCss } = extractGlobalCssAtRules(inlineCss)
-  const cssContent = [globalCss, localCss].filter(Boolean).join('\n\n')
+  let cssContent = [globalCss, localCss].filter(Boolean).join('\n\n')
 
   let jsContent = ''
   if (options.allowJs !== false && rawJs.trim()) {
@@ -158,9 +158,13 @@ export function assembleLandingPageForWebflow(
   }
 
   const needsCarousel = /data-am-carousel=["']true["']/i.test(rawHtml)
-  if (options.allowJs !== false && needsCarousel) {
-    const carouselSanitized = sanitizeLandingPageJs(CAROUSEL_JS)
-    jsContent = jsContent ? `${jsContent}\n${carouselSanitized}` : carouselSanitized
+  if (needsCarousel) {
+    const carouselCss = CAROUSEL_CSS.trim()
+    cssContent = cssContent ? `${cssContent}\n${carouselCss}` : carouselCss
+    if (options.allowJs !== false) {
+      const carouselSanitized = sanitizeLandingPageJs(CAROUSEL_JS)
+      jsContent = jsContent ? `${jsContent}\n${carouselSanitized}` : carouselSanitized
+    }
   }
 
   const outputLines =

@@ -55,6 +55,9 @@ export type SectionSelection = {
   carouselAutoplay?: boolean
   carouselHideArrows?: boolean
   carouselHideDots?: boolean
+  carouselVariant?: string
+  carouselFullWidth?: boolean
+  blockVariant?: string
   role?: string
   columnIndex?: string
   containerStyles?: import('@/lib/editor/responsive-styles').ElementStyles

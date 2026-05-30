@@ -40,20 +40,65 @@ export type ElementStyles = {
   opacity?: string
 }
 
+/** Split gradient color stops without breaking rgb()/rgba() commas. */
+export function splitGradientStops(raw: string): string[] {
+  const stops: string[] = []
+  let depth = 0
+  let current = ''
+  for (const ch of raw) {
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    else if (ch === ',' && depth === 0) {
+      if (current.trim()) stops.push(current.trim())
+      current = ''
+      continue
+    }
+    current += ch
+  }
+  if (current.trim()) stops.push(current.trim())
+  return stops
+}
+
+export function normalizeColorInput(value: string): string {
+  const v = value.trim()
+  if (!v) return ''
+  if (v.startsWith('rgb') || v.startsWith('hsl') || v.startsWith('#')) return v
+  if (/^[0-9a-f]{3,8}$/i.test(v)) return `#${v}`
+  return v.startsWith('#') ? v : `#${v}`
+}
+
 export function buildLinearGradient(angle: number, from: string, to: string): string {
-  return `linear-gradient(${angle}deg, ${from}, ${to})`
+  const a = normalizeColorInput(from) || '#6366f1'
+  const b = normalizeColorInput(to) || '#a855f7'
+  return `linear-gradient(${angle}deg, ${a}, ${b})`
 }
 
 export function parseLinearGradient(raw?: string): { angle: number; from: string; to: string } | null {
   if (!raw?.includes('linear-gradient')) return null
-  const match = raw.match(/linear-gradient\((\d+)deg,\s*([^,]+),\s*([^)]+)\)/i)
-  if (!match) return null
+  const inner = raw.match(/linear-gradient\(\s*([\s\S]+?)\s*\)/i)?.[1]
+  if (!inner) return null
+
+  const angleMatch = inner.match(/^(\d+(?:\.\d+)?)\s*deg\s*,\s*/i)
+  const angle = angleMatch ? parseFloat(angleMatch[1]) || 135 : 135
+  const rest = angleMatch ? inner.slice(angleMatch[0].length) : inner
+  const stops = splitGradientStops(rest)
+  if (stops.length < 2) return null
+
   return {
-    angle: parseInt(match[1], 10) || 135,
-    from: match[2].trim(),
-    to: match[3].trim(),
+    angle,
+    from: stops[0],
+    to: stops[stops.length - 1],
   }
 }
+
+export const GRADIENT_PRESETS: { label: string; angle: number; from: string; to: string }[] = [
+  { label: 'Indigo', angle: 135, from: '#6366f1', to: '#a855f7' },
+  { label: 'Ocean', angle: 160, from: '#0ea5e9', to: '#6366f1' },
+  { label: 'Sunset', angle: 120, from: '#f59e0b', to: '#ef4444' },
+  { label: 'Forest', angle: 145, from: '#059669', to: '#0d9488' },
+  { label: 'Midnight', angle: 180, from: '#0f172a', to: '#334155' },
+  { label: 'Rose', angle: 135, from: '#f43f5e', to: '#fb7185' },
+]
 
 export function isLightColor(hex: string): boolean {
   const c = hex.replace('#', '')

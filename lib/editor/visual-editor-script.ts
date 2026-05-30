@@ -1,11 +1,13 @@
 /** Injected into iframe — Elementor-style builder with drag-and-drop */
 import { CAROUSEL_CSS } from '@/lib/editor/carousel-runtime'
+import { BLOCK_VARIANT_APPLY_SCRIPT } from '@/lib/editor/block-variant-script'
 import { ICON_EDITOR_SCRIPT } from '@/lib/editor/icon-render'
 
 const CAROUSEL_CSS_INLINE = CAROUSEL_CSS.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '')
 
 export const VISUAL_EDITOR_SCRIPT = `(function(){
 ${ICON_EDITOR_SCRIPT}
+${BLOCK_VARIANT_APPLY_SCRIPT}
 var SKIP_SEL='style,script,noscript,svg,path,iframe,#am-tb,#am-guides,#am-palette,#am-drop-line,#am-block-labels';
 function skip(n){
   if(!n||!n.closest)return null;
@@ -166,11 +168,11 @@ function initCarousels(){
       goTo(parseInt(btn.getAttribute('data-am-carousel-dot')||'0',10)||0);
     });}
     slides.forEach(function(slide){
+      if(section.getAttribute('data-am-carousel-variant')==='minimal')return;
       if(!slide.querySelector('[data-am-carousel-overlay]')){
         var ov=document.createElement('div');
         ov.setAttribute('data-am-carousel-overlay','true');
         ov.className='am-carousel-overlay';
-        ov.style.cssText='pointer-events:none;position:absolute;inset:0;border-radius:16px;background:linear-gradient(180deg,rgba(15,23,42,0) 40%,rgba(15,23,42,0.55) 100%)';
         if(slide.style.position!=='relative')slide.style.position='relative';
         slide.appendChild(ov);
       }
@@ -440,16 +442,15 @@ function applyStyleProps(el,styles,props,isResponsive){
       props['background-color']=styles.backgroundColor;
       props['background-image']='';
     }else{
-      el.style.background=styles.backgroundColor;
-      el.style.backgroundColor=styles.backgroundColor;
       el.style.backgroundImage='none';
+      el.style.backgroundColor=styles.backgroundColor;
     }
   }
   if(styles.color!=null){
     if(isResponsive)props['color']=styles.color;
     else el.style.color=styles.color;
-  }else if(styles.backgroundColor!=null||styles.backgroundImage){
-    var src=styles.backgroundColor||(styles.backgroundImage?'#6366f1':'');
+  }else if(styles.backgroundColor!=null&&!styles.backgroundImage){
+    var src=styles.backgroundColor||'';
     var auto=contrastTextForBg(src||el.style.backgroundColor);
     if(isResponsive)props['color']=auto;
     else el.style.color=auto;
@@ -907,6 +908,11 @@ function sectionPayload(el){
     payload.carouselAutoplay=el.getAttribute('data-am-carousel-autoplay')!=='0';
     payload.carouselHideArrows=el.getAttribute('data-am-carousel-hide-arrows')==='1';
     payload.carouselHideDots=el.getAttribute('data-am-carousel-hide-dots')==='1';
+    payload.carouselVariant=el.getAttribute('data-am-carousel-variant')||'classic';
+    payload.carouselFullWidth=el.getAttribute('data-am-carousel-full-width')==='1';
+  }
+  if(el.getAttribute('data-am-block-variant')){
+    payload.blockVariant=el.getAttribute('data-am-block-variant');
   }
   return payload;
 }
@@ -1549,11 +1555,17 @@ window.addEventListener('message',function(ev){
       if(d.autoplay!=null)carSec.setAttribute('data-am-carousel-autoplay',d.autoplay?'1':'0');
       if(d.hideArrows!=null)carSec.setAttribute('data-am-carousel-hide-arrows',d.hideArrows?'1':'0');
       if(d.hideDots!=null)carSec.setAttribute('data-am-carousel-hide-dots',d.hideDots?'1':'0');
+      applyCarouselShell(carSec,{variant:d.variant,fullWidth:d.fullWidth});
       carSec.removeAttribute('data-am-carousel-ready');
       initCarousels();
+      applyCarouselNavIcons(carSec);
       window.parent.postMessage(sectionPayload(carSec),'*');
       window.parent.postMessage({type:'am-changed'},'*');
     }
+  }
+  if(d.type==='am-block-variant-update'&&d.targetId&&d.variant){
+    var varSec=document.querySelector('[data-am-id="'+d.targetId+'"]');
+    if(varSec)applyBlockVariant(varSec,d.variant);
   }
   if(d.type==='am-icon-update'&&d.id&&d.iconRef){
     var iconEl=document.querySelector('[data-am-id="'+d.id+'"]');
